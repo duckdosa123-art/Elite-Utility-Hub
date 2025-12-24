@@ -48,22 +48,23 @@ Tab:CreateButton({
 
 Tab:CreateSection("Movement Physics")
 
--- FIXED Infinite Jump (Double Jump Style)
+-- FIXED Infinite Jump (Normal Jump Style)
 local InfiniteJumpEnabled = false
-local canJump = true -- This is our debounce variable
 
 game:GetService("UserInputService").JumpRequest:Connect(function()
-	if InfiniteJumpEnabled and canJump then
-		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-		if hum then
-            canJump = false -- Lock jumping
-			hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            task.wait(0.2) -- Small cooldown so it doesn't "fly"
-            canJump = true -- Unlock jumping
-		end
-	end
+    if InfiniteJumpEnabled then
+        local char = game.Players.LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if hum then
+            -- ChangeState(Jumping) makes it feel like a real jump
+            -- We use the State check to prevent the "flying" glitch
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
 end)
 
+-- The Toggle for the UI
 Tab:CreateToggle({
    Name = "Elite Inf-Jump",
    CurrentValue = false,
@@ -72,3 +73,4 @@ Tab:CreateToggle({
       InfiniteJumpEnabled = Value
    end,
 })
+
