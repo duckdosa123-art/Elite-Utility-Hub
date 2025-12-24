@@ -48,18 +48,23 @@ Tab:CreateButton({
 
 Tab:CreateSection("Movement Physics")
 
--- FIXED Infinite Jump (Normal Jump Style)
-local InfiniteJumpEnabled = false
+local UserInputService = game:GetService("UserInputService")
+local Player = game.Players.LocalPlayer
+local InfJumpEnabled = false -- This tracks if the toggle is ON
+local canJump = true         -- This is the cooldown debounce
+local cooldown = 0.25 
 
-game:GetService("UserInputService").JumpRequest:Connect(function()
-    if InfiniteJumpEnabled then
-        local char = game.Players.LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        
-        if hum then
-            -- ChangeState(Jumping) makes it feel like a real jump
-            -- We use the State check to prevent the "flying" glitch
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+-- The Event Listener (Always running, but checks if enabled)
+UserInputService.JumpRequest:Connect(function()
+    if InfJumpEnabled and canJump then
+        local character = Player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            canJump = false 
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(cooldown) 
+            canJump = true 
         end
     end
 end)
@@ -70,7 +75,8 @@ Tab:CreateToggle({
    CurrentValue = false,
    Flag = "InfJump",
    Callback = function(Value)
-      InfiniteJumpEnabled = Value
+      InfJumpEnabled = Value -- This now correctly connects to the listener above
    end,
 })
+
 
