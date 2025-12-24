@@ -4,6 +4,7 @@ local Window = Rayfield:CreateWindow({
    Name = "Elite-Utility-Hub",
    LoadingTitle = "Modular System Loading...",
    LoadingSubtitle = "by Ducky",
+   Theme = "Default",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "EliteUtilHub",
