@@ -48,23 +48,24 @@ Tab:CreateButton({
 
 Tab:CreateSection("Movement Physics")
 
--- Improved Infinite Jump (Air Jump Logic)
+-- FIXED Infinite Jump (Double Jump Style)
 local InfiniteJumpEnabled = false
+local canJump = true -- This is our debounce variable
+
 game:GetService("UserInputService").JumpRequest:Connect(function()
-	if InfiniteJumpEnabled then
-		local Character = game.Players.LocalPlayer.Character
-		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
-		
-		if Humanoid then
-            -- This forces a state change to "Jumping" which respects JumpPower
-            -- It feels like a real jump rather than floating
-			Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	if InfiniteJumpEnabled and canJump then
+		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if hum then
+            canJump = false -- Lock jumping
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(0.2) -- Small cooldown so it doesn't "fly"
+            canJump = true -- Unlock jumping
 		end
 	end
 end)
 
 Tab:CreateToggle({
-   Name = "Infinite Jump (Air Jump)",
+   Name = "Elite Inf-Jump",
    CurrentValue = false,
    Flag = "InfJump",
    Callback = function(Value)
