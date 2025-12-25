@@ -9,13 +9,13 @@ local Camera = workspace.CurrentCamera
 local Tab = _G.VisualTab
 if not Tab then return warn("Elite-Hub: VisualTab not found!") end
 
--- [ CACHE ORIGINAL LIGHTING ]
+-- [ CACHE ORIGINAL SETTINGS ]
 local LightingDefaults = {
     Ambient = Lighting.Ambient,
     OutdoorAmbient = Lighting.OutdoorAmbient,
     GlobalShadows = Lighting.GlobalShadows,
     FogEnd = Lighting.FogEnd,
-    FogStart = Lighting.FogStart
+    FogStart = Lighting.FogStart,
     MaxZoom = LP.CameraMaxZoomDistance,
     MinZoom = LP.CameraMinZoomDistance
 }
@@ -91,9 +91,8 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [ ELITE ESP ENGINE - FULLY FIXED ]
+-- [ ELITE ESP ENGINE ]
 local function CreateESP(Player)
-    -- Initialize Drawing Objects
     local Lines = {}
     for i = 1, 12 do Lines[i] = Drawing.new("Line") Lines[i].Thickness = 1 Lines[i].Visible = false end
     local LookLine = Drawing.new("Line")
@@ -112,7 +111,6 @@ local function CreateESP(Player)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local head = char and char:FindFirstChild("Head")
 
-            -- 1. Outline Feature (Highlight)
             if _G.ESPSettings.Enabled and _G.ESPSettings.Outline and char then
                 local hl = char:FindFirstChild("EliteHighlight") or Instance.new("Highlight", char)
                 hl.Name = "EliteHighlight"
@@ -123,11 +121,9 @@ local function CreateESP(Player)
                 char.EliteHighlight.Enabled = false
             end
 
-            -- 2. Main ESP Logic
             if _G.ESPSettings.Enabled and root and hum and hum.Health > 0 then
                 local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
                 
-                -- Breadcrumbs (Trails)
                 if _G.ESPSettings.Breadcrumbs then
                     table.insert(Positions, 1, root.Position)
                     if #Positions > 11 then table.remove(Positions) end
@@ -142,7 +138,6 @@ local function CreateESP(Player)
                 else for i=1,10 do BreadcrumbLines[i].Visible = false end end
 
                 if onScreen then
-                    -- 3D Box
                     if _G.ESPSettings.Box3D then
                         local pts = GetBoxPoints(root.CFrame, Vector3.new(4, 5, 2))
                         local conn = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
@@ -152,14 +147,12 @@ local function CreateESP(Player)
                         end
                     else for i=1,12 do Lines[i].Visible = false end end
 
-                    -- Look Direction Line
                     if _G.ESPSettings.LookLines and head then
                         local endP = Camera:WorldToViewportPoint(head.Position + (head.CFrame.LookVector * 6))
                         LookLine.From, LookLine.To = Vector2.new(pos.X, pos.Y), Vector2.new(endP.X, endP.Y)
                         LookLine.Color, LookLine.Visible = Color3.new(1,1,1), true
                     else LookLine.Visible = false end
 
-                    -- Health Bar
                     if _G.ESPSettings.HealthBars then
                         local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
                         HealthBar.From = Vector2.new(pos.X - 35, pos.Y + 30)
@@ -167,14 +160,12 @@ local function CreateESP(Player)
                         HealthBar.Color, HealthBar.Thickness, HealthBar.Visible = Color3.fromHSV(hp * 0.3, 1, 1), 3, true
                     else HealthBar.Visible = false end
 
-                    -- [ FIXED NAME & DISTANCE - HEAD POSITION ]
                     if (_G.ESPSettings.Names or _G.ESPSettings.Distance) and head then
                         local hVPP, hOn = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
                         if hOn then
-                            local myRoot = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
                             local dText = ""
-                            if _G.ESPSettings.Distance and myRoot then
-                                dText = "\n[" .. math.floor((root.Position - myRoot.Position).Magnitude) .. " studs]"
+                            if _G.ESPSettings.Distance and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                                dText = "\n[" .. math.floor((root.Position - LP.Character.HumanoidRootPart.Position).Magnitude) .. " studs]"
                             end
                             Name.Text = (_G.ESPSettings.Names and Player.Name or "") .. dText
                             Name.Position = Vector2.new(hVPP.X, hVPP.Y)
@@ -195,6 +186,7 @@ local function CreateESP(Player)
     end
     task.spawn(Update)
 end
+
 -- [ WORLD UPDATE LOOP ]
 RunService.RenderStepped:Connect(function()
     if _G.ESPSettings.Fullbright then
@@ -208,8 +200,7 @@ RunService.RenderStepped:Connect(function()
         Lighting.FogEnd, Lighting.FogStart = LightingDefaults.FogEnd, LightingDefaults.FogStart
     end
     Camera.FieldOfView = _G.ESPSettings.FOV
-    -- Fixed Third Person Toggle
-    -- Fixed Third Person Toggle
+    
     if _G.ESPSettings.ThirdPerson then 
         LP.CameraMaxZoomDistance = 30 
         LP.CameraMinZoomDistance = 30 
@@ -218,7 +209,6 @@ RunService.RenderStepped:Connect(function()
         LP.CameraMinZoomDistance = LightingDefaults.MinZoom
     end
     
-    -- Viewmodel Transparency
     for _, v in pairs(Camera:GetChildren()) do
         if v:IsA("Model") or v:IsA("BasePart") then
             for _, p in pairs(v:GetDescendants()) do 
@@ -228,7 +218,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Initialize Players
 for _, p in pairs(Players:GetPlayers()) do if p ~= LP then CreateESP(p) end end
 Players.PlayerAdded:Connect(function(p) if p ~= LP then CreateESP(p) end end)
 
