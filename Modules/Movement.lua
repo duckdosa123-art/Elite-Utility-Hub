@@ -79,68 +79,64 @@ Tab:CreateToggle({
    end,
 })
 
--- FLY LOGIC VARIABLES
+-- ELITE SMOOTH FLY ENGINE
 local flyEnabled = false
 local flySpeed = 50
-local c = nil -- Connection variable
+local runService = game:GetService("RunService")
+local lp = game:GetService("Players").LocalPlayer
 
--- THE REFINED FLY ENGINE
-local function ToggleFly(Value)
+local function SetupFly(Value)
     flyEnabled = Value
-    local player = game.Players.LocalPlayer
-    local char = player.Character or player.CharacterAdded:Wait()
+    local char = lp.Character or lp.CharacterAdded:Wait()
     local root = char:WaitForChild("HumanoidRootPart")
     
     if flyEnabled then
-        -- Create a "BodyVelocity" to handle the floating physics
-        local bv = Instance.new("BodyVelocity")
-        bv.Name = "EliteFlyForce"
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = Vector3.new(0, 0, 0)
-        bv.Parent = root
-        
-        -- The loop that handles movement direction
-        c = game:GetService("RunService").Heartbeat:Connect(function()
-            if not flyEnabled or not char:Parent() then 
-                bv:Destroy()
-                c:Disconnect() 
-                return 
+        -- Create physics movers for maximum smoothness
+        local bg = Instance.new("BodyGyro", root) -- Keeps you upright
+        bg.Name = "EliteFlyGyro"
+        bg.P = 9e4
+        bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.cframe = root.CFrame
+
+        local bv = Instance.new("BodyVelocity", root) -- Handles the actual movement
+        bv.Name = "EliteFlyVel"
+        bv.velocity = Vector3.new(0, 0.1, 0)
+        bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+
+        -- The Render Loop
+        task.spawn(function()
+            while flyEnabled and char:Parent() do
+                local camera = workspace.CurrentCamera
+                -- This math makes the flight follow your camera view perfectly
+                bv.velocity = camera.CFrame.LookVector * flySpeed
+                bg.cframe = camera.CFrame
+                runService.RenderStepped:Wait()
             end
-            
-            local cam = workspace.CurrentCamera
-            local moveDir = Vector3.new(0,0,0)
-            
-            -- Direction logic (works with mobile joysticks)
-            local hum = char:FindFirstChild("Humanoid")
-            if hum then
-                moveDir = hum.MoveDirection * flySpeed
-                bv.Velocity = moveDir + Vector3.new(0, 1.5, 0) -- Added slight lift to stay level
-            end
+            -- Cleanup when disabled
+            if bg then bg:Destroy() end
+            if bv then bv:Destroy() end
         end)
     else
-        -- Clean up when turned off
-        if root:FindFirstChild("EliteFlyForce") then
-            root.EliteFlyForce:Destroy()
-        end
-        if c then c:Disconnect() end
+        -- Force remove physics objects if they exist
+        if root:FindFirstChild("EliteFlyGyro") then root.EliteFlyGyro:Destroy() end
+        if root:FindFirstChild("EliteFlyVel") then root.EliteFlyVel:Destroy() end
     end
 end
 
--- RAYFIELD UI TOGGLE
+-- RAYFIELD UI INTEGRATION
 Tab:CreateToggle({
-   Name = "Elite Flight (Discord Refined)",
+   Name = "Elite Fly(Logic by: Mohii03",
    CurrentValue = false,
-   Flag = "FlyToggle",
+   Flag = "SmoothFly",
    Callback = function(Value)
-      ToggleFly(Value)
+      SetupFly(Value)
    end,
 })
 
--- FLY SPEED SLIDER
 Tab:CreateSlider({
    Name = "Flight Speed",
-   Range = {10, 300},
-   Increment = 1,
+   Range = {0, 500},
+   Increment = 5,
    Suffix = "SPS",
    CurrentValue = 50,
    Flag = "FlySpeed",
