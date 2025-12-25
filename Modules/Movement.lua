@@ -79,4 +79,72 @@ Tab:CreateToggle({
    end,
 })
 
+-- FLY LOGIC VARIABLES
+local flyEnabled = false
+local flySpeed = 50
+local c = nil -- Connection variable
 
+-- THE REFINED FLY ENGINE
+local function ToggleFly(Value)
+    flyEnabled = Value
+    local player = game.Players.LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
+    
+    if flyEnabled then
+        -- Create a "BodyVelocity" to handle the floating physics
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "EliteFlyForce"
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(0, 0, 0)
+        bv.Parent = root
+        
+        -- The loop that handles movement direction
+        c = game:GetService("RunService").Heartbeat:Connect(function()
+            if not flyEnabled or not char:Parent() then 
+                bv:Destroy()
+                c:Disconnect() 
+                return 
+            end
+            
+            local cam = workspace.CurrentCamera
+            local moveDir = Vector3.new(0,0,0)
+            
+            -- Direction logic (works with mobile joysticks)
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then
+                moveDir = hum.MoveDirection * flySpeed
+                bv.Velocity = moveDir + Vector3.new(0, 1.5, 0) -- Added slight lift to stay level
+            end
+        end)
+    else
+        -- Clean up when turned off
+        if root:FindFirstChild("EliteFlyForce") then
+            root.EliteFlyForce:Destroy()
+        end
+        if c then c:Disconnect() end
+    end
+end
+
+-- RAYFIELD UI TOGGLE
+Tab:CreateToggle({
+   Name = "Elite Flight (Discord Refined)",
+   CurrentValue = false,
+   Flag = "FlyToggle",
+   Callback = function(Value)
+      ToggleFly(Value)
+   end,
+})
+
+-- FLY SPEED SLIDER
+Tab:CreateSlider({
+   Name = "Flight Speed",
+   Range = {10, 300},
+   Increment = 1,
+   Suffix = "SPS",
+   CurrentValue = 50,
+   Flag = "FlySpeed",
+   Callback = function(Value)
+      flySpeed = Value
+   end,
+})
