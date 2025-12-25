@@ -88,59 +88,78 @@ local isFlying = false
 local flySpeed = 50
 local flyConnection
 
--- THE ELITE FLY ENGINE (Mobile & PC Optimized)
-local function UpdateFlight()
-    local char = LP.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if not root or not hum then return end
+-- FLIGHT SYSTEM CONFIGURATION
+local FlyEnabled = false
+local FlySpeed = 50
+local BodyGyro = nil
+local BodyVelocity = nil
+local RunService = game:GetService("RunService")
+local LP = game:GetService("Players").LocalPlayer
 
-    -- Create physics stabilizers if they don't exist
-    local bv = root:FindFirstChild("EliteVelocity") or Instance.new("BodyVelocity", root)
-    local bg = root:FindFirstChild("EliteGyro") or Instance.new("BodyGyro", root)
+-- THE ELITE FLY ENGINE
+local function StartFlying()
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
     
-    bv.Name = "EliteVelocity"
-    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    
-    bg.Name = "EliteGyro"
-    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    bg.CFrame = workspace.CurrentCamera.CFrame
+    -- Clean up any old forces before starting
+    if root:FindFirstChild("EliteGyro") then root.EliteGyro:Destroy() end
+    if root:FindFirstChild("EliteVelocity") then root.EliteVelocity:Destroy() end
 
-    if isFlying then
-        -- This part captures the Mobile Joystick or WASD input
-        local dir = hum.MoveDirection
-        local cam = workspace.CurrentCamera.CFrame
-        
-        -- Calculate movement relative to camera look direction
-        if dir.Magnitude > 0 then
-            bv.Velocity = dir * flySpeed
-        else
-            bv.Velocity = Vector3.new(0, 0.1, 0) -- Hover steady
+    -- Gyro keeps you upright and facing your camera direction
+    BodyGyro = Instance.new("BodyGyro")
+    BodyGyro.Name = "EliteGyro"
+    BodyGyro.P = 9e4
+    BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BodyGyro.CFrame = root.CFrame
+    BodyGyro.Parent = root
+
+    -- Velocity handles the actual movement
+    BodyVelocity = Instance.new("BodyVelocity")
+    BodyVelocity.Name = "EliteVelocity"
+    BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    BodyVelocity.Parent = root
+
+    -- Main Flight Loop (Joystick Compatible)
+    task.spawn(function()
+        while FlyEnabled and char:Parent() do
+            local camera = workspace.CurrentCamera
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            
+            if humanoid and root then
+                -- This is the "Infinite Yield" secret: using MoveDirection
+                -- This makes it work perfectly with mobile joysticks
+                local moveDir = humanoid.MoveDirection
+                BodyVelocity.Velocity = moveDir * FlySpeed
+                BodyGyro.CFrame = camera.CFrame
+            end
+            RunService.RenderStepped:Wait()
         end
         
-        -- Tilt the character slightly toward the camera view
-        bg.CFrame = cam
-    else
-        -- Clean up physics when disabled
-        bv:Destroy()
-        bg:Destroy()
-        if flyConnection then flyConnection:Disconnect() end
-    end
+        -- Cleanup when disabled
+        if BodyGyro then BodyGyro:Destroy() end
+        if BodyVelocity then BodyVelocity:Destroy() end
+        if char:FindFirstChildOfClass("Humanoid") then
+            char:FindFirstChildOfClass("Humanoid").PlatformStand = false
+        end
+    end)
 end
 
--- RAYFIELD INTEGRATION
+-- RAYFIELD UI INTEGRATION
 Tab:CreateToggle({
-   Name = "Elite Flight (Logic by: sukuna_ryomen1.)",
+   Name = "Elite Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
-      isFlying = Value
-      if isFlying then
-          -- Start the physics loop
-          flyConnection = RunService.Heartbeat:Connect(UpdateFlight)
+      FlyEnabled = Value
+      if Value then
+          StartFlying()
       else
-          UpdateFlight() -- Triggers the cleanup block
+          -- Safety Reset
+          local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+          if root then
+              root.AssemblyLinearVelocity = Vector3.zero
+          end
       end
    end,
 })
@@ -148,11 +167,12 @@ Tab:CreateToggle({
 Tab:CreateSlider({
    Name = "Flight Speed",
    Range = {10, 500},
-   Increment = 5,
+   Increment = 1,
    Suffix = "SPS",
    CurrentValue = 50,
    Flag = "FlySpeed",
    Callback = function(Value)
-      flySpeed = Value
+      FlySpeed = Value
    end,
 })
+
