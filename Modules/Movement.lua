@@ -79,7 +79,10 @@ Tab:CreateToggle({
    end,
 })
 
--- Movement.lua - Elite-Utility-Hub (IY Style)
+-- 4. Vertical Logic (Space = Up, Ctrl = Down)
+            local vertical = 0
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical = 1 
+-- Movement.lua - Elite-Utility-Hub (IY Style Optimized)
 local LP = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -89,96 +92,108 @@ local _f = false
 local _s = 50
 local bv, bg -- Body Movers
 
--- [ELITE FLY ENGINE]
+-- [CLEANUP FUNCTION] - Fixes the Jump Bug
 local function CleanFly()
     if bv then bv:Destroy() bv = nil end
     if bg then bg:Destroy() bg = nil end
-    local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-    if hum then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    
+    local char = LP.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    local r = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if hum
+            elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) then vertical = -1 end
+
+            -- then
+        hum.PlatformStand = false
+        -- Force the humanoid back to a state that allows jumping
+        hum:Change 5. Final Velocity Application
+            if moveVec.Magnitude > 0 or vertical ~= 0 then
+                bv.VelocityState(Enum.HumanoidStateType.Running) 
+        hum:SetStateEnabled(Enum.HumanoidStateType.Jumping = (direction * _s) + Vector3.new(0, vertical * _s, 0)
+            else
+                bv.Velocity = Vector3.zero
+            end
+
+            -- Face where camera is looking (Standard IY, true)
+    end
+    if r then
+        r.Velocity = Vector3.zero -- Stop momentum instantly
+    end
 end
 
+-- [ELITE FLY ENGINE]
 task.spawn(function()
-    RunService.RenderStepped:Connect(function()
-        local char = LP.Character
-        local r = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChild("Humanoid")
-        local cam = workspace.CurrentCamera
-
-        if _f and r and hum and cam then
-            -- Create movers if they don't exist (IY Style)
-            if not bv then
-                bv = Instance.new("BodyVelocity")
-                bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
-                bv.Parent = r
-            end
-            if not bg then
-                bg = Instance.new("BodyGyro")
-                bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
-                bg.P = 9000
-                bg.Parent = r
-            end
-
-            -- Physics State (Prevents falling animation)
-            hum:ChangeState(Enum.HumanoidStateType.Physics)
-
-            -- Camera-Relative Movement Logic
-            local dir = hum.MoveDirection
-            local velocity = Vector3.zero
-
-            -- Vertical Movement (Space = Up, Ctrl = Down)
-            local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
-            local down = UIS:IsKeyDown(Enum.KeyCode.LeftControl) and 1 or 0
-            local vertical = Vector3.new(0, (up - down) * _s, 0)
-
-            if dir.Magnitude > 0 then
-                -- Move exactly where looking + vertical offset
-                velocity = (cam.CFrame.LookVector * (dir.Z * -_s)) + (cam.CFrame.RightVector * (dir.X * _s))
-            end
-            
-            bv.Velocity = velocity + vertical
-            bg.CFrame = cam.CFrame -- Matches IY's "Face where you look" feature
+    RunService)
+            bg.CFrame = cam.CFrame
         else
             CleanFly()
         end
-    end)
+.RenderStepped:Connect(function()
+        local char = LP.Character
+        local r = char and    end)
 end)
 
 -- [UI ELEMENTS]
 Tab:CreateToggle({
-   Name = "Elite Flight",
+   Name = "Elite char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
-   Callback = function(Value)
+   Callback = function(Value")
+        local cam = workspace.CurrentCamera
+
+        if _f and r and hum and cam then
+            )
       _f = Value
       if not Value then CleanFly() end
    end,
 })
 
+-- Create movers if they don't exist
+            if not bv then
+                bv = Instance.new("BodyVelocity")
 Tab:CreateSlider({
    Name = "Fly Speed",
    Range = {10, 300},
    Increment = 1,
    Suffix = "Speed",
-   CurrentValue = 50,
+   CurrentValue = 50                bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
+                bv.Parent = r
+            end
+            if not bg then
+                bg = Instance.new("Body,
    Flag = "FlySpeed",
-   Callback = function(Value)
-      _s = Value
-   end,
+   Callback = function(Value) _s = Value end,
 })
 
--- Keep your existing Stud buttons for precise positioning
-Tab:CreateButton({
+Gyro")
+                bg.MaxTorque = Vector3.new(1, 1, 1) *Tab:CreateButton({
    Name = "UP (one stud)",
    Callback = function()
-       local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       local math.huge
+                bg.P = 9000
+                bg.Parent = r
+            end r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
        if r then r.CFrame = r.CFrame * CFrame.new(0, 1, 0) end
+
+
+            -- Physics State
+            hum.PlatformStand = true -- Prevents legs from "walking" in air
+
    end,
 })
 
 Tab:CreateButton({
    Name = "DOWN (one stud)",
-   Callback = function()
+   Callback            -- Control Logic (Fixes Directional Bug)
+            local moveDir = hum.MoveDirection -- World Space = function()
        local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-       if r then r.CFrame = r.CFrame * CFrame.new(0, -1, 0) end
+ direction from Joystick/WASD
+            local look = cam.CFrame.LookVector
+            local right = cam.C       if r then r.CFrame = r.CFrame * CFrame.new(0, -1,Frame.RightVector
+            
+            -- Convert World MoveDirection to Camera Local Direction
+            -- This ensures "Forward" on 0) end
    end,
 })
