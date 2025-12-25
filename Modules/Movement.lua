@@ -125,7 +125,7 @@ end
 
 -- RAYFIELD UI INTEGRATION
 Tab:CreateToggle({
-   Name = "Elite Fly(Logic by: Mohii03",
+   Name = "Elite Fly(Logic by: Mohii03)",
    CurrentValue = false,
    Flag = "SmoothFly",
    Callback = function(Value)
