@@ -79,121 +79,108 @@ Tab:CreateToggle({
    end,
 })
 
--- 4. Vertical Logic (Space = Up, Ctrl = Down)
-            local vertical = 0
-            if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical = 1 
--- Movement.lua - Elite-Utility-Hub (IY Style Optimized)
-local LP = game:GetService("Players").LocalPlayer
-local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-
--- States
+-- [ ELITE FLY SYSTEM ]
 local _f = false
 local _s = 50
-local bv, bg -- Body Movers
+local bv, bg
 
--- [CLEANUP FUNCTION] - Fixes the Jump Bug
+-- Function to safely clean up physics and restore jumping
 local function CleanFly()
+    _f = false
     if bv then bv:Destroy() bv = nil end
     if bg then bg:Destroy() bg = nil end
     
     local char = LP.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local r = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if hum
-            elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) then vertical = -1 end
-
-            -- then
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
         hum.PlatformStand = false
-        -- Force the humanoid back to a state that allows jumping
-        hum:Change 5. Final Velocity Application
-            if moveVec.Magnitude > 0 or vertical ~= 0 then
-                bv.VelocityState(Enum.HumanoidStateType.Running) 
-        hum:SetStateEnabled(Enum.HumanoidStateType.Jumping = (direction * _s) + Vector3.new(0, vertical * _s, 0)
-            else
-                bv.Velocity = Vector3.zero
-            end
-
-            -- Face where camera is looking (Standard IY, true)
-    end
-    if r then
-        r.Velocity = Vector3.zero -- Stop momentum instantly
+        hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+        hum:ChangeState(Enum.HumanoidStateType.Running)
     end
 end
 
--- [ELITE FLY ENGINE]
+-- Fly Engine (IY-Style with Mobile Support)
 task.spawn(function()
-    RunService)
-            bg.CFrame = cam.CFrame
-        else
-            CleanFly()
-        end
-.RenderStepped:Connect(function()
+    RunService.RenderStepped:Connect(function()
         local char = LP.Character
-        local r = char and    end)
-end)
-
--- [UI ELEMENTS]
-Tab:CreateToggle({
-   Name = "Elite char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChild("Humanoid Flight",
-   CurrentValue = false,
-   Flag = "FlyToggle",
-   Callback = function(Value")
+        local r = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
         local cam = workspace.CurrentCamera
 
         if _f and r and hum and cam then
-            )
+            -- Create movers if they don't exist
+            if not bv then
+                bv = Instance.new("BodyVelocity")
+                bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
+                bv.Parent = r
+            end
+            if not bg then
+                bg = Instance.new("BodyGyro")
+                bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+                bg.P = 9000
+                bg.Parent = r
+            end
+
+            hum.PlatformStand = true -- Prevents "walking" animations
+            
+            -- Directional Logic (Joystick & WASD Compatible)
+            local moveDir = hum.MoveDirection
+            local look = cam.CFrame.LookVector
+            local right = cam.CFrame.RightVector
+            
+            -- Vertical Controls
+            local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
+            local down = UIS:IsKeyDown(Enum.KeyCode.LeftControl) and 1 or 0
+            local vertical = Vector3.new(0, (up - down) * _s, 0)
+
+            -- The Magic Formula (Camera-Relative Movement)
+            -- This ensures joystick 'Forward' follows the camera's view
+            local localDir = cam.CFrame:VectorToObjectSpace(moveDir)
+            local velocity = (look * -localDir.Z * _s) + (right * localDir.X * _s) + vertical
+            
+            bv.Velocity = (moveDir.Magnitude > 0 or up ~= 0 or down ~= 0) and velocity or Vector3.zero
+            bg.CFrame = cam.CFrame
+        else
+            if bv or bg then CleanFly() end
+        end
+    end)
+end)
+
+-- [ UI ELEMENTS ]
+Tab:CreateToggle({
+   Name = "Elite Flight",
+   CurrentValue = false,
+   Flag = "FlyToggle",
+   Callback = function(Value)
       _f = Value
       if not Value then CleanFly() end
    end,
 })
 
--- Create movers if they don't exist
-            if not bv then
-                bv = Instance.new("BodyVelocity")
 Tab:CreateSlider({
-   Name = "Fly Speed",
+   Name = "Flight Speed",
    Range = {10, 300},
    Increment = 1,
-   Suffix = "Speed",
-   CurrentValue = 50                bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
-                bv.Parent = r
-            end
-            if not bg then
-                bg = Instance.new("Body,
+   Suffix = "SPS",
+   CurrentValue = 50,
    Flag = "FlySpeed",
-   Callback = function(Value) _s = Value end,
+   Callback = function(Value)
+      _s = Value
+   end,
 })
 
-Gyro")
-                bg.MaxTorque = Vector3.new(1, 1, 1) *Tab:CreateButton({
+Tab:CreateButton({
    Name = "UP (one stud)",
    Callback = function()
-       local math.huge
-                bg.P = 9000
-                bg.Parent = r
-            end r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
        if r then r.CFrame = r.CFrame * CFrame.new(0, 1, 0) end
-
-
-            -- Physics State
-            hum.PlatformStand = true -- Prevents legs from "walking" in air
-
    end,
 })
 
 Tab:CreateButton({
    Name = "DOWN (one stud)",
-   Callback            -- Control Logic (Fixes Directional Bug)
-            local moveDir = hum.MoveDirection -- World Space = function()
+   Callback = function()
        local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
- direction from Joystick/WASD
-            local look = cam.CFrame.LookVector
-            local right = cam.C       if r then r.CFrame = r.CFrame * CFrame.new(0, -1,Frame.RightVector
-            
-            -- Convert World MoveDirection to Camera Local Direction
-            -- This ensures "Forward" on 0) end
+       if r then r.CFrame = r.CFrame * CFrame.new(0, -1, 0) end
    end,
 })
