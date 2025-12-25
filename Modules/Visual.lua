@@ -89,10 +89,11 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [ ENGINE: ESP ]
+-- [ ELITE ESP ENGINE - FULLY FIXED ]
 local function CreateESP(Player)
+    -- Initialize Drawing Objects
     local Lines = {}
-    for i = 1, 12 do Lines[i] = Drawing.new("Line") Lines[i].Thickness = 1 end
+    for i = 1, 12 do Lines[i] = Drawing.new("Line") Lines[i].Thickness = 1 Lines[i].Visible = false end
     local LookLine = Drawing.new("Line")
     local HealthBar = Drawing.new("Line")
     local Name = Drawing.new("Text")
@@ -109,7 +110,7 @@ local function CreateESP(Player)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local head = char and char:FindFirstChild("Head")
 
-            -- Outline / Chams
+            -- 1. Outline Feature (Highlight)
             if _G.ESPSettings.Enabled and _G.ESPSettings.Outline and char then
                 local hl = char:FindFirstChild("EliteHighlight") or Instance.new("Highlight", char)
                 hl.Name = "EliteHighlight"
@@ -120,10 +121,11 @@ local function CreateESP(Player)
                 char.EliteHighlight.Enabled = false
             end
 
+            -- 2. Main ESP Logic
             if _G.ESPSettings.Enabled and root and hum and hum.Health > 0 then
                 local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
                 
-                -- Breadcrumbs Trail
+                -- Breadcrumbs (Trails)
                 if _G.ESPSettings.Breadcrumbs then
                     table.insert(Positions, 1, root.Position)
                     if #Positions > 11 then table.remove(Positions) end
@@ -148,7 +150,7 @@ local function CreateESP(Player)
                         end
                     else for i=1,12 do Lines[i].Visible = false end end
 
-                    -- Look Lines
+                    -- Look Direction Line
                     if _G.ESPSettings.LookLines and head then
                         local endP = Camera:WorldToViewportPoint(head.Position + (head.CFrame.LookVector * 6))
                         LookLine.From, LookLine.To = Vector2.new(pos.X, pos.Y), Vector2.new(endP.X, endP.Y)
@@ -163,24 +165,20 @@ local function CreateESP(Player)
                         HealthBar.Color, HealthBar.Thickness, HealthBar.Visible = Color3.fromHSV(hp * 0.3, 1, 1), 3, true
                     else HealthBar.Visible = false end
 
-                    -- Name & Distance (FIXED)
-                    Name.Visible = _G.ESPSettings.Names
-                    local distText = ""
-
-                    if _G.ESPSettings.Distance then
-                        local myChar = LP.Character
-                        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                        
-                        -- Ensure both your root and the enemy root exist before math
-                        if myRoot and root then
-                            local magnitude = (root.Position - myRoot.Position).Magnitude
-                            distText = " [" .. math.floor(magnitude) .. " studs]"
-                        end
-                    end
-
-                    Name.Text = Player.Name .. distText
-                    Name.Position = Vector2.new(pos.X, pos.Y - 55)
-                    Name.Color, Name.Center, Name.Outline = _G.ESPSettings.NameColor, true, true
+                    -- [ FIXED NAME & DISTANCE - HEAD POSITION ]
+                    if (_G.ESPSettings.Names or _G.ESPSettings.Distance) and head then
+                        local hVPP, hOn = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+                        if hOn then
+                            local myRoot = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                            local dText = ""
+                            if _G.ESPSettings.Distance and myRoot then
+                                dText = "\n[" .. math.floor((root.Position - myRoot.Position).Magnitude) .. " studs]"
+                            end
+                            Name.Text = (_G.ESPSettings.Names and Player.Name or "") .. dText
+                            Name.Position = Vector2.new(hVPP.X, hVPP.Y)
+                            Name.Color, Name.Visible, Name.Center, Name.Outline = _G.ESPSettings.NameColor, true, true, true
+                        else Name.Visible = false end
+                    else Name.Visible = false end
                 else
                     for i=1,12 do Lines[i].Visible = false end
                     LookLine.Visible, HealthBar.Visible, Name.Visible = false, false, false
@@ -195,7 +193,6 @@ local function CreateESP(Player)
     end
     task.spawn(Update)
 end
-
 -- [ WORLD UPDATE LOOP ]
 RunService.RenderStepped:Connect(function()
     if _G.ESPSettings.Fullbright then
