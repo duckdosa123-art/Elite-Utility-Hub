@@ -79,14 +79,18 @@ Tab:CreateToggle({
    end,
 })
 
--- [ ELITE FLY SYSTEM ]
+-- Movement.lua - Elite-Utility-Hub (IY Style - FIXED)
+local LP = game:GetService("Players").LocalPlayer
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+
+-- States
 local _f = false
 local _s = 50
-local bv, bg
+local bv, bg -- Body Movers
 
--- Function to safely clean up physics and restore jumping
+-- [ELITE FLY ENGINE]
 local function CleanFly()
-    _f = false
     if bv then bv:Destroy() bv = nil end
     if bg then bg:Destroy() bg = nil end
     
@@ -94,12 +98,12 @@ local function CleanFly()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.PlatformStand = false
+        -- Fixes Jump Bug: Re-enables jump logic and resets state
         hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
         hum:ChangeState(Enum.HumanoidStateType.Running)
     end
 end
 
--- Fly Engine (IY-Style with Mobile Support)
 task.spawn(function()
     RunService.RenderStepped:Connect(function()
         local char = LP.Character
@@ -121,32 +125,41 @@ task.spawn(function()
                 bg.Parent = r
             end
 
-            hum.PlatformStand = true -- Prevents "walking" animations
-            
-            -- Directional Logic (Joystick & WASD Compatible)
+            -- Physics State
+            hum.PlatformStand = true -- Prevents walking animations in air
+            hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+            -- FIXED Directional Logic (Joystick & WASD)
+            -- Convert world MoveDirection to Camera-Relative direction
             local moveDir = hum.MoveDirection
-            local look = cam.CFrame.LookVector
-            local right = cam.CFrame.RightVector
+            local localDir = cam.CFrame:VectorToObjectSpace(moveDir)
             
-            -- Vertical Controls
+            -- Vertical Movement (PC Support)
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = UIS:IsKeyDown(Enum.KeyCode.LeftControl) and 1 or 0
             local vertical = Vector3.new(0, (up - down) * _s, 0)
 
-            -- The Magic Formula (Camera-Relative Movement)
-            -- This ensures joystick 'Forward' follows the camera's view
-            local localDir = cam.CFrame:VectorToObjectSpace(moveDir)
-            local velocity = (look * -localDir.Z * _s) + (right * localDir.X * _s) + vertical
+            -- Calculate velocity: Z is forward/back, X is left/right
+            -- We multiply by -localDir.Z because -Z is forward in Roblox
+            local velocity = (cam.CFrame.LookVector * (-localDir.Z * _s)) + (cam.CFrame.RightVector * (localDir.X * _s))
             
-            bv.Velocity = (moveDir.Magnitude > 0 or up ~= 0 or down ~= 0) and velocity or Vector3.zero
-            bg.CFrame = cam.CFrame
+            -- Apply movement or hover perfectly still
+            if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
+                bv.Velocity = velocity + vertical
+            else
+                bv.Velocity = Vector3.zero
+            end
+            
+            -- Align character with camera (IY Style)
+            bg.CFrame = cam.CFrame 
         else
+            -- Auto-cleanup if flight toggled off or character resets
             if bv or bg then CleanFly() end
         end
     end)
 end)
 
--- [ UI ELEMENTS ]
+-- [UI ELEMENTS]
 Tab:CreateToggle({
    Name = "Elite Flight",
    CurrentValue = false,
@@ -158,10 +171,10 @@ Tab:CreateToggle({
 })
 
 Tab:CreateSlider({
-   Name = "Flight Speed",
+   Name = "Fly Speed",
    Range = {10, 300},
    Increment = 1,
-   Suffix = "SPS",
+   Suffix = "Speed",
    CurrentValue = 50,
    Flag = "FlySpeed",
    Callback = function(Value)
