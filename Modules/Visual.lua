@@ -40,6 +40,13 @@ _G.ESPSettings = {
     -- Transparencies
     FillTrans = 0.5,
     OutlineTrans = 0
+    -- [ CACHE ORIGINAL LIGHTING ]
+    local LightingDefaults = {
+        Ambient = Lighting.Ambient,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        GlobalShadows = Lighting.GlobalShadows,
+        FogEnd = Lighting.FogEnd,
+        FogStart = Lighting.FogStart
 }
 
 -- [ HELPER: 3D BOX MATH ]
@@ -169,8 +176,17 @@ local function CreateESP(Player)
 
                     -- Name/Distance Text
                     Name.Visible = _G.ESPSettings.Names
-                    local dist = _G.ESPSettings.Distance and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and math.floor((root.Position - LP.Character.HumanoidRootPart.Position).Magnitude) or nil
-                    Name.Text = Player.Name .. (dist and " ["..dist.."s]" or "")
+                    local distText = ""
+                    
+                    if _G.ESPSettings.Distance then
+                        local myRoot = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                        if myRoot then
+                            local d = math.floor((root.Position - myRoot.Position).Magnitude)
+                            distText = " [" .. tostring(d) .. " studs]"
+                        end
+                    end
+                    
+                    Name.Text = Player.Name .. distText
                     Name.Position = Vector2.new(pos.X, pos.Y - 55)
                     Name.Color, Name.Center, Name.Outline = _G.ESPSettings.NameColor, true, true
                 else
@@ -192,12 +208,38 @@ end
 for _, p in pairs(Players:GetPlayers()) do if p ~= LP then CreateESP(p) end end
 Players.PlayerAdded:Connect(function(p) if p ~= LP then CreateESP(p) end end)
 
--- World/Local Update Logic
+-- World/Local Update Logic (Fixed Toggles)
 RunService.RenderStepped:Connect(function()
-    if _G.ESPSettings.Fullbright then Lighting.Ambient = Color3.new(1,1,1) Lighting.OutdoorAmbient = Color3.new(1,1,1) Lighting.GlobalShadows = false end
-    if _G.ESPSettings.NoFog then Lighting.FogEnd = 1e7 Lighting.FogStart = 1e7 end
+    -- Fullbright Toggle
+    if _G.ESPSettings.Fullbright then
+        Lighting.Ambient = Color3.new(1,1,1)
+        Lighting.OutdoorAmbient = Color3.new(1,1,1)
+        Lighting.GlobalShadows = false
+    else
+        Lighting.Ambient = LightingDefaults.Ambient
+        Lighting.OutdoorAmbient = LightingDefaults.OutdoorAmbient
+        Lighting.GlobalShadows = LightingDefaults.GlobalShadows
+    end
+
+    -- No Fog Toggle
+    if _G.ESPSettings.NoFog then
+        Lighting.FogEnd = 1e7
+        Lighting.FogStart = 1e7
+    else
+        Lighting.FogEnd = LightingDefaults.FogEnd
+        Lighting.FogStart = LightingDefaults.FogStart
+    end
+
+    -- Camera & Local Logic
     Camera.FieldOfView = _G.ESPSettings.FOV
-    if _G.ESPSettings.ThirdPerson then LP.CameraMaxZoomDistance = 30 LP.CameraMinZoomDistance = 30 else LP.CameraMaxZoomDistance = 128 LP.CameraMinZoomDistance = 0.5 end
+    if _G.ESPSettings.ThirdPerson then 
+        LP.CameraMaxZoomDistance = 30 
+        LP.CameraMinZoomDistance = 30 
+    else 
+        LP.CameraMaxZoomDistance = 128 
+        LP.CameraMinZoomDistance = 0.5 
+    end
+end)
     
     -- Viewmodel Transparency
     for _, v in pairs(Camera:GetChildren()) do
