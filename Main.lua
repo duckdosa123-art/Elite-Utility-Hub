@@ -37,9 +37,11 @@ local MiscTab = Window:CreateTab("Misc", 4483362458)
 -- We pass the Tab variables to the modules so they know where to put buttons
 _G.MoveTab = MoveTab
 _G.VisualTab = VisualTab
+-G.MiscTab = MiscTab
 
 -- This actually runs the code inside your Modules/Movement.lua
 LoadModule("Movement.lua")
+LoadModule("Misc.lua")
 
 -- Welcome message
 MainTab:CreateParagraph({Title = "Welcome!", Content = "Elite-Utility-Hub is now active. Modules Loaded."})
