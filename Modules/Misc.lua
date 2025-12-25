@@ -63,9 +63,11 @@ Tab:CreateButton({
    end,
 })
 
--- [ ELITE FPS BOOSTER ]
+-- [ ELITE FPS BOOSTER SYSTEM ]
 local _fpsEnabled = false
-local _boosterThread = 0 -- Thread Guard to prevent toggle overlap
+local _boosterThread = 0
+local _originalCache = {} -- THE CACHE: Stores original game looks
+
 local Lighting = game:GetService("Lighting")
 local Terrain = workspace:FindFirstChildOfClass("Terrain")
 
@@ -74,63 +76,107 @@ local function ToggleEliteFPS(Value)
     _boosterThread = _boosterThread + 1
     local currentThread = _boosterThread
 
-    -- 1. Instant Global Changes (Shadows & Lighting)
-    Lighting.GlobalShadows = not Value
-    Lighting.Brightness = Value and 1 or 2
-    Lighting.EnvironmentDiffuseScale = Value and 0 or 0.3
-    Lighting.EnvironmentSpecularScale = Value and 0 or 0.3
-    
-    -- Toggle Post-Processing
-    for _, effect in pairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
-            effect.Enabled = not Value
-        end
+    -- 1. HANDLE LIGHTING & TERRAIN
+    if Value then
+        -- Save Lighting originals
+        _originalCache["Lighting"] = {
+            GS = Lighting.GlobalShadows,
+            BR = Lighting.Brightness,
+            EDS = Lighting.EnvironmentDiffuseScale,
+            ESS = Lighting.EnvironmentSpecularScale
+        }
+        -- Apply Potato Lighting
+        Lighting.GlobalShadows = false
+        Lighting.Brightness = 1
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+    elseif _originalCache["Lighting"] then
+        -- Restore Lighting
+        local settings = _originalCache["Lighting"]
+        Lighting.GlobalShadows = settings.GS
+        Lighting.Brightness = settings.BR
+        Lighting.EnvironmentDiffuseScale = settings.EDS
+        Lighting.EnvironmentSpecularScale = settings.ESS
     end
 
-    -- 2. Terrain Changes
-    if Terrain then
-        Terrain.WaterWaveSize = Value and 0 or 0.15
-        Terrain.WaterWaveSpeed = Value and 0 or 8
-        Terrain.WaterReflectance = Value and 0 or 1
-        Terrain.WaterTransparency = Value and 0 or 1
-    end
-
-    -- 3. World Object Loop (Optimized & Guarded)
+    -- 2. HANDLE WORLD OBJECTS (THE HEAVY LIFTING)
     task.spawn(function()
         local objects = workspace:GetDescendants()
         for i, v in pairs(objects) do
-            -- Thread Guard Check: If user toggled again, kill this loop instantly
+            -- Thread Guard: Stop if toggle was flipped again
             if _boosterThread ~= currentThread then return end
 
-            if v:IsA("BasePart") then
-                v.CastShadow = not Value
-                v.Material = Value and Enum.Material.SmoothPlastic or Enum.Material.Plastic
-            elseif v:IsA("Decal") or v:IsA("Texture") then
-                v.Transparency = Value and 1 or 0
-            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") or v:IsA("Smoke") then
-                v.Enabled = not Value
+            if Value then
+                -- ENABLING: Save and change
+                if v:IsA("BasePart") and not _originalCache[v] then
+                    _originalCache[v] = {
+                        Mat = v.Material,
+                        SH = v.CastShadow,
+                        TR = (v:IsA("Decal") or v:IsA("Texture")) and v.Transparency or nil
+                    }
+                    
+                    v.CastShadow = false
+                    v.Material = Enum.Material.SmoothPlastic
+                elseif (v:IsA("Decal") or v:IsA("Texture")) then
+                    if not _originalCache[v] then _originalCache[v] = {TR = v.Transparency} end
+                    v.Transparency = 1
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                    if not _originalCache[v] then _originalCache[v] = {EN = v.Enabled} end
+                    v.Enabled = false
+                end
+            else
+                -- DISABLING: Restore from cache
+                local data = _originalCache[v]
+                if data then
+                    if v:IsA("BasePart") then
+                        v.CastShadow = data.SH
+                        v.Material = data.Mat
+                    elseif v:IsA("Decal") or v:IsA("Texture") then
+                        v.Transparency = data.TR
+                    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                        v.Enabled = data.EN
+                    end
+                end
             end
 
-            -- Yield every 300 items to keep mobile CPU usage low
-            if i % 300 == 0 then task.wait() end
+            -- Yield to prevent mobile crashes (High speed: 500 items per frame)
+            if i % 500 == 0 then task.wait() end
         end
+        
+        -- Clear cache on disable to save memory
+        if not Value then _originalCache = {} end
     end)
 end
 
 -- [ UI ELEMENTS ]
-Tab:CreateSection("Performance")
+-- Safety check to prevent "nil" callback error
+if _G.MiscTab then
+    local Tab = _G.MiscTab
+    
+    Tab:CreateSection("Performance")
 
-Tab:CreateToggle({
-   Name = "Elite FPS Booster",
-   CurrentValue = false,
-   Flag = "EliteFPS",
-   Callback = function(Value)
-      ToggleEliteFPS(Value)
-      Rayfield:Notify({
-         Title = "Elite Hub",
-         Content = Value and "Maximum FPS Mode Enabled" or "Graphics Restored to Standard",
-         Duration = 3,
-         Image = 4483362458,
-      })
-   end,
-})
+    Tab:CreateToggle({
+       Name = "Elite FPS Booster",
+       CurrentValue = false,
+       Flag = "EliteFPS",
+       Callback = function(Value)
+          -- Wrap in pcall to "God-Proof" the callback from errors
+          local success, err = pcall(function()
+              ToggleEliteFPS(Value)
+          end)
+          
+          if not success then
+              warn("Elite-Hub FPS Callback Error: " .. tostring(err))
+          end
+
+          Rayfield:Notify({
+             Title = "Elite Hub",
+             Content = Value and "Potato Mode: Visuals Cached & Simplified." or "Graphics Restored from Cache.",
+             Duration = 3,
+             Image = 4483362458,
+          })
+       end,
+    })
+else
+    warn("Elite-Hub: Misc Tab not found, FPS Booster could not initialize.")
+end
