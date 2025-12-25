@@ -63,55 +63,56 @@ Tab:CreateButton({
    end,
 })
 
--- [ ELITE FPS BOOSTER LOGIC ]
+-- [ ELITE FPS BOOSTER ]
 local _fpsEnabled = false
+local _boosterThread = 0 -- Thread Guard to prevent toggle overlap
 local Lighting = game:GetService("Lighting")
 local Terrain = workspace:FindFirstChildOfClass("Terrain")
 
-local function ToggleFPSBooster(Value)
+local function ToggleEliteFPS(Value)
     _fpsEnabled = Value
+    _boosterThread = _boosterThread + 1
+    local currentThread = _boosterThread
+
+    -- 1. Instant Global Changes (Shadows & Lighting)
+    Lighting.GlobalShadows = not Value
+    Lighting.Brightness = Value and 1 or 2
+    Lighting.EnvironmentDiffuseScale = Value and 0 or 0.3
+    Lighting.EnvironmentSpecularScale = Value and 0 or 0.3
     
+    -- Toggle Post-Processing
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = not Value
+        end
+    end
+
+    -- 2. Terrain Changes
+    if Terrain then
+        Terrain.WaterWaveSize = Value and 0 or 0.15
+        Terrain.WaterWaveSpeed = Value and 0 or 8
+        Terrain.WaterReflectance = Value and 0 or 1
+        Terrain.WaterTransparency = Value and 0 or 1
+    end
+
+    -- 3. World Object Loop (Optimized & Guarded)
     task.spawn(function()
-        -- 1. Global Lighting & Shadows Restoration
-        Lighting.GlobalShadows = not Value
-        Lighting.Brightness = Value and 1 or 2
-        Lighting.FogEnd = Value and 9e9 or 100000 -- Restores fog distance
-        Lighting.EnvironmentDiffuseScale = Value and 0 or 0.3
-        Lighting.EnvironmentSpecularScale = Value and 0 or 0.3
-        
-        -- 2. Post-Processing (Bloom, Blur, etc)
-        for _, effect in pairs(Lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
-                effect.Enabled = not Value
-            end
-        end
-
-        -- 3. Terrain Quality
-        if Terrain then
-            Terrain.WaterWaveSize = Value and 0 or 0.15
-            Terrain.WaterWaveSpeed = Value and 0 or 8
-            Terrain.WaterReflectance = Value and 0 or 1
-            Terrain.WaterTransparency = Value and 0 or 1
-        end
-
-        -- 4. The Loop (Optimized for Mobile)
-        -- We removed the 'break' so that the loop always finishes resetting everything
-        local descendants = workspace:GetDescendants()
-        for i, v in pairs(descendants) do
-            -- If the user toggles it AGAIN while this loop is running, stop this specific thread
-            if _fpsEnabled ~= Value then return end 
+        local objects = workspace:GetDescendants()
+        for i, v in pairs(objects) do
+            -- Thread Guard Check: If user toggled again, kill this loop instantly
+            if _boosterThread ~= currentThread then return end
 
             if v:IsA("BasePart") then
-                v.Material = Value and Enum.Material.SmoothPlastic or Enum.Material.Plastic
                 v.CastShadow = not Value
+                v.Material = Value and Enum.Material.SmoothPlastic or Enum.Material.Plastic
             elseif v:IsA("Decal") or v:IsA("Texture") then
                 v.Transparency = Value and 1 or 0
             elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") or v:IsA("Smoke") then
                 v.Enabled = not Value
             end
 
-            -- Yield every 250 items to keep mobile framerate stable during the switch
-            if i % 250 == 0 then task.wait() end
+            -- Yield every 300 items to keep mobile CPU usage low
+            if i % 300 == 0 then task.wait() end
         end
     end)
 end
@@ -120,14 +121,14 @@ end
 Tab:CreateSection("Performance")
 
 Tab:CreateToggle({
-   Name = "Elite Potato Mode (FPS)",
+   Name = "Elite FPS Booster",
    CurrentValue = false,
-   Flag = "FpsBooster",
+   Flag = "EliteFPS",
    Callback = function(Value)
-      ToggleFPSBooster(Value)
+      ToggleEliteFPS(Value)
       Rayfield:Notify({
-         Title = "FPS System",
-         Content = Value and "Potato Mode Enabled: Visuals Simplified." or "Visuals Restored: Shadows & Textures On.",
+         Title = "Elite Hub",
+         Content = Value and "Maximum FPS Mode Enabled" or "Graphics Restored to Standard",
          Duration = 3,
          Image = 4483362458,
       })
