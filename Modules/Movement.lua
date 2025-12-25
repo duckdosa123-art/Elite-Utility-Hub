@@ -79,10 +79,9 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE DIRECTIONAL FLIGHT SYSTEM
+-- ELITE DIRECTIONAL FLIGHT (FIXED CONTROLS)
 local flyEnabled = false
 local flySpeed = 50
-local verticalVelocity = 0 -- For the Up/Down buttons
 local RunService = game:GetService("RunService")
 local LP = game.Players.LocalPlayer
 
@@ -98,24 +97,25 @@ RunService.Heartbeat:Connect(function()
     
     if root and hum then
         local cam = workspace.CurrentCamera
-        
-        -- Directional Logic: Camera-relative movement
-        -- This handles looking up/down to fly up/down
         local moveDir = hum.MoveDirection
-        local flyVelocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
         
-        -- Add Vertical Support (Up/Down buttons + Camera Tilt)
-        local verticalInput = (moveDir.Z < 0 and cam.CFrame.LookVector.Y or 0) * flySpeed
-        root.AssemblyLinearVelocity = flyVelocity + Vector3.new(0, verticalVelocity + verticalInput, 0)
+        -- FIXED LOGIC: Forward is now based on where the camera is actually pointing
+        -- This uses the AssemblyLinearVelocity method from your source 
+        if moveDir.Magnitude > 0 then
+            root.AssemblyLinearVelocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
+            -- This line specifically adds the "Look Up = Fly Up" logic
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + (cam.CFrame.LookVector * (moveDir.Z * -flySpeed))
+        else
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        end
         
-        -- Keep character upright and stable
         if bG then bG.CFrame = cam.CFrame end
     end
 end)
 
 -- UI Toggle
 Tab:CreateToggle({
-   Name = "Elite Fly",
+   Name = "Elite Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
@@ -124,7 +124,6 @@ Tab:CreateToggle({
       local root = char and char:FindFirstChild("HumanoidRootPart")
       
       if Value and root then
-          -- Add Gyro to keep you from spinning
           bG = Instance.new("BodyGyro")
           bG.P = 9e4
           bG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
@@ -132,34 +131,28 @@ Tab:CreateToggle({
           bG.Parent = root
       else
           if bG then bG:Destroy() end
-          verticalVelocity = 0
-          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+          if root then root.AssemblyLinearVelocity = Vector3.zero end [cite: 5]
       end
    end,
 })
 
--- Flight Speed
-Tab:CreateSlider({
-   Name = "Flight Speed",
-   Range = {10, 500},
-   Increment = 5,
-   CurrentValue = 50,
-   Flag = "FlySpeed",
-   Callback = function(Value) flySpeed = Value end,
-})
-
--- MOBILE HEIGHT CONTROLS
+-- UP/DOWN INSTANT MOVEMENT
 Tab:CreateButton({
-   Name = "Ascend (Go Up)",
-   Callback = function() verticalVelocity = flySpeed end,
+   Name = "Up (1 Stud)",
+   Callback = function()
+       local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if root then
+           root.CFrame = root.CFrame * CFrame.new(0, 1, 0)
+       end
+   end,
 })
 
 Tab:CreateButton({
-   Name = "Descend (Go Down)",
-   Callback = function() verticalVelocity = -flySpeed end,
-})
-
-Tab:CreateButton({
-   Name = "Level Out (Stop Up/Down)",
-   Callback = function() verticalVelocity = 0 end,
+   Name = "(1 Stud)",
+   Callback = function()
+       local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if root then
+           root.CFrame = root.CFrame * CFrame.new(0, -1, 0)
+       end
+   end,
 })
