@@ -96,61 +96,34 @@ local BodyVelocity = nil
 local RunService = game:GetService("RunService")
 local LP = game:GetService("Players").LocalPlayer
 
--- ELITE FLY SYSTEM (MOBILE & PC OPTIMIZED)
-local flyEnabled = false
-local flySpeed = 50
-local RunService = game:GetService("RunService")
-local LP = game.Players.LocalPlayer
+-- FLY SCRIPT
+local flyScriptURL = "https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"
+local LP = game:GetService("Players").LocalPlayer
 
--- The Physics Loop
-RunService.RenderStepped:Connect(function()
-    if not flyEnabled then return end
-    
-    local char = LP.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if root and hum then
-        local cam = workspace.CurrentCamera
-        
-        -- If player is using joystick/keys, move in that direction relative to camera
-        if hum.MoveDirection.Magnitude > 0 then
-            root.AssemblyLinearVelocity = hum.MoveDirection * flySpeed
-        else
-            -- If not moving, stay still in the air (anti-gravity)
-            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        end
-        
-        -- Keep the character leveled and facing where the camera looks
-        root.CFrame = CFrame.new(root.Position, root.Position + cam.CFrame.LookVector)
-    end
-end)
-
--- UI Toggle
 Tab:CreateToggle({
-   Name = "Elite Flight (Joystick Ready)",
+   Name = "Elite Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
-      flyEnabled = Value
-      
-      -- Safety physics reset when turning off
-      if not Value then
+      if Value then
+          -- RUN THE SCRIPT
+          loadstring(game:HttpGet(flyScriptURL))()
+          Rayfield:Notify({Title = "Elite Hub", Content = "Fly Script Loaded!", Duration = 2})
+      else
+          -- KILL THE SCRIPT
+          -- We find the GUI by the name defined in its source code 
+          local flyGui = LP.PlayerGui:FindFirstChild("Elite_Project_v3")
+          if flyGui then
+              flyGui:Destroy()
+          end
+          
+          -- Reset physics to stop any sliding 
           local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+          if root then 
+              root.AssemblyLinearVelocity = Vector3.new(0,0,0) 
+          end
+          
+          Rayfield:Notify({Title = "Elite Hub", Content = "Fly Script Disabled", Duration = 2})
       end
-   end,
-})
-
--- UI Speed Slider
-Tab:CreateSlider({
-   Name = "Flight Speed",
-   Range = {10, 500},
-   Increment = 5,
-   Suffix = "SPS",
-   CurrentValue = 50,
-   Flag = "FlySpeed",
-   Callback = function(Value)
-      flySpeed = Value
    end,
 })
