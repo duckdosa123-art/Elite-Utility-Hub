@@ -62,3 +62,42 @@ Tab:CreateButton({
        if char then char:BreakJoints() end
    end,
 })
+
+-- [ FPS BOOSTER LOGIC ]
+local function OptimizePerformance()
+    task.spawn(function()
+        local Lighting = game:GetService("Lighting")
+        local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+        -- Disable Shadows and Lighting Effects
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, v in pairs(Lighting:GetChildren()) do
+            if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
+                v.Enabled = false
+            end
+        end
+
+        if Terrain then
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 0
+        end
+
+        -- Optimize Parts (Materials and Textures)
+        for i, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v:IsA("MeshPart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.CastShadow = false
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v.Transparency = 1
+            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                v.Enabled = false
+            end
+            
+            -- Prevent lag while script is cleaning (Wait every 100 items)
+            if i % 100 == 0 then task.wait() end
+        end
+    end)
+end
