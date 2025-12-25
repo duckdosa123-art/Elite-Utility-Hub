@@ -79,16 +79,16 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE DIRECTIONAL FLIGHT (FIXED CONTROLS)
+-- ELITE FLIGHT
 local flyEnabled = false
 local flySpeed = 50
 local RunService = game:GetService("RunService")
 local LP = game.Players.LocalPlayer
 
-local bG -- BodyGyro to keep you upright
+local bG = nil -- BodyGyro
 
--- The Physics Loop
-RunService.Heartbeat:Connect(function()
+-- THE PHYSICS LOOP (Safe & Fixed)
+RunService.RenderStepped:Connect(function()
     if not flyEnabled then return end
     
     local char = LP.Character
@@ -99,17 +99,17 @@ RunService.Heartbeat:Connect(function()
         local cam = workspace.CurrentCamera
         local moveDir = hum.MoveDirection
         
-        -- FIXED LOGIC: Forward is now based on where the camera is actually pointing
-        -- This uses the AssemblyLinearVelocity method from your source 
+        -- FIXED MATH: Moves relative to Camera without Inversion
         if moveDir.Magnitude > 0 then
+            -- This makes sure if you look up, you fly up. No inversion.
             root.AssemblyLinearVelocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
-            -- This line specifically adds the "Look Up = Fly Up" logic
-            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + (cam.CFrame.LookVector * (moveDir.Z * -flySpeed))
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + (cam.CFrame.LookVector * (moveDir.Magnitude * flySpeed))
         else
+            -- Anti-Gravity: Stay still when not moving
             root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         end
         
-        if bG then bG.CFrame = cam.CFrame end
+        if bG and bG.Parent then bG.CFrame = cam.CFrame end
     end
 end)
 
@@ -124,35 +124,37 @@ Tab:CreateToggle({
       local root = char and char:FindFirstChild("HumanoidRootPart")
       
       if Value and root then
+          -- Setup stability
           bG = Instance.new("BodyGyro")
           bG.P = 9e4
           bG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
           bG.CFrame = root.CFrame
           bG.Parent = root
       else
-          if bG then bG:Destroy() end
-          if root then root.AssemblyLinearVelocity = Vector3.zero end [cite: 5]
+          -- Clean up
+          if bG then bG:Destroy() bG = nil end
+          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
       end
    end,
 })
 
--- UP/DOWN INSTANT MOVEMENT
+-- 1-STUD PRECISION BUTTONS
 Tab:CreateButton({
    Name = "Up (1 Stud)",
    Callback = function()
        local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
        if root then
-           root.CFrame = root.CFrame * CFrame.new(0, 1, 0)
+           root.CFrame = root.CFrame + Vector3.new(0, 1, 0)
        end
    end,
 })
 
 Tab:CreateButton({
-   Name = "(1 Stud)",
+   Name = "Down (1 Stud)",
    Callback = function()
        local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
        if root then
-           root.CFrame = root.CFrame * CFrame.new(0, -1, 0)
+           root.CFrame = root.CFrame + Vector3.new(0, -1, 0)
        end
    end,
 })
