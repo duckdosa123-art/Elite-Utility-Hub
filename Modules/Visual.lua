@@ -209,6 +209,7 @@ RunService.RenderStepped:Connect(function()
     end
     Camera.FieldOfView = _G.ESPSettings.FOV
     -- Fixed Third Person Toggle
+    -- Fixed Third Person Toggle
     if _G.ESPSettings.ThirdPerson then 
         LP.CameraMaxZoomDistance = 30 
         LP.CameraMinZoomDistance = 30 
@@ -217,9 +218,12 @@ RunService.RenderStepped:Connect(function()
         LP.CameraMinZoomDistance = LightingDefaults.MinZoom
     end
     
+    -- Viewmodel Transparency
     for _, v in pairs(Camera:GetChildren()) do
-        if v:IsA("Model") then
-            for _, p in pairs(v:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = _G.ESPSettings.VMTrans end end
+        if v:IsA("Model") or v:IsA("BasePart") then
+            for _, p in pairs(v:GetDescendants()) do 
+                if p:IsA("BasePart") then p.Transparency = _G.ESPSettings.VMTrans end 
+            end
         end
     end
 end)
@@ -248,6 +252,6 @@ Tab:CreateToggle({Name = "Force Third Person", CurrentValue = false, Flag = "V_T
 
 Tab:CreateSection("Elite Aesthetic")
 Tab:CreateToggle({Name = "Cartoon Outline", CurrentValue = false, Flag = "V_OL", Callback = function(V) _G.ESPSettings.Outline = V end})
-Tab:CreateToggle({Name = "Rainbow RGB", CurrentValue = false, Flag = "V_RB", Callback = function(V) _G.ESPSettings.Rainbow = V end})
+Tab:CreateToggle({Name = "Rainbow RGB Mode", CurrentValue = false, Flag = "V_RB", Callback = function(V) _G.ESPSettings.Rainbow = V end})
 Tab:CreateToggle({Name = "Center Crosshair", CurrentValue = false, Flag = "V_CH", Callback = function(V) _G.ESPSettings.Crosshair = V end})
 Tab:CreateColorPicker({Name = "Crosshair Color", Color = Color3.new(0,1,0), Flag = "V_CHC", Callback = function(V) _G.ESPSettings.CrossColor = V end})
