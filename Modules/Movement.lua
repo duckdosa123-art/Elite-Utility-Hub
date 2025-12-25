@@ -79,7 +79,7 @@ Tab:CreateToggle({
    end,
 })
 
--- Movement.lua - Elite-Utility-Hub
+-- FLY
 local LP = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -87,7 +87,6 @@ local UIS = game:GetService("UserInputService")
 -- States
 local _f = false      -- Flight Toggle
 local _s = 50         -- Flight Speed
-local _ij = false     -- Infinite Jump Toggle
 
 -- [FLIGHT ENGINE]
 task.spawn(function()
@@ -115,18 +114,7 @@ task.spawn(function()
     end)
 end)
 
--- [INFINITE JUMP ENGINE]
-UIS.JumpRequest:Connect(function()
-    if _ij then
-        local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-        if hum then
-            hum:ChangeState("Jumping")
-        end
-    end
-end)
-
 -- [UI ELEMENTS]
--- Elite Flight Main Feature
 Tab:CreateToggle({
    Name = "Elite Flight",
    CurrentValue = false,
@@ -154,14 +142,5 @@ Tab:CreateButton({
    Callback = function()
        local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
        if r then r.CFrame = r.CFrame * CFrame.new(0, -1, 0) end
-   end,
-})
-
-Tab:CreateToggle({
-   Name = "Infinite Jump",
-   CurrentValue = false,
-   Flag = "InfJump",
-   Callback = function(Value)
-      _ij = Value
    end,
 })
