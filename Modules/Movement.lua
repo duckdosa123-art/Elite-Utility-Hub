@@ -79,37 +79,66 @@ Tab:CreateToggle({
    end,
 })
 
--- FLY
+-- Movement.lua - Elite-Utility-Hub (IY Style)
 local LP = game:GetService("Players").LocalPlayer
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 
 -- States
-local _f = false      -- Flight Toggle
-local _s = 50         -- Flight Speed
+local _f = false
+local _s = 50
+local bv, bg -- Body Movers
 
--- [FLIGHT ENGINE]
+-- [ELITE FLY ENGINE]
+local function CleanFly()
+    if bv then bv:Destroy() bv = nil end
+    if bg then bg:Destroy() bg = nil end
+    local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+    if hum then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+end
+
 task.spawn(function()
     RunService.RenderStepped:Connect(function()
-        if not _f then return end
-        
         local char = LP.Character
         local r = char and char:FindFirstChild("HumanoidRootPart")
         local hum = char and char:FindFirstChild("Humanoid")
-        
-        if r and hum then
-            local dir = hum.MoveDirection -- Supports Joystick and WASD
-            
+        local cam = workspace.CurrentCamera
+
+        if _f and r and hum and cam then
+            -- Create movers if they don't exist (IY Style)
+            if not bv then
+                bv = Instance.new("BodyVelocity")
+                bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
+                bv.Parent = r
+            end
+            if not bg then
+                bg = Instance.new("BodyGyro")
+                bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+                bg.P = 9000
+                bg.Parent = r
+            end
+
+            -- Physics State (Prevents falling animation)
+            hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+            -- Camera-Relative Movement Logic
+            local dir = hum.MoveDirection
+            local velocity = Vector3.zero
+
+            -- Vertical Movement (Space = Up, Ctrl = Down)
+            local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
+            local down = UIS:IsKeyDown(Enum.KeyCode.LeftControl) and 1 or 0
+            local vertical = Vector3.new(0, (up - down) * _s, 0)
+
             if dir.Magnitude > 0 then
-                -- Move in direction of input
-                r.AssemblyLinearVelocity = dir * _s
-            else
-                -- Hover perfectly still
-                r.AssemblyLinearVelocity = Vector3.zero
+                -- Move exactly where looking + vertical offset
+                velocity = (cam.CFrame.LookVector * (dir.Z * -_s)) + (cam.CFrame.RightVector * (dir.X * _s))
             end
             
-            -- Prevent gravity from pulling the character down while flying
-            r.Velocity = Vector3.new(r.Velocity.X, 0, r.Velocity.Z)
+            bv.Velocity = velocity + vertical
+            bg.CFrame = cam.CFrame -- Matches IY's "Face where you look" feature
+        else
+            CleanFly()
         end
     end)
 end)
@@ -121,14 +150,23 @@ Tab:CreateToggle({
    Flag = "FlyToggle",
    Callback = function(Value)
       _f = Value
-      if not Value then
-          local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-          if r then r.AssemblyLinearVelocity = Vector3.zero end 
-      end
+      if not Value then CleanFly() end
    end,
 })
 
--- Sub-features (Simple Naming)
+Tab:CreateSlider({
+   Name = "Fly Speed",
+   Range = {10, 300},
+   Increment = 1,
+   Suffix = "Speed",
+   CurrentValue = 50,
+   Flag = "FlySpeed",
+   Callback = function(Value)
+      _s = Value
+   end,
+})
+
+-- Keep your existing Stud buttons for precise positioning
 Tab:CreateButton({
    Name = "UP (one stud)",
    Callback = function()
