@@ -101,3 +101,18 @@ local function OptimizePerformance()
         end
     end)
 end
+
+Tab:CreateSection("Performance")
+
+Tab:CreateButton({
+   Name = "Elite FPS Booster",
+   Callback = function()
+       OptimizePerformance()
+       Rayfield:Notify({
+          Title = "Optimization Complete",
+          Content = "Visuals simplified for maximum performance.",
+          Duration = 3,
+          Image = 4483362458,
+       })
+   end,
+})
