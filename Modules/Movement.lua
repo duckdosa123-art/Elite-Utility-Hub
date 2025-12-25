@@ -96,83 +96,61 @@ local BodyVelocity = nil
 local RunService = game:GetService("RunService")
 local LP = game:GetService("Players").LocalPlayer
 
--- THE ELITE FLY ENGINE
-local function StartFlying()
-    local char = LP.Character or LP.CharacterAdded:Wait()
-    local root = char:WaitForChild("HumanoidRootPart")
+-- ELITE FLY SYSTEM (MOBILE & PC OPTIMIZED)
+local flyEnabled = false
+local flySpeed = 50
+local RunService = game:GetService("RunService")
+local LP = game.Players.LocalPlayer
+
+-- The Physics Loop
+RunService.RenderStepped:Connect(function()
+    if not flyEnabled then return end
     
-    -- Clean up any old forces before starting
-    if root:FindFirstChild("EliteGyro") then root.EliteGyro:Destroy() end
-    if root:FindFirstChild("EliteVelocity") then root.EliteVelocity:Destroy() end
-
-    -- Gyro keeps you upright and facing your camera direction
-    BodyGyro = Instance.new("BodyGyro")
-    BodyGyro.Name = "EliteGyro"
-    BodyGyro.P = 9e4
-    BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    BodyGyro.CFrame = root.CFrame
-    BodyGyro.Parent = root
-
-    -- Velocity handles the actual movement
-    BodyVelocity = Instance.new("BodyVelocity")
-    BodyVelocity.Name = "EliteVelocity"
-    BodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    BodyVelocity.Parent = root
-
-    -- Main Flight Loop (Joystick Compatible)
-    task.spawn(function()
-        while FlyEnabled and char:Parent() do
-            local camera = workspace.CurrentCamera
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            
-            if humanoid and root then
-                -- This is the "Infinite Yield" secret: using MoveDirection
-                -- This makes it work perfectly with mobile joysticks
-                local moveDir = humanoid.MoveDirection
-                BodyVelocity.Velocity = moveDir * FlySpeed
-                BodyGyro.CFrame = camera.CFrame
-            end
-            RunService.RenderStepped:Wait()
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    
+    if root and hum then
+        local cam = workspace.CurrentCamera
+        
+        -- If player is using joystick/keys, move in that direction relative to camera
+        if hum.MoveDirection.Magnitude > 0 then
+            root.AssemblyLinearVelocity = hum.MoveDirection * flySpeed
+        else
+            -- If not moving, stay still in the air (anti-gravity)
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         end
         
-        -- Cleanup when disabled
-        if BodyGyro then BodyGyro:Destroy() end
-        if BodyVelocity then BodyVelocity:Destroy() end
-        if char:FindFirstChildOfClass("Humanoid") then
-            char:FindFirstChildOfClass("Humanoid").PlatformStand = false
-        end
-    end)
-end
+        -- Keep the character leveled and facing where the camera looks
+        root.CFrame = CFrame.new(root.Position, root.Position + cam.CFrame.LookVector)
+    end
+end)
 
--- RAYFIELD UI INTEGRATION
+-- UI Toggle
 Tab:CreateToggle({
-   Name = "Elite Flight",
+   Name = "Elite Flight (Joystick Ready)",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
-      FlyEnabled = Value
-      if Value then
-          StartFlying()
-      else
-          -- Safety Reset
+      flyEnabled = Value
+      
+      -- Safety physics reset when turning off
+      if not Value then
           local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-          if root then
-              root.AssemblyLinearVelocity = Vector3.zero
-          end
+          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
       end
    end,
 })
 
+-- UI Speed Slider
 Tab:CreateSlider({
    Name = "Flight Speed",
    Range = {10, 500},
-   Increment = 1,
+   Increment = 5,
    Suffix = "SPS",
    CurrentValue = 50,
    Flag = "FlySpeed",
    Callback = function(Value)
-      FlySpeed = Value
+      flySpeed = Value
    end,
 })
-
