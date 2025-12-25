@@ -50,6 +50,7 @@ _G.MiscTab = MiscTab
 
 -- 4. RUN LOADER
 LoadModule("Movement.lua")
+LoadModule("Visual.lua")
 LoadModule("Misc.lua") 
 
 -- Welcome message
