@@ -79,75 +79,89 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE FLY SYSTEM
-local flyEnabled = false
-local flySpeed = 50
-local runService = game:GetService("RunService")
-local lp = game.Players.LocalPlayer
+-- Movement.lua - Elite-Utility-Hub
+local LP = game:GetService("Players").LocalPlayer
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 
--- THE PHYSICS LOOP (Wrapped to prevent crashing)
+-- States
+local _f = false      -- Flight Toggle
+local _s = 50         -- Flight Speed
+local _ij = false     -- Infinite Jump Toggle
+
+-- [FLIGHT ENGINE]
 task.spawn(function()
-    runService.RenderStepped:Connect(function()
-        if not flyEnabled then return end
+    RunService.RenderStepped:Connect(function()
+        if not _f then return end
         
-        local char = lp.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local char = LP.Character
+        local r = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
         
-        if root and hum then
-            local cam = workspace.CurrentCamera
-            local moveDir = hum.MoveDirection
+        if r and hum then
+            local dir = hum.MoveDirection -- Supports Joystick and WASD
             
-            if moveDir.Magnitude > 0 then
-                -- Direct camera-relative velocity
-                local velocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
-                -- Add verticality based on camera pitch
-                local vertical = cam.CFrame.LookVector.Y * (moveDir.Z * -flySpeed)
-                root.AssemblyLinearVelocity = velocity + Vector3.new(0, vertical, 0)
+            if dir.Magnitude > 0 then
+                -- Move in direction of input
+                r.AssemblyLinearVelocity = dir * _s
             else
-                root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                -- Hover perfectly still
+                r.AssemblyLinearVelocity = Vector3.zero
             end
             
-            -- Lock character rotation to camera
-            root.CFrame = CFrame.new(root.Position, root.Position + Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z))
+            -- Prevent gravity from pulling the character down while flying
+            r.Velocity = Vector3.new(r.Velocity.X, 0, r.Velocity.Z)
         end
     end)
 end)
 
--- UI CONTROLS
+-- [INFINITE JUMP ENGINE]
+UIS.JumpRequest:Connect(function()
+    if _ij then
+        local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum:ChangeState("Jumping")
+        end
+    end
+end)
+
+-- [UI ELEMENTS]
+-- Elite Flight Main Feature
 Tab:CreateToggle({
    Name = "Elite Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
-      flyEnabled = Value
-      local char = lp.Character
-      local root = char and char:FindFirstChild("HumanoidRootPart")
-      if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+      _f = Value
+      if not Value then
+          local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+          if r then r.AssemblyLinearVelocity = Vector3.zero end 
+      end
    end,
 })
 
-Tab:CreateSlider({
-   Name = "Flight Speed",
-   Range = {10, 500},
-   Increment = 5,
-   CurrentValue = 50,
-   Flag = "FlySpeed",
-   Callback = function(Value) flySpeed = Value end,
-})
-
+-- Sub-features (Simple Naming)
 Tab:CreateButton({
    Name = "UP (one stud)",
    Callback = function()
-       local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-       if root then root.CFrame = root.CFrame * CFrame.new(0, 1, 0) end
+       local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if r then r.CFrame = r.CFrame * CFrame.new(0, 1, 0) end
    end,
 })
 
 Tab:CreateButton({
    Name = "DOWN (one stud)",
    Callback = function()
-       local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-       if root then root.CFrame = root.CFrame * CFrame.new(0, -1, 0) end
+       local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if r then r.CFrame = r.CFrame * CFrame.new(0, -1, 0) end
+   end,
+})
+
+Tab:CreateToggle({
+   Name = "Infinite Jump",
+   CurrentValue = false,
+   Flag = "InfJump",
+   Callback = function(Value)
+      _ij = Value
    end,
 })
