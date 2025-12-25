@@ -79,51 +79,87 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE SMOOTH FLY ENGINE
-local RunService = game:GetService("RunService")
-local LP = game:GetService("Players").LocalPlayer
-
--- State Management
-local isFlying = false
+-- ELITE DIRECTIONAL FLIGHT SYSTEM
+local flyEnabled = false
 local flySpeed = 50
-local flyConnection
-
--- FLIGHT SYSTEM CONFIGURATION
-local FlyEnabled = false
-local FlySpeed = 50
-local BodyGyro = nil
-local BodyVelocity = nil
+local verticalVelocity = 0 -- For the Up/Down buttons
 local RunService = game:GetService("RunService")
-local LP = game:GetService("Players").LocalPlayer
+local LP = game.Players.LocalPlayer
 
--- FLY SCRIPT
-local flyScriptURL = "https://obj.wearedevs.net/2/scripts/Fly.lua"
-local LP = game:GetService("Players").LocalPlayer
+local bG -- BodyGyro to keep you upright
 
+-- The Physics Loop
+RunService.Heartbeat:Connect(function()
+    if not flyEnabled then return end
+    
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    
+    if root and hum then
+        local cam = workspace.CurrentCamera
+        
+        -- Directional Logic: Camera-relative movement
+        -- This handles looking up/down to fly up/down
+        local moveDir = hum.MoveDirection
+        local flyVelocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
+        
+        -- Add Vertical Support (Up/Down buttons + Camera Tilt)
+        local verticalInput = (moveDir.Z < 0 and cam.CFrame.LookVector.Y or 0) * flySpeed
+        root.AssemblyLinearVelocity = flyVelocity + Vector3.new(0, verticalVelocity + verticalInput, 0)
+        
+        -- Keep character upright and stable
+        if bG then bG.CFrame = cam.CFrame end
+    end
+end)
+
+-- UI Toggle
 Tab:CreateToggle({
-   Name = "Elite Flight",
+   Name = "Elite Fly",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
-      if Value then
-          -- RUN THE SCRIPT
-          loadstring(game:HttpGet(flyScriptURL))()
-          Rayfield:Notify({Title = "Elite Hub", Content = "Fly Script Loaded!", Duration = 2})
+      flyEnabled = Value
+      local char = LP.Character
+      local root = char and char:FindFirstChild("HumanoidRootPart")
+      
+      if Value and root then
+          -- Add Gyro to keep you from spinning
+          bG = Instance.new("BodyGyro")
+          bG.P = 9e4
+          bG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+          bG.CFrame = root.CFrame
+          bG.Parent = root
       else
-          -- KILL THE SCRIPT
-          -- We find the GUI by the name defined in its source code 
-          local flyGui = LP.PlayerGui:FindFirstChild("Elite_Project_v3")
-          if flyGui then
-              flyGui:Destroy()
-          end
-          
-          -- Reset physics to stop any sliding 
-          local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-          if root then 
-              root.AssemblyLinearVelocity = Vector3.new(0,0,0) 
-          end
-          
-          Rayfield:Notify({Title = "Elite Hub", Content = "Fly Script Disabled", Duration = 2})
+          if bG then bG:Destroy() end
+          verticalVelocity = 0
+          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
       end
    end,
+})
+
+-- Flight Speed
+Tab:CreateSlider({
+   Name = "Flight Speed",
+   Range = {10, 500},
+   Increment = 5,
+   CurrentValue = 50,
+   Flag = "FlySpeed",
+   Callback = function(Value) flySpeed = Value end,
+})
+
+-- MOBILE HEIGHT CONTROLS
+Tab:CreateButton({
+   Name = "Ascend (Go Up)",
+   Callback = function() verticalVelocity = flySpeed end,
+})
+
+Tab:CreateButton({
+   Name = "Descend (Go Down)",
+   Callback = function() verticalVelocity = -flySpeed end,
+})
+
+Tab:CreateButton({
+   Name = "Level Out (Stop Up/Down)",
+   Callback = function() verticalVelocity = 0 end,
 })
