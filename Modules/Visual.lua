@@ -163,13 +163,22 @@ local function CreateESP(Player)
                         HealthBar.Color, HealthBar.Thickness, HealthBar.Visible = Color3.fromHSV(hp * 0.3, 1, 1), 3, true
                     else HealthBar.Visible = false end
 
-                    -- Name & Distance
+                    -- Name & Distance (FIXED)
                     Name.Visible = _G.ESPSettings.Names
-                    local dText = ""
-                    if _G.ESPSettings.Distance and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
-                        dText = " ["..math.floor((root.Position - LP.Character.HumanoidRootPart.Position).Magnitude).."s]"
+                    local distText = ""
+
+                    if _G.ESPSettings.Distance then
+                        local myChar = LP.Character
+                        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                        
+                        -- Ensure both your root and the enemy root exist before math
+                        if myRoot and root then
+                            local magnitude = (root.Position - myRoot.Position).Magnitude
+                            distText = " [" .. math.floor(magnitude) .. " studs]"
+                        end
                     end
-                    Name.Text = Player.Name .. dText
+
+                    Name.Text = Player.Name .. distText
                     Name.Position = Vector2.new(pos.X, pos.Y - 55)
                     Name.Color, Name.Center, Name.Outline = _G.ESPSettings.NameColor, true, true
                 else
