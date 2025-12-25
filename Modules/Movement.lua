@@ -79,82 +79,75 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE FLIGHT
+-- ELITE FLY SYSTEM
 local flyEnabled = false
 local flySpeed = 50
-local RunService = game:GetService("RunService")
-local LP = game.Players.LocalPlayer
+local runService = game:GetService("RunService")
+local lp = game.Players.LocalPlayer
 
-local bG = nil -- BodyGyro
-
--- THE PHYSICS LOOP (Safe & Fixed)
-RunService.RenderStepped:Connect(function()
-    if not flyEnabled then return end
-    
-    local char = LP.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if root and hum then
-        local cam = workspace.CurrentCamera
-        local moveDir = hum.MoveDirection
+-- THE PHYSICS LOOP (Wrapped to prevent crashing)
+task.spawn(function()
+    runService.RenderStepped:Connect(function()
+        if not flyEnabled then return end
         
-        -- FIXED MATH: Moves relative to Camera without Inversion
-        if moveDir.Magnitude > 0 then
-            -- This makes sure if you look up, you fly up. No inversion.
-            root.AssemblyLinearVelocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
-            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + (cam.CFrame.LookVector * (moveDir.Magnitude * flySpeed))
-        else
-            -- Anti-Gravity: Stay still when not moving
-            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        local char = lp.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if root and hum then
+            local cam = workspace.CurrentCamera
+            local moveDir = hum.MoveDirection
+            
+            if moveDir.Magnitude > 0 then
+                -- Direct camera-relative velocity
+                local velocity = cam.CFrame:VectorToWorldSpace(Vector3.new(moveDir.X, 0, moveDir.Z)) * flySpeed
+                -- Add verticality based on camera pitch
+                local vertical = cam.CFrame.LookVector.Y * (moveDir.Z * -flySpeed)
+                root.AssemblyLinearVelocity = velocity + Vector3.new(0, vertical, 0)
+            else
+                root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            end
+            
+            -- Lock character rotation to camera
+            root.CFrame = CFrame.new(root.Position, root.Position + Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z))
         end
-        
-        if bG and bG.Parent then bG.CFrame = cam.CFrame end
-    end
+    end)
 end)
 
--- UI Toggle
+-- UI CONTROLS
 Tab:CreateToggle({
    Name = "Elite Flight",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
       flyEnabled = Value
-      local char = LP.Character
+      local char = lp.Character
       local root = char and char:FindFirstChild("HumanoidRootPart")
-      
-      if Value and root then
-          -- Setup stability
-          bG = Instance.new("BodyGyro")
-          bG.P = 9e4
-          bG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-          bG.CFrame = root.CFrame
-          bG.Parent = root
-      else
-          -- Clean up
-          if bG then bG:Destroy() bG = nil end
-          if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-      end
+      if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
    end,
 })
 
--- 1-STUD PRECISION BUTTONS
+Tab:CreateSlider({
+   Name = "Flight Speed",
+   Range = {10, 500},
+   Increment = 5,
+   CurrentValue = 50,
+   Flag = "FlySpeed",
+   Callback = function(Value) flySpeed = Value end,
+})
+
 Tab:CreateButton({
-   Name = "Up (1 Stud)",
+   Name = "UP (one stud)",
    Callback = function()
-       local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-       if root then
-           root.CFrame = root.CFrame + Vector3.new(0, 1, 0)
-       end
+       local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+       if root then root.CFrame = root.CFrame * CFrame.new(0, 1, 0) end
    end,
 })
 
 Tab:CreateButton({
-   Name = "Down (1 Stud)",
+   Name = "DOWN (one stud)",
    Callback = function()
-       local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-       if root then
-           root.CFrame = root.CFrame + Vector3.new(0, -1, 0)
-       end
+       local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+       if root then root.CFrame = root.CFrame * CFrame.new(0, -1, 0) end
    end,
 })
