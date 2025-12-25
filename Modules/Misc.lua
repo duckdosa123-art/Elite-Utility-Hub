@@ -63,8 +63,7 @@ Tab:CreateButton({
    end,
 })
 
--- [ FPS BOOSTER LOGIC ]
--- [ ELITE POTATO MODE LOGIC ]
+-- [ ELITE FPS BOOSTER LOGIC ]
 local _fpsEnabled = false
 local Lighting = game:GetService("Lighting")
 local Terrain = workspace:FindFirstChildOfClass("Terrain")
@@ -73,15 +72,16 @@ local function ToggleFPSBooster(Value)
     _fpsEnabled = Value
     
     task.spawn(function()
-        -- 1. Global Lighting & Shadows
+        -- 1. Global Lighting & Shadows Restoration
         Lighting.GlobalShadows = not Value
         Lighting.Brightness = Value and 1 or 2
+        Lighting.FogEnd = Value and 9e9 or 100000 -- Restores fog distance
         Lighting.EnvironmentDiffuseScale = Value and 0 or 0.3
         Lighting.EnvironmentSpecularScale = Value and 0 or 0.3
         
-        -- 2. Toggle Post-Processing Effects
+        -- 2. Post-Processing (Bloom, Blur, etc)
         for _, effect in pairs(Lighting:GetChildren()) do
-            if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
+            if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
                 effect.Enabled = not Value
             end
         end
@@ -94,13 +94,13 @@ local function ToggleFPSBooster(Value)
             Terrain.WaterTransparency = Value and 0 or 1
         end
 
-        -- 4. Heavy Object Cleaning (Materials & Shadows)
-        -- We loop through everything. If Value is true, we go Potato. 
-        -- If false, we reset to SmoothPlastic/Plastic.
+        -- 4. The Loop (Optimized for Mobile)
+        -- We removed the 'break' so that the loop always finishes resetting everything
         local descendants = workspace:GetDescendants()
         for i, v in pairs(descendants) do
-            if not _fpsEnabled and not Value then break end -- Stop if toggle changed mid-loop
-            
+            -- If the user toggles it AGAIN while this loop is running, stop this specific thread
+            if _fpsEnabled ~= Value then return end 
+
             if v:IsA("BasePart") then
                 v.Material = Value and Enum.Material.SmoothPlastic or Enum.Material.Plastic
                 v.CastShadow = not Value
@@ -110,51 +110,13 @@ local function ToggleFPSBooster(Value)
                 v.Enabled = not Value
             end
 
-            -- Safety wait to prevent mobile crashes during large loops
-            if i % 200 == 0 then task.wait() end
-        end
-    end)
-end
-local function OptimizePerformance()
-    task.spawn(function()
-        local Lighting = game:GetService("Lighting")
-        local Terrain = workspace:FindFirstChildOfClass("Terrain")
-
-        -- Disable Shadows and Lighting Effects
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
-                v.Enabled = false
-            end
-        end
-
-        if Terrain then
-            Terrain.WaterWaveSize = 0
-            Terrain.WaterWaveSpeed = 0
-            Terrain.WaterReflectance = 0
-            Terrain.WaterTransparency = 0
-        end
-
-        -- Optimize Parts (Materials and Textures)
-        for i, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") and not v:IsA("MeshPart") then
-                v.Material = Enum.Material.SmoothPlastic
-                v.CastShadow = false
-            elseif v:IsA("Decal") or v:IsA("Texture") then
-                v.Transparency = 1
-            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-                v.Enabled = false
-            end
-            
-            -- Prevent lag while script is cleaning (Wait every 100 items)
-            if i % 100 == 0 then task.wait() end
+            -- Yield every 250 items to keep mobile framerate stable during the switch
+            if i % 250 == 0 then task.wait() end
         end
     end)
 end
 
-Tab:CreateSection("Performance")
-
+-- [ UI ELEMENTS ]
 Tab:CreateSection("Performance")
 
 Tab:CreateToggle({
@@ -164,8 +126,8 @@ Tab:CreateToggle({
    Callback = function(Value)
       ToggleFPSBooster(Value)
       Rayfield:Notify({
-         Title = "FPS Booster",
-         Content = Value and "Potato Mode Active (Maximum FPS)" or "Visuals Restored to Standard",
+         Title = "FPS System",
+         Content = Value and "Potato Mode Enabled: Visuals Simplified." or "Visuals Restored: Shadows & Textures On.",
          Duration = 3,
          Image = 4483362458,
       })
