@@ -97,7 +97,7 @@ local RunService = game:GetService("RunService")
 local LP = game:GetService("Players").LocalPlayer
 
 -- FLY SCRIPT
-local flyScriptURL = "https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"
+local flyScriptURL = "https://obj.wearedevs.net/2/scripts/Fly.lua"
 local LP = game:GetService("Players").LocalPlayer
 
 Tab:CreateToggle({
