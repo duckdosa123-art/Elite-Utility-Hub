@@ -16,6 +16,8 @@ local LightingDefaults = {
     GlobalShadows = Lighting.GlobalShadows,
     FogEnd = Lighting.FogEnd,
     FogStart = Lighting.FogStart
+    MaxZoom = LP.CameraMaxZoomDistance,
+    MinZoom = LP.CameraMinZoomDistance
 }
 
 -- [ ELITE GLOBAL SETTINGS ]
@@ -206,7 +208,14 @@ RunService.RenderStepped:Connect(function()
         Lighting.FogEnd, Lighting.FogStart = LightingDefaults.FogEnd, LightingDefaults.FogStart
     end
     Camera.FieldOfView = _G.ESPSettings.FOV
-    if _G.ESPSettings.ThirdPerson then LP.CameraMaxZoomDistance = 30 LP.CameraMinZoomDistance = 30 else LP.CameraMaxZoomDistance = 128 end
+    -- Fixed Third Person Toggle
+    if _G.ESPSettings.ThirdPerson then 
+        LP.CameraMaxZoomDistance = 30 
+        LP.CameraMinZoomDistance = 30 
+    else 
+        LP.CameraMaxZoomDistance = LightingDefaults.MaxZoom
+        LP.CameraMinZoomDistance = LightingDefaults.MinZoom
+    end
     
     for _, v in pairs(Camera:GetChildren()) do
         if v:IsA("Model") then
