@@ -197,3 +197,41 @@ Tab:CreateButton({
        if r then r.CFrame = r.CFrame * CFrame.new(0, -1, 0) end
    end,
 })
+-- ELITE NO CLIP
+local _nc = false -- Noclip Toggle State
+
+-- [ ELITE NOCLIP ENGINE ]
+task.spawn(function()
+    RunService.Stepped:Connect(function()
+        if _nc then
+            local char = LP.Character
+            if char then
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+Tab:CreateToggle({
+   Name = "Elite Noclip",
+   CurrentValue = false,
+   Flag = "NoclipToggle",
+   Callback = function(Value)
+      _nc = Value
+      if not Value then
+          -- Optional: Force a character refresh of collisions when turned off
+          local char = LP.Character
+          if char then
+              for _, part in pairs(char:GetDescendants()) do
+                  if part:IsA("BasePart") then
+                      part.CanCollide = true
+                  end
+              end
+          end
+      end
+   end,
+})
