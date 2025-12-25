@@ -1,4 +1,4 @@
--- Visuals.lua - Elite-Utility-Hub
+-- Visual.lua - Elite-Utility-Hub
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
@@ -9,11 +9,19 @@ local Camera = workspace.CurrentCamera
 local Tab = _G.VisualTab
 if not Tab then return warn("Elite-Hub: VisualTab not found!") end
 
+-- [ CACHE ORIGINAL LIGHTING ]
+local LightingDefaults = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart
+}
+
 -- [ ELITE GLOBAL SETTINGS ]
 _G.ESPSettings = {
     Enabled = false,
     Box3D = false,
-    Tracers = false,
     Names = false,
     Outline = false,
     LookLines = false,
@@ -32,21 +40,12 @@ _G.ESPSettings = {
     Crosshair = false,
     -- Colors
     BoxColor = Color3.fromRGB(200, 50, 50),
-    TracerColor = Color3.fromRGB(255, 255, 255),
     NameColor = Color3.fromRGB(255, 255, 255),
     FillColor = Color3.fromRGB(200, 50, 50),
     OutlineColor = Color3.fromRGB(0, 0, 0),
     CrossColor = Color3.fromRGB(0, 255, 0),
-    -- Transparencies
     FillTrans = 0.5,
     OutlineTrans = 0
-    -- [ CACHE ORIGINAL LIGHTING ]
-    local LightingDefaults = {
-        Ambient = Lighting.Ambient,
-        OutdoorAmbient = Lighting.OutdoorAmbient,
-        GlobalShadows = Lighting.GlobalShadows,
-        FogEnd = Lighting.FogEnd,
-        FogStart = Lighting.FogStart
 }
 
 -- [ HELPER: 3D BOX MATH ]
@@ -64,20 +63,19 @@ local function GetBoxPoints(cframe, size)
     }
 end
 
--- [ RAINBOW ENGINE ]
+-- [ ENGINE: RAINBOW ]
 task.spawn(function()
     while true do
         if _G.ESPSettings.Rainbow then
             local color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
             _G.ESPSettings.BoxColor = color
             _G.ESPSettings.FillColor = color
-            _G.ESPSettings.TracerColor = color
         end
         task.wait()
     end
 end)
 
--- [ CROSSHAIR ENGINE ]
+-- [ ENGINE: CROSSHAIR ]
 local CH_V = Drawing.new("Line")
 local CH_H = Drawing.new("Line")
 RunService.RenderStepped:Connect(function()
@@ -91,17 +89,14 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [ ESP ENGINE ]
+-- [ ENGINE: ESP ]
 local function CreateESP(Player)
     local Lines = {}
     for i = 1, 12 do Lines[i] = Drawing.new("Line") Lines[i].Thickness = 1 end
-    
-    local Tracer = Drawing.new("Line")
     local LookLine = Drawing.new("Line")
     local HealthBar = Drawing.new("Line")
     local Name = Drawing.new("Text")
     
-    -- Breadcrumbs (Trails)
     local BreadcrumbLines = {}
     local Positions = {}
     for i = 1, 10 do BreadcrumbLines[i] = Drawing.new("Line") BreadcrumbLines[i].Thickness = 1 end
@@ -114,24 +109,21 @@ local function CreateESP(Player)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local head = char and char:FindFirstChild("Head")
 
-            -- Outline (Highlight) Logic
+            -- Outline / Chams
             if _G.ESPSettings.Enabled and _G.ESPSettings.Outline and char then
-                local highlight = char:FindFirstChild("EliteHighlight") or Instance.new("Highlight", char)
-                highlight.Name = "EliteHighlight"
-                highlight.FillColor = _G.ESPSettings.FillColor
-                highlight.OutlineColor = _G.ESPSettings.OutlineColor
-                highlight.FillTransparency = _G.ESPSettings.FillTrans
-                highlight.OutlineTransparency = _G.ESPSettings.OutlineTrans
-                highlight.Enabled = true
+                local hl = char:FindFirstChild("EliteHighlight") or Instance.new("Highlight", char)
+                hl.Name = "EliteHighlight"
+                hl.FillColor, hl.OutlineColor = _G.ESPSettings.FillColor, _G.ESPSettings.OutlineColor
+                hl.FillTransparency, hl.OutlineTransparency = _G.ESPSettings.FillTrans, _G.ESPSettings.OutlineTrans
+                hl.Enabled = true
             elseif char and char:FindFirstChild("EliteHighlight") then
                 char.EliteHighlight.Enabled = false
             end
 
-            -- Main ESP Graphics
             if _G.ESPSettings.Enabled and root and hum and hum.Health > 0 then
                 local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
                 
-                -- Breadcrumbs Logic (Trails)
+                -- Breadcrumbs Trail
                 if _G.ESPSettings.Breadcrumbs then
                     table.insert(Positions, 1, root.Position)
                     if #Positions > 11 then table.remove(Positions) end
@@ -139,10 +131,8 @@ local function CreateESP(Player)
                         local p1, on1 = Camera:WorldToViewportPoint(Positions[i])
                         local p2, on2 = Camera:WorldToViewportPoint(Positions[i+1])
                         if on1 and on2 then
-                            BreadcrumbLines[i].From = Vector2.new(p1.X, p1.Y)
-                            BreadcrumbLines[i].To = Vector2.new(p2.X, p2.Y)
-                            BreadcrumbLines[i].Color = _G.ESPSettings.BoxColor
-                            BreadcrumbLines[i].Visible = true
+                            BreadcrumbLines[i].From, BreadcrumbLines[i].To = Vector2.new(p1.X, p1.Y), Vector2.new(p2.X, p2.Y)
+                            BreadcrumbLines[i].Color, BreadcrumbLines[i].Visible = _G.ESPSettings.BoxColor, true
                         else BreadcrumbLines[i].Visible = false end
                     end
                 else for i=1,10 do BreadcrumbLines[i].Visible = false end end
@@ -158,35 +148,28 @@ local function CreateESP(Player)
                         end
                     else for i=1,12 do Lines[i].Visible = false end end
 
-                    -- Look Line
+                    -- Look Lines
                     if _G.ESPSettings.LookLines and head then
                         local endP = Camera:WorldToViewportPoint(head.Position + (head.CFrame.LookVector * 6))
-                        LookLine.From, LookLine.To = Vector2.new(pos.X, pos.Y - 20), Vector2.new(endP.X, endP.Y)
+                        LookLine.From, LookLine.To = Vector2.new(pos.X, pos.Y), Vector2.new(endP.X, endP.Y)
                         LookLine.Color, LookLine.Visible = Color3.new(1,1,1), true
                     else LookLine.Visible = false end
 
-                    -- Dynamic Health Bar
+                    -- Health Bar
                     if _G.ESPSettings.HealthBars then
-                        local healthPerc = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                        local barColor = Color3.fromHSV(healthPerc * 0.3, 1, 1) -- Red to Green
+                        local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
                         HealthBar.From = Vector2.new(pos.X - 35, pos.Y + 30)
-                        HealthBar.To = Vector2.new(pos.X - 35, pos.Y + 30 - (60 * healthPerc))
-                        HealthBar.Color, HealthBar.Thickness, HealthBar.Visible = barColor, 3, true
+                        HealthBar.To = Vector2.new(pos.X - 35, pos.Y + 30 - (60 * hp))
+                        HealthBar.Color, HealthBar.Thickness, HealthBar.Visible = Color3.fromHSV(hp * 0.3, 1, 1), 3, true
                     else HealthBar.Visible = false end
 
-                    -- Name/Distance Text
+                    -- Name & Distance
                     Name.Visible = _G.ESPSettings.Names
-                    local distText = ""
-                    
-                    if _G.ESPSettings.Distance then
-                        local myRoot = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                        if myRoot then
-                            local d = math.floor((root.Position - myRoot.Position).Magnitude)
-                            distText = " [" .. tostring(d) .. " studs]"
-                        end
+                    local dText = ""
+                    if _G.ESPSettings.Distance and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                        dText = " ["..math.floor((root.Position - LP.Character.HumanoidRootPart.Position).Magnitude).."s]"
                     end
-                    
-                    Name.Text = Player.Name .. distText
+                    Name.Text = Player.Name .. dText
                     Name.Position = Vector2.new(pos.X, pos.Y - 55)
                     Name.Color, Name.Center, Name.Outline = _G.ESPSettings.NameColor, true, true
                 else
@@ -204,73 +187,52 @@ local function CreateESP(Player)
     task.spawn(Update)
 end
 
--- Init All Players
-for _, p in pairs(Players:GetPlayers()) do if p ~= LP then CreateESP(p) end end
-Players.PlayerAdded:Connect(function(p) if p ~= LP then CreateESP(p) end end)
-
--- World/Local Update Logic (Fixed Toggles)
+-- [ WORLD UPDATE LOOP ]
 RunService.RenderStepped:Connect(function()
-    -- Fullbright Toggle
     if _G.ESPSettings.Fullbright then
-        Lighting.Ambient = Color3.new(1,1,1)
-        Lighting.OutdoorAmbient = Color3.new(1,1,1)
-        Lighting.GlobalShadows = false
+        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.GlobalShadows = Color3.new(1,1,1), Color3.new(1,1,1), false
     else
-        Lighting.Ambient = LightingDefaults.Ambient
-        Lighting.OutdoorAmbient = LightingDefaults.OutdoorAmbient
-        Lighting.GlobalShadows = LightingDefaults.GlobalShadows
+        Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.GlobalShadows = LightingDefaults.Ambient, LightingDefaults.OutdoorAmbient, LightingDefaults.GlobalShadows
     end
-
-    -- No Fog Toggle
     if _G.ESPSettings.NoFog then
-        Lighting.FogEnd = 1e7
-        Lighting.FogStart = 1e7
+        Lighting.FogEnd, Lighting.FogStart = 1e7, 1e7
     else
-        Lighting.FogEnd = LightingDefaults.FogEnd
-        Lighting.FogStart = LightingDefaults.FogStart
+        Lighting.FogEnd, Lighting.FogStart = LightingDefaults.FogEnd, LightingDefaults.FogStart
     end
-
-    -- Camera & Local Logic
     Camera.FieldOfView = _G.ESPSettings.FOV
-    if _G.ESPSettings.ThirdPerson then 
-        LP.CameraMaxZoomDistance = 30 
-        LP.CameraMinZoomDistance = 30 
-    else 
-        LP.CameraMaxZoomDistance = 128 
-        LP.CameraMinZoomDistance = 0.5 
-    end
-end)
+    if _G.ESPSettings.ThirdPerson then LP.CameraMaxZoomDistance = 30 LP.CameraMinZoomDistance = 30 else LP.CameraMaxZoomDistance = 128 end
     
-    -- Viewmodel Transparency
     for _, v in pairs(Camera:GetChildren()) do
-        if v:IsA("Model") or v:IsA("BasePart") then
-            for _, part in pairs(v:GetDescendants()) do
-                if part:IsA("BasePart") then part.Transparency = _G.ESPSettings.VMTrans end
-            end
+        if v:IsA("Model") then
+            for _, p in pairs(v:GetDescendants()) do if p:IsA("BasePart") then p.Transparency = _G.ESPSettings.VMTrans end end
         end
     end
 end)
 
+-- Initialize Players
+for _, p in pairs(Players:GetPlayers()) do if p ~= LP then CreateESP(p) end end
+Players.PlayerAdded:Connect(function(p) if p ~= LP then CreateESP(p) end end)
+
 -- [ UI CONSTRUCTION ]
 Tab:CreateSection("Tactical Combat")
-Tab:CreateToggle({Name = "Master Enable", Callback = function(V) _G.ESPSettings.Enabled = V end})
-Tab:CreateToggle({Name = "3D Box (Hitbox)", Callback = function(V) _G.ESPSettings.Box3D = V end})
-Tab:CreateToggle({Name = "Look Direction Lines", Callback = function(V) _G.ESPSettings.LookLines = V end})
-Tab:CreateToggle({Name = "Dynamic Health Bar", Callback = function(V) _G.ESPSettings.HealthBars = V end})
-Tab:CreateToggle({Name = "Show Distance", Callback = function(V) _G.ESPSettings.Distance = V end})
-Tab:CreateToggle({Name = "Breadcrumbs (Trails)", Callback = function(V) _G.ESPSettings.Breadcrumbs = V end})
+Tab:CreateToggle({Name = "Master Enable", CurrentValue = false, Flag = "V_M", Callback = function(V) _G.ESPSettings.Enabled = V end})
+Tab:CreateToggle({Name = "3D Hitbox", CurrentValue = false, Flag = "V_3B", Callback = function(V) _G.ESPSettings.Box3D = V end})
+Tab:CreateToggle({Name = "Look Direction", CurrentValue = false, Flag = "V_LD", Callback = function(V) _G.ESPSettings.LookLines = V end})
+Tab:CreateToggle({Name = "Dynamic Health Bar", CurrentValue = false, Flag = "V_HB", Callback = function(V) _G.ESPSettings.HealthBars = V end})
+Tab:CreateToggle({Name = "Show Distance", CurrentValue = false, Flag = "V_SD", Callback = function(V) _G.ESPSettings.Distance = V end})
+Tab:CreateToggle({Name = "Breadcrumbs (Trails)", CurrentValue = false, Flag = "V_BC", Callback = function(V) _G.ESPSettings.Breadcrumbs = V end})
 
 Tab:CreateSection("Map & Environment")
-Tab:CreateToggle({Name = "Fullbright (No Shadows)", Callback = function(V) _G.ESPSettings.Fullbright = V end})
-Tab:CreateToggle({Name = "No Fog / Infinite Render", Callback = function(V) _G.ESPSettings.NoFog = V end})
+Tab:CreateToggle({Name = "Fullbright", CurrentValue = false, Flag = "V_FB", Callback = function(V) _G.ESPSettings.Fullbright = V end})
+Tab:CreateToggle({Name = "No Fog", CurrentValue = false, Flag = "V_NF", Callback = function(V) _G.ESPSettings.NoFog = V end})
 
 Tab:CreateSection("Local Enhancements")
-Tab:CreateSlider({Name = "FOV Changer", Range = {70, 120}, Increment = 1, CurrentValue = 70, Callback = function(V) _G.ESPSettings.FOV = V end})
-Tab:CreateSlider({Name = "Viewmodel Transparency", Range = {0, 1}, Increment = 0.1, CurrentValue = 0, Callback = function(V) _G.ESPSettings.VMTrans = V end})
-Tab:CreateToggle({Name = "Force Third Person", Callback = function(V) _G.ESPSettings.ThirdPerson = V end})
+Tab:CreateSlider({Name = "FOV Changer", Range = {70, 120}, Increment = 1, CurrentValue = 70, Flag = "V_FOV", Callback = function(V) _G.ESPSettings.FOV = V end})
+Tab:CreateSlider({Name = "VM Transparency", Range = {0, 1}, Increment = 0.1, CurrentValue = 0, Flag = "V_VM", Callback = function(V) _G.ESPSettings.VMTrans = V end})
+Tab:CreateToggle({Name = "Force Third Person", CurrentValue = false, Flag = "V_TP", Callback = function(V) _G.ESPSettings.ThirdPerson = V end})
 
 Tab:CreateSection("Elite Aesthetic")
-Tab:CreateToggle({Name = "Cartoon Outline", Callback = function(V) _G.ESPSettings.Outline = V end})
-Tab:CreateToggle({Name = "Rainbow RGB Mode", Callback = function(V) _G.ESPSettings.Rainbow = V end})
-Tab:CreateToggle({Name = "Center Crosshair", Callback = function(V) _G.ESPSettings.Crosshair = V end})
-Tab:CreateColorPicker({Name = "Crosshair Color", Color = Color3.new(0,1,0), Callback = function(V) _G.ESPSettings.CrossColor = V end})
+Tab:CreateToggle({Name = "Cartoon Outline", CurrentValue = false, Flag = "V_OL", Callback = function(V) _G.ESPSettings.Outline = V end})
+Tab:CreateToggle({Name = "Rainbow RGB", CurrentValue = false, Flag = "V_RB", Callback = function(V) _G.ESPSettings.Rainbow = V end})
+Tab:CreateToggle({Name = "Center Crosshair", CurrentValue = false, Flag = "V_CH", Callback = function(V) _G.ESPSettings.Crosshair = V end})
+Tab:CreateColorPicker({Name = "Crosshair Color", Color = Color3.new(0,1,0), Flag = "V_CHC", Callback = function(V) _G.ESPSettings.CrossColor = V end})
