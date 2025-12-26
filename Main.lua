@@ -43,12 +43,14 @@ local MoveTab = Window:CreateTab("Movement", 4483362458)
 local VisualTab = Window:CreateTab("Visuals", 4483362458)
 local MiscTab = Window:CreateTab("Misc", 4483362458)
 local ToolTab = Window:CreateTab("Tools", 4483362458)
+local AdminTab = Window:CreateTab("Admin and dev", 4483362458)
 local LogTab = Window:CreateTab("Logs", 4483362458)
 -- 3. CONNECT THE FILES (MUST be before LoadModule)
 _G.MoveTab = MoveTab
 _G.VisualTab = VisualTab
 _G.MiscTab = MiscTab 
 _G.ToolTab = ToolTab
+_G.AdminTab = AdminTab
 _G.LogTab = LogTab
 
 -- [ ELITE GLOBAL LOGGER ]
@@ -76,6 +78,7 @@ LoadModule("Movement.lua")
 LoadModule("Visual.lua")
 LoadModule("Misc.lua") 
 LoadModule("Tool.lua")
+LoadModule("AdminCmd.lua")
 LoadModule("Log.lua")
 
 _G.EliteLog("Elite-Utility-Hub Initialized", "success")
