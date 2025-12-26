@@ -13,7 +13,20 @@ GravityGui.ResetOnSpawn = false
 GravityGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GravityGui.Parent = LP:WaitForChild("PlayerGui")
 
--- Buttons moved to top-center (Safe Zone)
+-- Crosshair (Center Dot)
+local Crosshair = Instance.new("Frame")
+Crosshair.Name = "EliteCrosshair"
+Crosshair.Size = UDim2.new(0, 4, 0, 4)
+Crosshair.Position = UDim2.new(0.5, -2, 0.5, -2)
+Crosshair.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+Crosshair.BorderSizePixel = 0
+Crosshair.Visible = false
+Crosshair.Parent = GravityGui
+
+local chCorner = Instance.new("UICorner")
+chCorner.CornerRadius = UDim.new(1, 0)
+chCorner.Parent = Crosshair
+
 local function CreateGravButton(name, pos, color)
     local btn = Instance.new("TextButton")
     btn.Name = name
@@ -26,14 +39,14 @@ local function CreateGravButton(name, pos, color)
     btn.TextSize = 14
     btn.Parent = GravityGui
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
+    corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
     return btn
 end
 
--- Horizontal Layout at the Top
+-- Moved to Top-Center to avoid Jump/Chat buttons
 local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.5, -115, 0, 60), Color3.fromRGB(200, 50, 50))
-local StopBtn = CreateGravButton("DROP", UDim2.new(0.5, 5, 0, 60), Color3.fromRGB(50, 50, 50))
+local StopBtn = CreateGravButton("STOP / DROP", UDim2.new(0.5, 5, 0, 60), Color3.fromRGB(50, 50, 50))
 
 -- Aiming Crosshair
 local CH_V = Instance.new("Frame", GravityGui)
@@ -237,22 +250,41 @@ Tab:CreateToggle({
 -- CHAOS
 Tab:CreateSection("Physics & Fun")
 
+-- UPDATED GRAVITY GUN TOGGLE
 Tab:CreateToggle({
    Name = "Elite Gravity Gun",
    CurrentValue = false,
+   Flag = "GravToggle",
    Callback = function(Value)
        if Value then
            local tool = Instance.new("Tool", LP.Backpack)
            tool.Name = "Elite: Grav-Gun"
            tool.RequiresHandle = false
-           tool.Equipped:Connect(function() GravityGui.Enabled = true end)
-           tool.Unequipped:Connect(function() GravityGui.Enabled = false; Release() end)
+           
+           tool.Equipped:Connect(function() 
+               GravityGui.Enabled = true 
+               Crosshair.Visible = true -- Show Crosshair
+               _G.EliteLog("Grav-Gun Ready: Aim with center dot", "info")
+           end)
+           
+           tool.Unequipped:Connect(function() 
+               GravityGui.Enabled = false 
+               Crosshair.Visible = false -- Hide Crosshair
+               Release() 
+           end)
+           
            tool.Activated:Connect(GravityGunLogic)
            ActiveTools["Grav"] = tool
-       elseif ActiveTools["Grav"] then ActiveTools["Grav"]:Destroy(); GravityGui.Enabled = false; Release() end
+           _G.EliteLog("Gravity Gun Granted", "success")
+       else
+           if ActiveTools["Grav"] then ActiveTools["Grav"]:Destroy() end
+           GravityGui.Enabled = false
+           Crosshair.Visible = false
+           Release()
+           _G.EliteLog("Gravity Gun Removed", "warn")
+       end
    end,
 })
-
 Tab:CreateToggle({
    Name = "Local Fire Tool",
    CurrentValue = false,
