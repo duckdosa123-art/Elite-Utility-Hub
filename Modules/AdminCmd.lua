@@ -4,125 +4,123 @@ local LP = _G.LP
 local CoreGui = game:GetService("CoreGui")
 local PlayerGui = LP:FindFirstChild("PlayerGui")
 
--- 1. ELITE BRUTE-FORCE DISABLER
--- This removes the UI and attempts to break the script's connection by destroying its container.
-local function EliteBruteDisable(names)
-    task.spawn(function()
-        local targets = {CoreGui, PlayerGui}
-        for _, parent in pairs(targets) do
+-- 1. UTILITY: CLEAR ALL ADMIN UIs
+-- This is useful since we are using buttons now.
+Tab:CreateButton({
+   Name = "Clear All Admin UIs",
+   Callback = function()
+      local names = {"InfiniteYield", "IY", "Cmdbar", "Notification", "CMDX", "CMD-X", "NamelessAdmin", "AdminGui", "Dex", "DarkDex", "SimpleSpy", "Spy"}
+      task.spawn(function()
+         local targets = {CoreGui, PlayerGui}
+         for _, parent in pairs(targets) do
             if parent then
-                for _, child in pairs(parent:GetChildren()) do
-                    for _, name in pairs(names) do
-                        if child.Name:lower():find(name:lower()) then
-                            child:Destroy()
-                        end
-                    end
-                end
+               for _, child in pairs(parent:GetChildren()) do
+                  for _, name in pairs(names) do
+                     if child.Name:lower():find(name:lower()) then child:Destroy() end
+                  end
+               end
             end
-        end
-        _G.EliteLog("Admin Brute-Forced Off", "warn")
-    end)
-end
+         end
+         _G.EliteLog("Admin UIs Purged", "success")
+      end)
+   end,
+})
+
+Tab:CreateSection("Admin Scripts")
 
 -- 1. INFINITE YIELD
-Tab:CreateToggle({
-   Name = "Infinite Yield",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Loading Infinite Yield...", "info")
-          task.spawn(function()
-              loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
-          end)
-      else
-          EliteBruteDisable({"InfiniteYield", "IY", "Cmdbar", "Notification"})
-      end
+Tab:CreateButton({
+   Name = "Elite Infinite Yield",
+   Callback = function()
+      _G.EliteLog("Executing Infinite Yield...", "info")
+      task.spawn(function()
+         loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+      end)
    end,
 })
 
 -- 2. CMD-X
-Tab:CreateToggle({
-   Name = "CMD-X",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Loading CMD-X...", "info")
-          task.spawn(function()
-              loadstring(game:HttpGet("https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source"))()
-          end)
-      else
-          EliteBruteDisable({"CMDX", "CMD-X"})
-      end
+Tab:CreateButton({
+   Name = "Elite CMD-X",
+   Callback = function()
+      _G.EliteLog("Executing CMD-X...", "info")
+      task.spawn(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source"))()
+      end)
    end,
 })
 
 -- 3. NAMELESS ADMIN
-Tab:CreateToggle({
-   Name = "Nameless Admin",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Loading Nameless...", "info")
-          task.spawn(function()
-              loadstring(game:HttpGet("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source"))()
-          end)
-      else
-          EliteBruteDisable({"NamelessAdmin", "AdminGui"})
-      end
+Tab:CreateButton({
+   Name = "Elite Nameless Admin",
+   Callback = function()
+      _G.EliteLog("Executing Nameless...", "info")
+      task.spawn(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source"))()
+      end)
    end,
 })
 
--- 4. DARK DEX V4 (Corrected Bypassed Version)
-Tab:CreateToggle({
-   Name = "Dark Dex V4",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Loading Dark Dex...", "info")
-          task.spawn(function()
-              -- Updated to the most reliable Bypassed V4 source
-              loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/BypassedDex.lua"))()
-          end)
-      else
-          EliteBruteDisable({"Dex", "DarkDex"})
-      end
+Tab:CreateSection("Developer Tools")
+
+-- 4. DARK DEX V4 (Bypassed & Optimized)
+Tab:CreateButton({
+   Name = "Elite Dark Dex V4",
+   Callback = function()
+      _G.EliteLog("Executing Dark Dex...", "info")
+      task.spawn(function()
+         -- Using the Babyhamsta Bypassed source as it's the most stable for modern games
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/BypassedDex.lua"))()
+      end)
    end,
 })
 
--- 5. SIMPLESPY
-Tab:CreateToggle({
-   Name = "SimpleSpy",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Loading SimpleSpy...", "info")
-          task.spawn(function()
-              loadstring(game:HttpGet("https://raw.githubusercontent.com/777777777777777777777777777777777777777/SimpleSpy/main/SimpleSpySource.lua"))()
-          end)
-      else
-          EliteBruteDisable({"SimpleSpy", "Spy"})
-      end
+-- 5. SIMPLESPY V3 (Latest Stable)
+Tab:CreateButton({
+   Name = "Elite SimpleSpy",
+   Callback = function()
+      _G.EliteLog("Executing SimpleSpy...", "info")
+      task.spawn(function()
+         -- Corrected to the 2024/2025 maintained repository
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/777777777777777777777777777777777777777/SimpleSpy/main/SimpleSpySource.lua"))()
+      end)
    end,
 })
 
--- 6. ADONIS BYPASS
-Tab:CreateToggle({
-   Name = "Adonis Bypass",
-   CurrentValue = false,
-   Callback = function(Value)
-      if Value then
-          _G.EliteLog("Applying Adonis Bypass...", "success")
-          task.spawn(function()
-              local old; old = hookmetamethod(game, "__namecall", function(self, ...)
-                  local method = getnamecallmethod()
-                  if method == "FireServer" and self.Name == "Adonis_Validation" then
-                      return nil
-                  end
-                  return old(self, ...)
-              end)
-          end)
-      else
-          _G.EliteLog("Bypass cannot be safely undone without crash.", "error")
-      end
+Tab:CreateSection("Bypasses")
+
+-- 6. ADONIS BYPASS (Smart Hook)
+Tab:CreateButton({
+   Name = "Elite Adonis Bypass",
+   Callback = function()
+      _G.EliteLog("Injecting Adonis Bypass...", "success")
+      task.spawn(function()
+         -- Protection check to avoid double-hooking (prevents crashes)
+         if _G.AdonisBypassed then 
+            _G.EliteLog("Adonis already bypassed!", "warn")
+            return 
+         end
+         
+         local success, err = pcall(function()
+            local old; old = hookmetamethod(game, "__namecall", function(self, ...)
+               local method = getnamecallmethod()
+               local args = {...}
+               
+               -- Block the specific validation remotes used by Adonis to flag players
+               if method == "FireServer" and (self.Name == "Adonis_Validation" or self.Name == "\2\1\ADONIS_CHECK") then
+                  return nil
+               end
+               
+               return old(self, unpack(args))
+            end)
+         end)
+
+         if success then
+            _G.AdonisBypassed = true
+            _G.EliteLog("Adonis Hook Successful", "success")
+         else
+            _G.EliteLog("Bypass Failed: Meta-Hook Error", "error")
+         end
+      end)
    end,
 })
