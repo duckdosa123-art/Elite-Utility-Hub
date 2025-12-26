@@ -217,70 +217,78 @@ Tab:CreateToggle({
       end
    end,
 })
--- ELITE NO-FALL (Reactive Impact Guard)
-local NoFallConnection = nil
+-- ELITE TP-WALK (CFrame Speed Bypass)
+local TPWalkConnection
+local TPWalkSpeed = 2
+
+Tab:CreateSlider({
+   Name = "Elite TP-Walk Speed",
+   Range = {0, 10},
+   Increment = 0.1,
+   Suffix = "Mult",
+   CurrentValue = 2,
+   Callback = function(Value)
+      TPWalkSpeed = Value
+   end,
+})
 
 Tab:CreateToggle({
-   Name = "Elite No-Fall",
+   Name = "Elite TP-Walk",
    CurrentValue = false,
    Callback = function(Value)
-      _G.NoFallEnabled = Value
+      _G.TPWalkEnabled = Value
+      if TPWalkConnection then TPWalkConnection:Disconnect() end
       
-      if NoFallConnection then NoFallConnection:Disconnect() end
-
       if Value then
-         _G.EliteLog("No-Fall: Reactive Mode Active", "success")
-         
-         local rayParams = RaycastParams.new()
-         -- Update filter inside the loop to handle character respawns
-         
-         NoFallConnection = game:GetService("RunService").PreSimulation:Connect(function()
-            if not _G.NoFallEnabled then return end
-            
+         _G.EliteLog("TP-Walk Enabled (Bypass Mode)", "success")
+         TPWalkConnection = game:GetService("RunService").PreSimulation:Connect(function()
             local Char = LP.Character
-            local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
             local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+            local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
             
-            if Hum and Root then
-               -- 1. UX CHECK: Only trigger if falling at LETHAL speeds (usually > 55)
-               -- This prevents interference with normal jumping or small hops.
-               local fallVelocity = Root.AssemblyLinearVelocity.Y
-               
-               if fallVelocity < -50 then
-                  -- 2. PROXIMITY CHECK: Look for the ground 8 studs below
-                  rayParams.FilterDescendantsInstances = {Char}
-                  rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                  
-                  local groundCheck = workspace:Raycast(Root.Position, Vector3.new(0, -10, 0), rayParams)
-                  
-                  if groundCheck then
-                     -- 3. BRUTE FORCE IMPACT RESET
-                     -- We set Y velocity to a safe landing speed only at the last split second.
-                     Root.AssemblyLinearVelocity = Vector3.new(
-                        Root.AssemblyLinearVelocity.X, 
-                        -2, -- Safe landing speed
-                        Root.AssemblyLinearVelocity.Z
-                     )
-                     
-                     -- Force state to Running to clear the internal fall-damage timer
-                     Hum:ChangeState(Enum.HumanoidStateType.Running)
-                  end
-               end
-
-               -- Backup: Block the damage-triggering states without affecting velocity
-               Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-               Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            if Root and Hum and Hum.MoveDirection.Magnitude > 0 then
+                -- Move the CFrame forward based on MoveDirection (Joystick compatible)
+               Root.CFrame = Root.CFrame + (Hum.MoveDirection * (TPWalkSpeed / 10))
             end
          end)
       else
-         -- Cleanup
-         if NoFallConnection then NoFallConnection:Disconnect() end
-         local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-         if Hum then
-            Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-         end
-         _G.EliteLog("No-Fall: Disabled", "info")
+         _G.EliteLog("TP-Walk Disabled", "info")
+      end
+   end,
+})
+
+-- ELITE SPIDER (Wall Climb)
+local SpiderConnection
+Tab:CreateToggle({
+   Name = "Elite Spider",
+   CurrentValue = false,
+   Callback = function(Value)
+      _G.SpiderEnabled = Value
+      if SpiderConnection then SpiderConnection:Disconnect() end
+      
+      if Value then
+         _G.EliteLog("Spider Mode Active", "success")
+         SpiderConnection = game:GetService("RunService").PreSimulation:Connect(function()
+            local Char = LP.Character
+            local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+            local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+            
+            if Root and Hum and Hum.MoveDirection.Magnitude > 0 then
+               -- Raycast forward to find a wall
+               local rayParams = RaycastParams.new()
+               rayParams.FilterDescendantsInstances = {Char}
+               rayParams.FilterType = Enum.RaycastFilterType.Exclude
+               
+               local wallCheck = workspace:Raycast(Root.Position, Hum.MoveDirection * 2, rayParams)
+               
+               if wallCheck then
+                  -- If wall found, shift velocity upward to "climb"
+                  Root.AssemblyLinearVelocity = Vector3.new(Root.AssemblyLinearVelocity.X, 25, Root.AssemblyLinearVelocity.Z)
+               end
+            end
+         end)
+      else
+         _G.EliteLog("Spider Mode Disabled", "info")
       end
    end,
 })
