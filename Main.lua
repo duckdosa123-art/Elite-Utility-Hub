@@ -42,7 +42,7 @@ local MainTab = Window:CreateTab("Home", 4483362458)
 local MoveTab = Window:CreateTab("Movement", 4483362458)
 local VisualTab = Window:CreateTab("Visuals", 4483362458)
 local MiscTab = Window:CreateTab("Misc", 4483362458)
-local ToolTab = Window:createTab("Tools", 4483362458)
+local ToolTab = Window:CreateTab("Tools", 4483362458)
 local LogTab = Window:CreateTab("Logs", 4483362458)
 -- 3. CONNECT THE FILES (MUST be before LoadModule)
 _G.MoveTab = MoveTab
