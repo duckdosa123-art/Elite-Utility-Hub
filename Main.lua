@@ -1,32 +1,38 @@
--- [[ ELITE-UTILITY-HUB: SMART LOADER (FIXED) ]]
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- 1. GLOBAL CONSTANTS
-_G.LP = game:GetService("Players").LocalPlayer
-_G.HttpService = game:GetService("HttpService")
-_G.TeleportService = game:GetService("TeleportService")
-_G.RunService = game:GetService("RunService")
-_G.ActiveTools = {}
 
 local Window = Rayfield:CreateWindow({
    Name = "Elite-Utility-Hub",
    LoadingTitle = "Modular System Loading...",
    LoadingSubtitle = "by Ducky",
    Theme = "Default",
-   ConfigurationSaving = { Enabled = true, FolderName = "EliteUtilHub", FileName = "MainConfig" }
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "EliteUtilHub",
+      FileName = "MainConfig"
+   }
 })
 
--- 2. CREATE TABS (Global Assignment)
-_G.MainTab = Window:CreateTab("Home", 4483362458) 
-_G.MoveTab = Window:CreateTab("Movement", 4483362458)
-_G.VisualTab = Window:CreateTab("Visuals", 4483362458)
-_G.MiscTab = Window:CreateTab("Misc", 4483362458)
-_G.ToolTab = Window:CreateTab("Tools", 4483362458)
-_G.AdminTab = Window:CreateTab("Admin and dev", 4483362458)
-_G.LogTab = Window:CreateTab("Logs", 4483362458)
+-- 1. CREATE THE TABS
+local MainTab = Window:CreateTab("Home", 4483362458) 
+local MoveTab = Window:CreateTab("Movement", 4483362458)
+local VisualTab = Window:CreateTab("Visuals", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+local ToolTab = Window:CreateTab("Tools", 4483362458)
+local AdminTab = Window:CreateTab("Admin and dev", 4483362458)
+local LogTab = Window:CreateTab("Logs", 4483362458)
 
--- 3. GLOBAL LOGGER
-_G.EliteLogs = {} 
+-- 2. EXPORT GLOBALS (The exact same way you had it)
+_G.MainTab = MainTab
+_G.MoveTab = MoveTab
+_G.VisualTab = VisualTab
+_G.MiscTab = MiscTab 
+_G.ToolTab = ToolTab
+_G.AdminTab = AdminTab
+_G.LogTab = LogTab
+_G.LP = game.Players.LocalPlayer
+
+-- 3. ELITE GLOBAL LOGGER
+_G.EliteLogs = {}
 _G.EliteLog = function(msg, logType)
     local timestamp = os.date("%X")
     local prefix = (logType == "success" and "🟢 SUCCESS") or (logType == "warn" and "🟡 WARN") or (logType == "error" and "🔴 ERROR") or "⚪ INFO"
@@ -35,68 +41,42 @@ _G.EliteLog = function(msg, logType)
     if _G.UpdateLogUI then _G.UpdateLogUI() end
 end
 
--- 4. SMART INJECTION ENGINE
-local ModuleMappings = {
-    ["Movement.lua"] = "_G.MoveTab",
-    ["Visual.lua"]   = "_G.VisualTab",
-    ["Misc.lua"]     = "_G.MiscTab",
-    ["Tool.lua"]     = "_G.ToolTab",
-    ["AdminCmd.lua"] = "_G.AdminTab",
-    ["Log.lua"]      = "_G.LogTab"
-}
-
+-- 4. THE LOADER FUNCTION
 local function LoadModule(FileName)
     local Repo = "https://raw.githubusercontent.com/duckdosa123-art/Elite-Utility-Hub/main/Modules/"
-    local success, result = pcall(function() return game:HttpGet(Repo .. FileName) end)
+    local success, result = pcall(function()
+        return game:HttpGet(Repo .. FileName)
+    end)
     
     if success and result ~= "404: Not Found" then
-        local TabVar = ModuleMappings[FileName] or "_G.MainTab"
-        
-        -- Header Injects the local variables into the downloaded code
-        local Header = string.format([[
-            local Tab = %s;
-            local LP = _G.LP;
-            local ActiveTools = _G.ActiveTools;
-            local TeleportService = _G.TeleportService;
-            local RunService = _G.RunService;
-            local HttpService = _G.HttpService;
-        ]], TabVar)
-        
-        local FinalCode = Header .. result
-        local func, err = loadstring(FinalCode)
-        
+        local func, err = loadstring(result)
         if func then
-            -- Wrapped in task.spawn and pcall for safety
-            task.spawn(function()
-                local ok, runErr = pcall(func)
-                if not ok then 
-                    warn("Elite-Hub: Execution Error in " .. FileName .. " | " .. tostring(runErr))
-                    _G.EliteLog("Module Crash: " .. FileName, "error")
-                end
-            end)
+            task.spawn(func)
             return true
         else
-            warn("Elite-Hub: Syntax Error in " .. FileName .. " | " .. tostring(err))
-            _G.EliteLog("Syntax Error: " .. FileName, "error")
+            warn("Elite-Hub: Syntax error in " .. FileName .. " | " .. tostring(err))
         end
     else
-        warn("Elite-Hub: GitHub File Missing or 404: " .. FileName)
-        _G.EliteLog("404 Not Found: " .. FileName, "error")
+        warn("Elite-Hub: Could not find file: " .. FileName)
     end
-    return false
 end
 
--- 5. RUN LOADER (Sequential with Delays)
-task.spawn(function()
-    local modules = {"Log.lua", "Movement.lua", "Visual.lua", "Misc.lua", "Tool.lua", "AdminCmd.lua"}
-    
-    for _, moduleName in pairs(modules) do
-        local ok = LoadModule(moduleName)
-        if ok then
-            task.wait(0.3) -- Crucial delay to allow Rayfield to render the UI components
-        end
-    end
-    
-    _G.EliteLog("Elite-Utility-Hub Fully Loaded", "success")
-    _G.MainTab:CreateParagraph({Title = "Welcome!", Content = "Elite-Utility-Hub is now active. All modules synced."})
-end)
+-- 5. RUN LOADER (In order)
+LoadModule("Log.lua")
+LoadModule("Movement.lua")
+LoadModule("Visual.lua")
+LoadModule("Misc.lua")
+LoadModule("Tool.lua")
+LoadModule("AdminCmd.lua")
+
+_G.EliteLog("Elite-Utility-Hub Initialized", "success")
+
+-- Welcome message
+MainTab:CreateParagraph({Title = "Welcome!", Content = "Elite-Utility-Hub is now active. Modules Loaded."})
+
+Rayfield:Notify({
+   Title = "Hub Loaded!",
+   Content = "All modules synced from GitHub.",
+   Duration = 5,
+   Image = 4483362458,
+})
