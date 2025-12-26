@@ -1,4 +1,4 @@
--- [[ ELITE-UTILITY-HUB: SMART LOADER ]]
+-- [[ ELITE-UTILITY-HUB: SMART LOADER (FIXED) ]]
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- 1. GLOBAL CONSTANTS
@@ -16,7 +16,7 @@ local Window = Rayfield:CreateWindow({
    ConfigurationSaving = { Enabled = true, FolderName = "EliteUtilHub", FileName = "MainConfig" }
 })
 
--- 2. CREATE TABS
+-- 2. CREATE TABS (Global Assignment)
 _G.MainTab = Window:CreateTab("Home", 4483362458) 
 _G.MoveTab = Window:CreateTab("Movement", 4483362458)
 _G.VisualTab = Window:CreateTab("Visuals", 4483362458)
@@ -36,7 +36,6 @@ _G.EliteLog = function(msg, logType)
 end
 
 -- 4. SMART INJECTION ENGINE
--- This table maps filenames to the Tab variable they should use.
 local ModuleMappings = {
     ["Movement.lua"] = "_G.MoveTab",
     ["Visual.lua"]   = "_G.VisualTab",
@@ -51,8 +50,9 @@ local function LoadModule(FileName)
     local success, result = pcall(function() return game:HttpGet(Repo .. FileName) end)
     
     if success and result ~= "404: Not Found" then
-        -- AUTO-INJECTION: We prepend the variables at the start of the code string
         local TabVar = ModuleMappings[FileName] or "_G.MainTab"
+        
+        -- Header Injects the local variables into the downloaded code
         local Header = string.format([[
             local Tab = %s;
             local LP = _G.LP;
@@ -66,26 +66,37 @@ local function LoadModule(FileName)
         local func, err = loadstring(FinalCode)
         
         if func then
+            -- Wrapped in task.spawn and pcall for safety
             task.spawn(function()
                 local ok, runErr = pcall(func)
-                if not ok then warn("Elite-Hub: Run Error in " .. FileName .. " | " .. tostring(runErr)) end
+                if not ok then 
+                    warn("Elite-Hub: Execution Error in " .. FileName .. " | " .. tostring(runErr))
+                    _G.EliteLog("Module Crash: " .. FileName, "error")
+                end
             end)
             return true
         else
             warn("Elite-Hub: Syntax Error in " .. FileName .. " | " .. tostring(err))
+            _G.EliteLog("Syntax Error: " .. FileName, "error")
         end
     else
-        warn("Elite-Hub: GitHub File Missing: " .. FileName)
+        warn("Elite-Hub: GitHub File Missing or 404: " .. FileName)
+        _G.EliteLog("404 Not Found: " .. FileName, "error")
     end
+    return false
 end
 
--- 5. RUN LOADER
-LoadModule("Log.lua") 
-LoadModule("Movement.lua")
-LoadModule("Visual.lua")
-LoadModule("Misc.lua") 
-LoadModule("Tool.lua")
-LoadModule("AdminCmd.lua")
-
-_G.EliteLog("Elite-Utility-Hub Initialized", "success")
-_G.MainTab:CreateParagraph({Title = "Welcome!", Content = "Elite-Utility-Hub is now active. Modules Loaded."})
+-- 5. RUN LOADER (Sequential with Delays)
+task.spawn(function()
+    local modules = {"Log.lua", "Movement.lua", "Visual.lua", "Misc.lua", "Tool.lua", "AdminCmd.lua"}
+    
+    for _, moduleName in pairs(modules) do
+        local ok = LoadModule(moduleName)
+        if ok then
+            task.wait(0.3) -- Crucial delay to allow Rayfield to render the UI components
+        end
+    end
+    
+    _G.EliteLog("Elite-Utility-Hub Fully Loaded", "success")
+    _G.MainTab:CreateParagraph({Title = "Welcome!", Content = "Elite-Utility-Hub is now active. All modules synced."})
+end)
