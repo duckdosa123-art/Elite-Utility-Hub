@@ -217,3 +217,43 @@ Tab:CreateToggle({
       end
    end,
 })
+-- NO FALL (Universal)
+Tab:CreateToggle({
+   Name = "Elite No-Fall",
+   CurrentValue = false,
+   Callback = function(Value)
+      _G.NoFallEnabled = Value
+      
+      if Value then
+         _G.EliteLog("No-Fall Enabled", "success")
+         
+         task.spawn(function()
+            while _G.NoFallEnabled do
+               local Character = LP.Character
+               local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+               
+               if Humanoid then
+                  -- Disables the physics state that triggers most fall-damage scripts
+                  Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                  Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                  
+                  -- Force-reset state if it accidentally triggers
+                  if Humanoid:GetState() == Enum.HumanoidStateType.FallingDown then
+                     Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+                  end
+               end
+               task.wait(0.5) -- Low frequency loop to save mobile CPU
+            end
+         end)
+      else
+         -- Re-enable default physics states when toggled off
+         local Character = LP.Character
+         local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+         if Humanoid then
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+         end
+         _G.EliteLog("No-Fall Disabled", "info")
+      end
+   end,
+})
