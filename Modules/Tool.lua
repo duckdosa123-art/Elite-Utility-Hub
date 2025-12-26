@@ -67,26 +67,98 @@ local grabbing = false
 local grabPart = nil
 local bp, bg, highlight
 
--- Gravity Gun Logic
+-- [ REFINED GRAVITY GUN LOGIC ]
 local function Release()
     grabbing = false
+    if grabPart then
+        -- Restore original properties
+        pcall(function()
+            if grabPart:IsA("BasePart") then
+                grabPart.CustomPhysicalProperties = nil
+                -- We don't reset NetworkOwner because we can't do that locally
+            end
+        end)
+    end
     if bp then bp:Destroy() bp = nil end
     if bg then bg:Destroy() bg = nil end
     if highlight then highlight:Destroy() highlight = nil end
-    if grabPart then grabPart = nil end
+    grabPart = nil
 end
 
 local function Throw()
-    if grabPart then
+    if grabPart and grabbing then
         local p = grabPart
-        -- Uses Camera direction for crosshair accuracy
         local look = workspace.CurrentCamera.CFrame.LookVector
         Release()
-        p.AssemblyLinearVelocity = look * 280 -- Increased Elite Power
-        _G.EliteLog("Object Thrown toward Crosshair", "success")
+        -- Elite Brute Force Throw
+        p.AssemblyLinearVelocity = look * 350 
+        _G.EliteLog("Object Launched", "success")
     end
 end
 
+-- Re-connect buttons to new functions
+ThrowBtn.MouseButton1Click:Connect(Throw)
+StopBtn.MouseButton1Click:Connect(Release)
+
+local function GravityGunLogic()
+    if not grabbing then
+        local target = Mouse.Target
+        -- Elite Check: Part must exist and be unanchored
+        if target and target:IsA("BasePart") and not target.Anchored then
+            grabbing = true
+            grabPart = target
+            
+            -- 1. CLAIM PHYSICS (Fixes the 'Stuck' bug)
+            -- We try to set network ownership so the part responds only to us
+            pcall(function()
+                if settings().Physics.AllowSleep then
+                    target.Velocity = Vector3.new(0, 1, 0) -- "Wake up" the part
+                end
+            end)
+
+            -- 2. ENHANCED VISUALS
+            highlight = Instance.new("Highlight")
+            highlight.FillColor = Color3.fromRGB(200, 50, 50)
+            highlight.OutlineColor = Color3.new(1, 1, 1)
+            highlight.Parent = grabPart
+            
+            -- 3. ELITE PHYSICS MOVERS
+            bg = Instance.new("BodyGyro")
+            bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
+            bg.P = 30000 -- Increased for better control
+            bg.Parent = grabPart
+            
+            bp = Instance.new("BodyPosition")
+            bp.MaxForce = Vector3.new(1, 1, 1) * math.huge
+            bp.P = 20000 -- Increased to lift heavy parts
+            bp.D = 500   -- Dampening to stop "shaking"
+            bp.Parent = grabPart
+            
+            _G.EliteLog("Grabbed: " .. grabPart.Name, "info")
+            
+            -- 4. THE ENGINE
+            task.spawn(function()
+                while grabbing and grabPart and grabPart.Parent do
+                    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                    local cam = workspace.CurrentCamera
+                    
+                    if hrp and cam then
+                        -- Hold part 15 studs in front of crosshair
+                        local holdPos = cam.CFrame.Position + (cam.CFrame.LookVector * 15)
+                        bp.Position = holdPos
+                        bg.CFrame = cam.CFrame
+                    end
+                    task.wait()
+                end
+                Release()
+            end)
+        else
+            _G.EliteLog("Part is Anchored or Invalid", "warn")
+        end
+    else
+        Release()
+    end
+end
 ThrowBtn.MouseButton1Click:Connect(Throw)
 StopBtn.MouseButton1Click:Connect(Release)
 
