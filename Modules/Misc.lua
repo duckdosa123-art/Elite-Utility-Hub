@@ -3,10 +3,27 @@ local Tab = _G.MiscTab
 local LP = game:GetService("Players").LocalPlayer
 local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 
--- [ STATES & VARIABLES ]
+-- [ PROTECTED NOTIFICATION HELPER ]
+local function EliteNotify(title, content)
+    Rayfield:Notify({
+        Title = title,
+        Content = content,
+        Duration = 3,
+        Image = 4483362458,
+    })
+end
+
+-- [ PROTECTED CALLBACK WRAPPER ]
+local function SafeCallback(func)
+    local success, err = pcall(func)
+    if not success then
+        warn("Elite-Hub Callback Error: " .. tostring(err))
+    end
+end
+
+-- [ STATES ]
 local _aafk = false
 local _autoclick = false
 local _cps = 10
@@ -14,11 +31,9 @@ local _antifling = false
 local _chatlog = false
 
 -- [ 1. DETECTIVE SUITE LOGIC ]
--- Chat Logger
 game:GetService("LogService").MessageOut:Connect(function(Message, Type)
-    if _chatlog and Type == Enum.MessageType.MessageOutput or Type == Enum.MessageType.MessageInfo then
-        -- This prints game output and chat to the F9 console for mobile users
-        print("[ELITE LOG]: " .. Message)
+    if _chatlog then
+        print("[ELITE CHAT LOG]: " .. Message)
     end
 end)
 
@@ -26,31 +41,31 @@ end)
 task.spawn(function()
     while true do
         if _autoclick then
-            local VirtualUser = game:GetService("VirtualUser")
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            SafeCallback(function()
+                local vu = game:GetService("VirtualUser")
+                vu:CaptureController()
+                vu:ClickButton2(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            end)
         end
         task.wait(1 / _cps)
     end
 end)
 
 -- [ 3. ELITE PROTECTION LOGIC ]
--- Anti-Fling: Monitors velocity to prevent player flinging
 RunService.Heartbeat:Connect(function()
     if _antifling then
         local char = LP.Character
         local r = char and char:FindFirstChild("HumanoidRootPart")
         if r then
             if r.AssemblyLinearVelocity.Magnitude > 150 or r.AssemblyAngularVelocity.Magnitude > 150 then
-                r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                r.Velocity = Vector3.new(0,0,0) -- Legacy support
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
             end
         end
     end
 end)
 
--- [ 4. PERFORMANCE & AFK LOGIC (Existing) ]
+-- [ 4. FPS BOOSTER ENGINE ]
 local _fpsEnabled = false
 local _boosterThread = 0
 local _originalCache = {}
@@ -59,13 +74,15 @@ local function ToggleEliteFPS(Value)
     _fpsEnabled = Value
     _boosterThread = _boosterThread + 1
     local currentThread = _boosterThread
+    
     if Value then
-        _originalCache["Lighting"] = {GS = Lighting.GlobalShadows, BR = Lighting.Brightness, EDS = Lighting.EnvironmentDiffuseScale, ESS = Lighting.EnvironmentSpecularScale}
-        Lighting.GlobalShadows, Lighting.Brightness, Lighting.EnvironmentDiffuseScale, Lighting.EnvironmentSpecularScale = false, 1, 0, 0
+        _originalCache["Lighting"] = {GS = Lighting.GlobalShadows, BR = Lighting.Brightness, EDS = Lighting.EnvironmentDiffuseScale}
+        Lighting.GlobalShadows, Lighting.Brightness, Lighting.EnvironmentDiffuseScale = false, 1, 0
     elseif _originalCache["Lighting"] then
         local s = _originalCache["Lighting"]
-        Lighting.GlobalShadows, Lighting.Brightness, Lighting.EnvironmentDiffuseScale, Lighting.EnvironmentSpecularScale = s.GS, s.BR, s.EDS, s.ESS
+        Lighting.GlobalShadows, Lighting.Brightness, Lighting.EnvironmentDiffuseScale = s.GS, s.BR, s.EDS
     end
+
     task.spawn(function()
         local objects = workspace:GetDescendants()
         for i, v in pairs(objects) do
@@ -87,11 +104,10 @@ local function ToggleEliteFPS(Value)
             end
             if i % 500 == 0 then task.wait() end
         end
-        if not Value then _originalCache = {} end
     end)
 end
 
--- Anti-AFK
+-- [ ANTI-AFK ENGINE ]
 LP.Idled:Connect(function()
     if _aafk then
         game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -102,34 +118,40 @@ end)
 
 -- [ UI CONSTRUCTION ]
 if _G.MiscTab then
-    -- SERVER UTILITIES
     Tab:CreateSection("Detective Suite")
     
     Tab:CreateToggle({
         Name = "Chat Logger (F9 Console)",
         CurrentValue = false,
         Flag = "ChatLog",
-        Callback = function(Value) _chatlog = Value end,
+        Callback = function(Value) 
+            _chatlog = Value 
+            EliteNotify("Detective", Value and "Chat Logging Enabled" or "Chat Logging Disabled")
+        end,
     })
 
     Tab:CreateButton({
         Name = "Audio Logger (Print IDs)",
         Callback = function()
-            print("--- ELITE AUDIO LOG ---")
-            for _, v in pairs(game:GetDescendants()) do
-                if v:IsA("Sound") and v.Playing then
-                    print("Name: " .. v.Name .. " | ID: " .. v.SoundId)
+            SafeCallback(function()
+                print("--- ELITE AUDIO LOG ---")
+                for _, v in pairs(game:GetDescendants()) do
+                    if v:IsA("Sound") and v.Playing then
+                        print("Audio: " .. v.Name .. " | ID: " .. v.SoundId)
+                    end
                 end
-            end
-            Rayfield:Notify({Title = "Detective", Content = "Active Audio IDs printed to F9 Console.", Duration = 3})
+                EliteNotify("Detective", "Active Audio IDs printed to F9 Console.")
+            end)
         end,
     })
 
     Tab:CreateButton({
         Name = "Copy Server JobID",
         Callback = function()
-            setclipboard(tostring(game.JobId))
-            Rayfield:Notify({Title = "Server Info", Content = "JobID copied to clipboard!", Duration = 2})
+            SafeCallback(function()
+                setclipboard(tostring(game.JobId))
+                EliteNotify("Server Info", "JobID copied to clipboard!")
+            end)
         end,
     })
 
@@ -139,7 +161,10 @@ if _G.MiscTab then
         Name = "Universal Auto-Clicker",
         CurrentValue = false,
         Flag = "AutoClick",
-        Callback = function(Value) _autoclick = Value end,
+        Callback = function(Value) 
+            _autoclick = Value 
+            EliteNotify("Automation", Value and "Auto-Clicker Started" or "Auto-Clicker Stopped")
+        end,
     })
 
     Tab:CreateSlider({
@@ -157,23 +182,9 @@ if _G.MiscTab then
         Name = "Anti-Fling (Physics Guard)",
         CurrentValue = false,
         Flag = "AntiFling",
-        Callback = function(Value) _antifling = Value end,
-    })
-
-    Tab:CreateSection("Character Utilities")
-
-    Tab:CreateToggle({
-        Name = "Anti-AFK",
-        CurrentValue = false,
-        Flag = "AntiAFK",
-        Callback = function(Value) _aafk = Value end,
-    })
-
-    Tab:CreateButton({
-        Name = "Respawn Character",
-        Callback = function()
-            local char = LP.Character
-            if char then char:BreakJoints() end
+        Callback = function(Value) 
+            _antifling = Value 
+            EliteNotify("Protection", Value and "Physics Guard Active" or "Physics Guard Disabled")
         end,
     })
 
@@ -183,7 +194,10 @@ if _G.MiscTab then
         Name = "Elite FPS Booster",
         CurrentValue = false,
         Flag = "EliteFPS",
-        Callback = function(Value) ToggleEliteFPS(Value) end,
+        Callback = function(Value) 
+            SafeCallback(function() ToggleEliteFPS(Value) end)
+            EliteNotify("Performance", Value and "Potato Mode: On" or "Performance: Restored")
+        end,
     })
 
     Tab:CreateSlider({
@@ -193,7 +207,7 @@ if _G.MiscTab then
         CurrentValue = 60,
         Flag = "FPSCap",
         Callback = function(Value)
-            if setfpscap then setfpscap(Value) end
+            SafeCallback(function() if setfpscap then setfpscap(Value) end end)
         end,
     })
 
@@ -201,24 +215,27 @@ if _G.MiscTab then
     
     Tab:CreateButton({
         Name = "Rejoin Server",
-        Callback = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) end,
+        Callback = function() 
+            EliteNotify("Server", "Rejoining...")
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) 
+        end,
     })
 
     Tab:CreateButton({
         Name = "Server Hop",
         Callback = function()
-            local Http = game:GetService("HttpService")
-            local Api = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
-            local success, result = pcall(function() return game:HttpGet(Api) end)
-            if success then
-                local _list = Http:JSONDecode(result)
+            SafeCallback(function()
+                EliteNotify("Server", "Finding new server...")
+                local Http = game:GetService("HttpService")
+                local Api = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
+                local _list = Http:JSONDecode(game:HttpGet(Api))
                 for _, v in pairs(_list.data) do
                     if v.playing < v.maxPlayers and v.id ~= game.JobId then
                         TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, LP)
                         break
                     end
                 end
-            end
+            end)
         end,
     })
 end
