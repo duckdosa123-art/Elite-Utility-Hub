@@ -47,7 +47,7 @@ Tab:CreateButton({
    Callback = function()
       _G.EliteLog("Executing Dark Dex...", "info")
       task.spawn(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/memeenjoyer43/darkdex/refs/heads/main/script"))()
+         loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Dex-Explorer-DPP-73687"))()
       end)
    end,
 })
@@ -58,7 +58,7 @@ Tab:CreateButton({
    Callback = function()
       _G.EliteLog("Executing SimpleSpy...", "info")
       task.spawn(function()
-         loadstring(game:HttpGet("https://github.com/exxtremestuffs/SimpleSpySource/raw/master/SimpleSpy.lua"))()
+         loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/78n/SimpleSpy/main/SimpleSpyBeta.lua"))()
       end)
    end,
 })
