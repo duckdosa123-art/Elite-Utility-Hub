@@ -273,3 +273,69 @@ Tab:CreateToggle({
        end)
    end,
 })
+-- SECTION: PART CONTROL
+Tab:CreateSection("Part Control")
+
+-- 1. Immune to Kill Bricks
+local _kbImmune = false
+Tab:CreateToggle({
+   Name = "Immune to Kill Bricks",
+   CurrentValue = false,
+   Flag = "KillBrickImmune",
+   Callback = function(Value)
+      _kbImmune = Value
+      _G.EliteLog("Kill Brick Immunity: " .. (Value and "Active" or "Disabled"), Value and "success" or "warn")
+      
+      -- Logic: Disables the character's ability to trigger "Touched" events
+      local char = LP.Character
+      if char then
+          for _, p in pairs(char:GetDescendants()) do
+              if p:IsA("BasePart") then
+                  p.CanTouch = not Value
+              end
+          end
+      end
+   end,
+})
+
+-- 2. Detach Nearby Parts (Pops them up for Telekinesis)
+Tab:CreateButton({
+   Name = "Pop Nearby Parts",
+   Callback = function()
+       task.spawn(function()
+           local count = 0
+           local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+           if not hrp then return end
+           
+           for _, v in pairs(workspace:GetDescendants()) do
+               if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                   local dist = (v.Position - hrp.Position).Magnitude
+                   if dist < 50 then
+                       count = count + 1
+                       -- Apply a small upward pop to "wake up" the physics
+                       v.AssemblyLinearVelocity = Vector3.new(0, 25, 0)
+                   end
+               end
+           end
+           _G.EliteLog("Popped " .. count .. " nearby parts for Telekinesis", "success")
+       end)
+   end,
+})
+
+-- 3. Launch Parts in Space
+Tab:CreateButton({
+   Name = "Launch Parts into Space",
+   Callback = function()
+       task.spawn(function()
+           local count = 0
+           for _, v in pairs(workspace:GetDescendants()) do
+               if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                   count = count + 1
+                   -- Massive upward velocity
+                   v.AssemblyLinearVelocity = Vector3.new(0, 1000, 0)
+               end
+           end
+           _G.EliteLog("Launched " .. count .. " unanchored parts into orbit", "success")
+       end)
+   end,
+})
