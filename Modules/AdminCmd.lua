@@ -8,7 +8,7 @@ Tab:CreateSection("Admin Scripts")
 
 -- 1. INFINITE YIELD
 Tab:CreateButton({
-   Name = "Elite Infinite Yield",
+   Name = "Infinite Yield",
    Callback = function()
       _G.EliteLog("Executing Infinite Yield...", "info")
       task.spawn(function()
@@ -19,22 +19,22 @@ Tab:CreateButton({
 
 -- 2. CMD-X
 Tab:CreateButton({
-   Name = "Elite CMD-X",
+   Name = "Paranoia Admin",
    Callback = function()
       _G.EliteLog("Executing CMD-X...", "info")
       task.spawn(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source"))()
+         loadstring(game:HttpGet("https://idx.lol/latest.lua"))()
       end)
    end,
 })
 
 -- 3. NAMELESS ADMIN
 Tab:CreateButton({
-   Name = "Elite Nameless Admin",
+   Name = "Nameless Admin",
    Callback = function()
       _G.EliteLog("Executing Nameless...", "info")
       task.spawn(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source"))()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/Source.lua"))()
       end)
    end,
 })
@@ -43,7 +43,7 @@ Tab:CreateSection("Developer Tools")
 
 -- 4. DARK DEX V4 (Updated Source)
 Tab:CreateButton({
-   Name = "Elite Dark Dex V4",
+   Name = "Dark Dex ++",
    Callback = function()
       _G.EliteLog("Executing Dark Dex...", "info")
       task.spawn(function()
@@ -54,7 +54,7 @@ Tab:CreateButton({
 
 -- 5. SIMPLESPY (Updated Source)
 Tab:CreateButton({
-   Name = "Elite SimpleSpy",
+   Name = "SimpleSpy",
    Callback = function()
       _G.EliteLog("Executing SimpleSpy...", "info")
       task.spawn(function()
