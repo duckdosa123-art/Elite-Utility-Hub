@@ -283,26 +283,37 @@ local function IsValidProp(v)
     return false
 end
 
--- 1. Pop Nearby Parts (Wake Up)
+-- 1. Elite Pop Launcher (One-time Impulse)
 Tab:CreateButton({
-   Name = "Pop Nearby Parts (Wake Up)",
+   Name = "Elite Pop Launcher",
    Callback = function()
-       local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-       if not hrp then return end
-       local count = 0
-       for _, v in pairs(workspace:GetDescendants()) do
-           if IsValidProp(v) then
-               local dist = (v.Position - hrp.Position).Magnitude
-               if dist < _physicsDist then
-                   v.AssemblyLinearVelocity = Vector3.new(0, 30, 0) 
-                   count = count + 1
+       task.spawn(function()
+           local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+           if not hrp then return end
+           
+           local count = 0
+           for _, v in pairs(workspace:GetDescendants()) do
+               if IsValidProp(v) then
+                   local dist = (v.Position - hrp.Position).Magnitude
+                   if dist < _physicsDist then
+                       -- Apply a high-velocity punch to launch stationary parts
+                       v.AssemblyLinearVelocity = Vector3.new(0, 60, 0) 
+                       count = count + 1
+                   end
                end
            end
-       end
-       _G.EliteLog("Popped " .. count .. " props near you", "success")
+           
+           _G.EliteLog("Launched " .. count .. " stationary parts near you", "success")
+           
+           -- Optional: Official Roblox notification for confirmation
+           game:GetService("StarterGui"):SetCore("SendNotification", {
+               Title = "Elite Launcher",
+               Text = "Popped " .. count .. " objects!",
+               Duration = 3
+           })
+       end)
    end,
 })
-
 -- 2. Launch Nearby Parts (Toggle Loop)
 local _launchNearby = false
 task.spawn(function()
