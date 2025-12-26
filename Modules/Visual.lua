@@ -274,58 +274,45 @@ Tab:CreateToggle({
    end
 })
 
--- ELITE HEAD TAGS (Overhead Display)
+-- ELITE HEAD TAGS (Clean & Minimalist)
 local HeadTagFolder = Instance.new("Folder", game:GetService("CoreGui"))
 HeadTagFolder.Name = "EliteHeadTags"
 
 local function CreateEliteTag(Player)
     task.spawn(function()
-        -- Nil-checks and wait for character
         local Char = Player.Character or Player.CharacterAdded:Wait()
         local Head = Char:WaitForChild("Head", 5)
         local Hum = Char:WaitForChild("Humanoid", 5)
         
         if not Head or not Hum then return end
         
-        -- Hide default Roblox name to prevent "clutter"
+        -- Hide default name tag
         Hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
         
         -- Create Billboard
         local BGui = Instance.new("BillboardGui")
         BGui.Name = "EliteTag_" .. Player.Name
         BGui.Adornee = Head
-        BGui.Size = UDim2.new(0, 200, 0, 50)
-        BGui.StudsOffset = Vector3.new(0, 2.5, 0) -- Positioned perfectly above head
+        BGui.Size = UDim2.new(0, 150, 0, 30) -- Smaller footprint
+        BGui.StudsOffset = Vector3.new(0, 2.2, 0) -- Closer to head
         BGui.AlwaysOnTop = true
-        BGui.MaxDistance = 150 -- Doesn't disturb the view from far away
+        BGui.MaxDistance = 120 -- Keeps it local to your area
         BGui.Parent = HeadTagFolder
 
-        -- Background Frame (The "Juicy" Style)
-        local MainFrame = Instance.new("Frame")
-        MainFrame.Size = UDim2.new(0, 120, 0, 28)
-        MainFrame.Position = UDim2.new(0.5, -60, 0.5, -14)
-        MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        MainFrame.BackgroundTransparency = 0.3
-        MainFrame.BorderSizePixel = 0
-        MainFrame.Parent = BGui
-
-        local Corner = Instance.new("UICorner", MainFrame)
-        Corner.CornerRadius = UDim.new(0, 6)
-
-        local Stroke = Instance.new("UIStroke", MainFrame)
-        Stroke.Color = Color3.fromRGB(0, 255, 180) -- Elite Teal
-        Stroke.Thickness = 1.5
-        Stroke.Transparency = 0.4
-
-        -- Display Name Label
+        -- Display Name Label (No Box, Just Text)
         local NameLabel = Instance.new("TextLabel")
         NameLabel.Size = UDim2.new(1, 0, 1, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = Player.DisplayName
         NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.TextSize = 13
+        NameLabel.TextSize = 12 -- Slightly smaller for that 'clean' look
         NameLabel.Font = Enum.Font.GothamBold
-        NameLabel.Parent = MainFrame
+        
+        -- Black Outline Logic
+        NameLabel.TextStrokeTransparency = 0 -- Full visibility
+        NameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        
+        NameLabel.Parent = BGui
         
         -- Cleanup on death/leave
         Player.CharacterRemoving:Connect(function() BGui:Destroy() end)
@@ -339,32 +326,27 @@ Tab:CreateToggle({
       _G.HeadTagsEnabled = Value
       
       if Value then
-          _G.EliteLog("Head Tags: Visualizing Players", "success")
-          -- Tag existing players
+          _G.EliteLog("Head Tags: Clean Mode Enabled", "success")
           for _, p in pairs(game.Players:GetPlayers()) do
               if p ~= LP then CreateEliteTag(p) end
           end
           
-          -- Tag joining players
-          _G.PlayerAddedConn = game.Players.PlayerAdded:Connect(function(p)
+          _G.TagConnection = game.Players.PlayerAdded:Connect(function(p)
               CreateEliteTag(p)
           end)
       else
-          -- Cleanup everything
-          if _G.PlayerAddedConn then _G.PlayerAddedConn:Disconnect() end
+          if _G.TagConnection then _G.TagConnection:Disconnect() end
           HeadTagFolder:ClearAllChildren()
           
-          -- Restore default Roblox names
+          -- Restore default tags
           for _, p in pairs(game.Players:GetPlayers()) do
-              if p.Character and p.Character:FindFirstChildOfClass("Humanoid") then
-                  p.Character:FindFirstChildOfClass("Humanoid").DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
-              end
+              local Hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+              if Hum then Hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer end
           end
           _G.EliteLog("Head Tags: Disabled", "info")
       end
    end,
 })
-
 Tab:CreateToggle({
    Name = "Breadcrumbs (Trails)", 
    CurrentValue = false, 
