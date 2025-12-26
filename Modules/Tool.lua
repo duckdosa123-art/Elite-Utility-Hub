@@ -45,8 +45,8 @@ local function CreateGravButton(name, pos, color)
 end
 
 -- Moved to Top-Center to avoid Jump/Chat buttons
-local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.5, -115, 0, 60), Color3.fromRGB(200, 50, 50))
-local StopBtn = CreateGravButton("STOP / DROP", UDim2.new(0.5, 5, 0, 60), Color3.fromRGB(50, 50, 50))
+local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.5, -115, 0, 5), Color3.fromRGB(200, 50, 50))
+local StopBtn = CreateGravButton("STOP / DROP", UDim2.new(0.5, 5, 0, 5), Color3.fromRGB(50, 50, 50))
 
 -- Aiming Crosshair
 local CH_V = Instance.new("Frame", GravityGui)
