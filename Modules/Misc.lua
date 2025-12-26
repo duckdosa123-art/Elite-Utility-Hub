@@ -268,21 +268,75 @@ if _G.MiscTab then
         end,
     })
 
-    Tab:CreateButton({
-        Name = "Server Hop",
-        Callback = function()
-            BruteExecute("Server Hop", function()
-                _G.EliteLog("Searching for new server...", "info")
-                local Http = game:GetService("HttpService")
-                local Api = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
-                local _list = Http:JSONDecode(game:HttpGet(Api))
-                for _, v in pairs(_list.data) do
-                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
-                        TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, LP)
-                        break
+    -- ELITE SERVER HOP (Smart Scan Mode)
+Tab:CreateButton({
+    Name = "Elite Server Hop",
+    Callback = function()
+        task.spawn(function()
+            _G.EliteLog("Scanning for available servers...", "info")
+            
+            local HttpService = game:GetService("HttpService")
+            local TeleportService = game:GetService("TeleportService")
+            local PlaceId = game.PlaceId
+            local JobId = game.JobId
+            
+            local function FetchServers(cursor)
+                local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+                if cursor then url = url .. "&cursor=" .. cursor end
+                
+                local success, result = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                
+                if success then
+                    return HttpService:JSONDecode(result)
+                end
+                return nil
+            end
+
+            local nextCursor = nil
+            local foundServer = false
+            
+            -- Scan loop
+            while not foundServer do
+                local serverList = FetchServers(nextCursor)
+                
+                if not serverList or not serverList.data then
+                    _G.EliteLog("API Rate Limit hit, retrying...", "error")
+                    task.wait(2)
+                else
+                    for _, server in pairs(serverList.data) do
+                        -- Logic: Is it a different server AND has at least 2 empty slots?
+                        if server.id ~= JobId and tonumber(server.playing) < tonumber(server.maxPlayers) - 1 then
+                            foundServer = true
+                            _G.EliteLog("Server found! Teleporting...", "success")
+                            
+                            -- Attempt Teleport
+                            local teleportSuccess, err = pcall(function()
+                                TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LP)
+                            end)
+                            
+                            if not teleportSuccess then
+                                foundServer = false -- Reset and keep looking if teleport failed
+                                _G.EliteLog("Teleport failed, finding another...", "error")
+                            else
+                                return -- Exit script as we are leaving
+                            end
+                        end
+                    end
+                    
+                    -- Handle pagination if no server found in first 100
+                    if serverList.nextPageCursor then
+                        nextCursor = serverList.nextPageCursor
+                        _G.EliteLog("Scanning next page...", "info")
+                    else
+                        -- No more servers to scan, restart from beginning
+                        nextCursor = nil
+                        _G.EliteLog("No slots found, restarting scan...", "info")
                     end
                 end
-            end)
-        end,
-    })
-end
+                task.wait(0.1) -- Minimal delay to prevent frame drops on mobile
+            end
+        end)
+    end,
+})
