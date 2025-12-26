@@ -275,7 +275,7 @@ Tab:CreateToggle({
 })
 
 -- ELITE HEAD TAGS (Auto-Refreshing & Persistent)
-local HeadTagFolder = instance.new("Folder", game:GetService("CoreGui"))
+local HeadTagFolder = Instance.new("Folder", game:GetService("CoreGui"))
 HeadTagFolder.Name = "EliteHeadTags"
 
 local TagConnections = {} -- Table to track listeners for cleanup
