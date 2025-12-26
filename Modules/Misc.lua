@@ -4,23 +4,38 @@ local LP = game:GetService("Players").LocalPlayer
 local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
 
--- [ PROTECTED NOTIFICATION HELPER ]
-local function EliteNotify(title, content)
+-- [ ELITE BRUTE-FORCE NOTIFICATION HELPER ]
+local function BruteNotify(title, text)
+    -- Rayfield Notify
     Rayfield:Notify({
         Title = title,
-        Content = content,
+        Content = text,
         Duration = 3,
         Image = 4483362458,
     })
+    -- Roblox System Notify (Brute Force Confirmation)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 3
+        })
+    end)
 end
 
--- [ PROTECTED CALLBACK WRAPPER ]
-local function SafeCallback(func)
-    local success, err = pcall(func)
-    if not success then
-        warn("Elite-Hub Callback Error: " .. tostring(err))
-    end
+-- [ THE BRUTE-FORCE CALLBACK WRAPPER ]
+-- This ensures Rayfield never sees a "delay", preventing the Callback Error
+local function BruteExecute(name, func)
+    task.spawn(function()
+        local success, err = pcall(func)
+        if success then
+            BruteNotify("Elite Hub: Success", name .. " executed successfully!")
+        else
+            BruteNotify("Elite Hub: ERROR", name .. " failed: " .. tostring(err))
+        end
+    end)
 end
 
 -- [ STATES ]
@@ -32,16 +47,14 @@ local _chatlog = false
 
 -- [ 1. DETECTIVE SUITE LOGIC ]
 game:GetService("LogService").MessageOut:Connect(function(Message, Type)
-    if _chatlog then
-        print("[ELITE CHAT LOG]: " .. Message)
-    end
+    if _chatlog then print("[ELITE CHAT LOG]: " .. Message) end
 end)
 
 -- [ 2. SIMULATOR KING LOGIC ]
 task.spawn(function()
     while true do
         if _autoclick then
-            SafeCallback(function()
+            pcall(function()
                 local vu = game:GetService("VirtualUser")
                 vu:CaptureController()
                 vu:ClickButton2(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
@@ -125,22 +138,20 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "ChatLog",
         Callback = function(Value) 
-            _chatlog = Value 
-            EliteNotify("Detective", Value and "Chat Logging Enabled" or "Chat Logging Disabled")
+            BruteExecute("Chat Logger", function() _chatlog = Value end)
         end,
     })
 
     Tab:CreateButton({
         Name = "Audio Logger (Print IDs)",
         Callback = function()
-            SafeCallback(function()
+            BruteExecute("Audio Logger", function()
                 print("--- ELITE AUDIO LOG ---")
                 for _, v in pairs(game:GetDescendants()) do
                     if v:IsA("Sound") and v.Playing then
                         print("Audio: " .. v.Name .. " | ID: " .. v.SoundId)
                     end
                 end
-                EliteNotify("Detective", "Active Audio IDs printed to F9 Console.")
             end)
         end,
     })
@@ -148,9 +159,8 @@ if _G.MiscTab then
     Tab:CreateButton({
         Name = "Copy Server JobID",
         Callback = function()
-            SafeCallback(function()
+            BruteExecute("JobID Copier", function()
                 setclipboard(tostring(game.JobId))
-                EliteNotify("Server Info", "JobID copied to clipboard!")
             end)
         end,
     })
@@ -162,8 +172,7 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "AutoClick",
         Callback = function(Value) 
-            _autoclick = Value 
-            EliteNotify("Automation", Value and "Auto-Clicker Started" or "Auto-Clicker Stopped")
+            BruteExecute("Auto-Clicker", function() _autoclick = Value end)
         end,
     })
 
@@ -179,24 +188,31 @@ if _G.MiscTab then
     Tab:CreateSection("Elite Protection")
 
     Tab:CreateToggle({
-        Name = "Anti-Fling (Physics Guard)",
+        Name = "Anti-Fling Guard",
         CurrentValue = false,
         Flag = "AntiFling",
         Callback = function(Value) 
-            _antifling = Value 
-            EliteNotify("Protection", Value and "Physics Guard Active" or "Physics Guard Disabled")
+            BruteExecute("Anti-Fling", function() _antifling = Value end)
         end,
     })
 
-    Tab:CreateSection("Performance & Battery")
+    Tab:CreateSection("Performance & AFK")
 
     Tab:CreateToggle({
         Name = "Elite FPS Booster",
         CurrentValue = false,
         Flag = "EliteFPS",
         Callback = function(Value) 
-            SafeCallback(function() ToggleEliteFPS(Value) end)
-            EliteNotify("Performance", Value and "Potato Mode: On" or "Performance: Restored")
+            BruteExecute("FPS Booster", function() ToggleEliteFPS(Value) end)
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Anti-AFK",
+        CurrentValue = false,
+        Flag = "AntiAFK",
+        Callback = function(Value)
+            BruteExecute("Anti-AFK", function() _aafk = Value end)
         end,
     })
 
@@ -207,7 +223,7 @@ if _G.MiscTab then
         CurrentValue = 60,
         Flag = "FPSCap",
         Callback = function(Value)
-            SafeCallback(function() if setfpscap then setfpscap(Value) end end)
+            BruteExecute("FPS Cap", function() if setfpscap then setfpscap(Value) end end)
         end,
     })
 
@@ -216,16 +232,16 @@ if _G.MiscTab then
     Tab:CreateButton({
         Name = "Rejoin Server",
         Callback = function() 
-            EliteNotify("Server", "Rejoining...")
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) 
+            BruteExecute("Rejoin", function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) 
+            end)
         end,
     })
 
     Tab:CreateButton({
         Name = "Server Hop",
         Callback = function()
-            SafeCallback(function()
-                EliteNotify("Server", "Finding new server...")
+            BruteExecute("Server Hop", function()
                 local Http = game:GetService("HttpService")
                 local Api = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
                 local _list = Http:JSONDecode(game:HttpGet(Api))
