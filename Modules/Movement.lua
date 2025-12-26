@@ -257,38 +257,72 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE SPIDER (Wall Climb)
-local SpiderConnection
+-- ELITE SPIDER (Surface Alignment & Wall Walk)
+local SpiderConnection = nil
+local StickyTrail = nil
+
 Tab:CreateToggle({
    Name = "Elite Spider",
    CurrentValue = false,
    Callback = function(Value)
       _G.SpiderEnabled = Value
-      if SpiderConnection then SpiderConnection:Disconnect() end
       
+      -- Cleanup
+      if SpiderConnection then SpiderConnection:Disconnect() end
+      if StickyTrail then StickyTrail:Destroy() StickyTrail = nil end
+
       if Value then
-         _G.EliteLog("Spider Mode Active", "success")
+         _G.EliteLog("Spider Mode: Surface Aligned", "success")
+         
+         -- Visual Effect: Sticky Trail
+         StickyTrail = Instance.new("SelectionBox")
+         StickyTrail.LineThickness = 0.05
+         StickyTrail.SurfaceColor3 = Color3.fromRGB(0, 255, 150) -- Elite Teal
+         StickyTrail.SurfaceTransparency = 0.8
+         StickyTrail.Adornee = nil 
+         StickyTrail.Parent = game:GetService("CoreGui")
+
          SpiderConnection = game:GetService("RunService").PreSimulation:Connect(function()
             local Char = LP.Character
             local Root = Char and Char:FindFirstChild("HumanoidRootPart")
             local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
             
-            if Root and Hum and Hum.MoveDirection.Magnitude > 0 then
-               -- Raycast forward to find a wall
+            if Root and Hum then
                local rayParams = RaycastParams.new()
                rayParams.FilterDescendantsInstances = {Char}
                rayParams.FilterType = Enum.RaycastFilterType.Exclude
                
-               local wallCheck = workspace:Raycast(Root.Position, Hum.MoveDirection * 2, rayParams)
+               -- Check for wall directly in front
+               local direction = Hum.MoveDirection.Magnitude > 0 and Hum.MoveDirection or Root.CFrame.LookVector
+               local wallCheck = workspace:Raycast(Root.Position, direction * 2.5, rayParams)
                
-               if wallCheck then
-                  -- If wall found, shift velocity upward to "climb"
-                  Root.AssemblyLinearVelocity = Vector3.new(Root.AssemblyLinearVelocity.X, 25, Root.AssemblyLinearVelocity.Z)
+               if wallCheck and wallCheck.Instance then
+                  -- 1. ADHESION: Keep character stuck to wall
+                  -- Counteract gravity and move UP based on walk direction
+                  local climbSpeed = Hum.WalkSpeed * 0.8
+                  Root.AssemblyLinearVelocity = Vector3.new(
+                     Root.AssemblyLinearVelocity.X, 
+                     climbSpeed, 
+                     Root.AssemblyLinearVelocity.Z
+                  )
+                  
+                  -- 2. ALIGNMENT (The "Cool" Part): Tilt body to the wall surface
+                  -- We lerp the CFrame to look at the wall normal for a smooth crawl
+                  local lookAtNormal = Root.Position + wallCheck.Normal
+                  local targetCFrame = CFrame.lookAt(Root.Position, wallCheck.Position, wallCheck.Normal)
+                  Root.CFrame = Root.CFrame:Lerp(targetCFrame, 0.15)
+                  
+                  -- 3. VISUAL PULSE
+                  StickyTrail.Adornee = wallCheck.Instance
+                  StickyTrail.Color3 = Color3.fromHSV(tick() % 5 / 5, 1, 1) -- Rainbow Pulse
+               else
+                  -- Reset if not hitting a wall
+                  StickyTrail.Adornee = nil
                end
             end
          end)
       else
-         _G.EliteLog("Spider Mode Disabled", "info")
+         _G.EliteLog("Spider Mode: Disabled", "info")
       end
    end,
 })
