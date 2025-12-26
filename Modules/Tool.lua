@@ -162,34 +162,6 @@ end
 ThrowBtn.MouseButton1Click:Connect(Throw)
 StopBtn.MouseButton1Click:Connect(Release)
 
-local function GravityGunLogic()
-    if not grabbing then
-        local target = Mouse.Target
-        if target and not target.Anchored then
-            grabbing = true
-            grabPart = target
-            highlight = Instance.new("Highlight", grabPart)
-            highlight.FillColor = Color3.fromRGB(200, 50, 50)
-            bg = Instance.new("BodyGyro", grabPart)
-            bg.MaxTorque = Vector3.new(1,1,1) * math.huge
-            bp = Instance.new("BodyPosition", grabPart)
-            bp.MaxForce = Vector3.new(1,1,1) * math.huge
-            bp.P = 15000
-            _G.EliteLog("Holding: " .. grabPart.Name, "info")
-            task.spawn(function()
-                while grabbing and grabPart and grabPart.Parent do
-                    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        bp.Position = hrp.Position + (Mouse.Hit.LookVector * 15)
-                        bg.CFrame = hrp.CFrame
-                    end
-                    task.wait()
-                end
-                Release()
-            end)
-        else _G.EliteLog("Target is anchored/unmovable", "warn") end
-    else Release() end
-end
 
 -- Grapple Logic
 local function GrappleLogic()
@@ -368,25 +340,5 @@ Tab:CreateToggle({
            t.Activated:Connect(function() if Mouse.Target then Instance.new("Fire", Mouse.Target) end end)
            ActiveTools["Fire"] = t
        elseif ActiveTools["Fire"] then ActiveTools["Fire"]:Destroy() end
-   end,
-})
-
--- AUTOMATION
-Tab:CreateSection("Automation")
-
-local autouseOn = false
-Tab:CreateToggle({
-   Name = "Auto-Use Held Tool",
-   CurrentValue = false,
-   Callback = function(Value)
-       autouseOn = Value
-       _G.EliteLog("Auto-Use: " .. (Value and "Active" or "Inactive"), "info")
-       task.spawn(function()
-           while autouseOn do
-               local tool = LP.Character and LP.Character:FindFirstChildOfClass("Tool")
-               if tool then tool:Activate() end
-               task.wait(0.1)
-           end
-       end)
    end,
 })
