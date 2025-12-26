@@ -257,31 +257,21 @@ Tab:CreateToggle({
    end,
 })
 
--- ELITE SPIDER (Surface Alignment & Wall Walk)
+-- ELITE IY-SPIDER (Full Surface Alignment)
 local SpiderConnection = nil
-local StickyTrail = nil
+local LastSurfaceNormal = Vector3.new(0, 1, 0)
 
 Tab:CreateToggle({
-   Name = "Elite Spider",
+   Name = "Elite Spider Walk",
    CurrentValue = false,
    Callback = function(Value)
       _G.SpiderEnabled = Value
       
-      -- Cleanup
       if SpiderConnection then SpiderConnection:Disconnect() end
-      if StickyTrail then StickyTrail:Destroy() StickyTrail = nil end
 
       if Value then
-         _G.EliteLog("Spider Mode: Surface Aligned", "success")
+         _G.EliteLog("Spider Mode: IY-Style Active", "success")
          
-         -- Visual Effect: Sticky Trail
-         StickyTrail = Instance.new("SelectionBox")
-         StickyTrail.LineThickness = 0.05
-         StickyTrail.SurfaceColor3 = Color3.fromRGB(0, 255, 150) -- Elite Teal
-         StickyTrail.SurfaceTransparency = 0.8
-         StickyTrail.Adornee = nil 
-         StickyTrail.Parent = game:GetService("CoreGui")
-
          SpiderConnection = game:GetService("RunService").PreSimulation:Connect(function()
             local Char = LP.Character
             local Root = Char and Char:FindFirstChild("HumanoidRootPart")
@@ -292,36 +282,47 @@ Tab:CreateToggle({
                rayParams.FilterDescendantsInstances = {Char}
                rayParams.FilterType = Enum.RaycastFilterType.Exclude
                
-               -- Check for wall directly in front
-               local direction = Hum.MoveDirection.Magnitude > 0 and Hum.MoveDirection or Root.CFrame.LookVector
-               local wallCheck = workspace:Raycast(Root.Position, direction * 2.5, rayParams)
+               -- RAYCAST: We check "down" relative to the character's current orientation
+               -- This allows the script to 'see' the ceiling when you are upside down
+               local rayDir = -Root.CFrame.UpVector * 7 
+               local result = workspace:Raycast(Root.Position, rayDir, rayParams)
                
-               if wallCheck and wallCheck.Instance then
-                  -- 1. ADHESION: Keep character stuck to wall
-                  -- Counteract gravity and move UP based on walk direction
-                  local climbSpeed = Hum.WalkSpeed * 0.8
-                  Root.AssemblyLinearVelocity = Vector3.new(
-                     Root.AssemblyLinearVelocity.X, 
-                     climbSpeed, 
-                     Root.AssemblyLinearVelocity.Z
-                  )
+               if result then
+                  LastSurfaceNormal = result.Normal
                   
-                  -- 2. ALIGNMENT (The "Cool" Part): Tilt body to the wall surface
-                  -- We lerp the CFrame to look at the wall normal for a smooth crawl
-                  local lookAtNormal = Root.Position + wallCheck.Normal
-                  local targetCFrame = CFrame.lookAt(Root.Position, wallCheck.Position, wallCheck.Normal)
-                  Root.CFrame = Root.CFrame:Lerp(targetCFrame, 0.15)
+                  -- 1. PHYSICS OVERRIDE
+                  -- We force PlatformStanding so the Humanoid doesn't try to stand "Up" (Y-axis)
+                  Hum.PlatformStand = true
                   
-                  -- 3. VISUAL PULSE
-                  StickyTrail.Adornee = wallCheck.Instance
-                  StickyTrail.Color3 = Color3.fromHSV(tick() % 5 / 5, 1, 1) -- Rainbow Pulse
+                  -- 2. SURFACE ALIGNMENT
+                  -- Calculate new orientation where the character's UP matches the wall's NORMAL
+                  local lookDir = Hum.MoveDirection.Magnitude > 0 and Hum.MoveDirection or Root.CFrame.LookVector
+                  local rightVec = lookDir:Cross(result.Normal)
+                  local forwardVec = result.Normal:Cross(rightVec)
+                  
+                  local targetCFrame = CFrame.fromMatrix(result.Position + (result.Normal * 3.2), rightVec, result.Normal, -forwardVec)
+                  
+                  -- 3. MOVEMENT (Joystick Support)
+                  -- Manually move the CFrame since WalkSpeed doesn't work well in PlatformStand
+                  local moveOffset = Hum.MoveDirection * (Hum.WalkSpeed / 40)
+                  
+                  -- 4. APPLY
+                  Root.CFrame = Root.CFrame:Lerp(targetCFrame + moveOffset, 0.2)
+                  Root.AssemblyLinearVelocity = Vector3.new(0,0,0) -- Kill gravity while sticking
                else
-                  -- Reset if not hitting a wall
-                  StickyTrail.Adornee = nil
+                  -- 5. TRANSITION BACK
+                  -- If we lose the surface, we try to flip back upright safely
+                  Hum.PlatformStand = false
+                  local uprightCFrame = CFrame.new(Root.Position) * CFrame.Angles(0, math.rad(Root.Orientation.Y), 0)
+                  Root.CFrame = Root.CFrame:Lerp(uprightCFrame, 0.1)
                end
             end
          end)
       else
+         -- CLEANUP
+         if SpiderConnection then SpiderConnection:Disconnect() end
+         local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+         if Hum then Hum.PlatformStand = false end
          _G.EliteLog("Spider Mode: Disabled", "info")
       end
    end,
