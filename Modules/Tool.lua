@@ -338,3 +338,76 @@ Tab:CreateToggle({
        end)
    end,
 })
+-- [ PART CONTROL - ELITE ADDITIONS ]
+
+-- 1. Unanchor & Pop (Wake up parts)
+Tab:CreateButton({
+   Name = "Unanchor & Pop Nearby",
+   Callback = function()
+       local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if hrp then
+           local count = 0
+           for _, v in pairs(workspace:GetDescendants()) do
+               if v:IsA("BasePart") and v.Parent ~= LP.Character and (v.Position - hrp.Position).Magnitude < 50 then
+                   v.Anchored = false
+                   v.AssemblyLinearVelocity = Vector3.new(0, 20, 0) -- The "Pop"
+                   count = count + 1
+               end
+           end
+           _G.EliteLog("Unanchored and Popped " .. count .. " parts", "success")
+       end
+   end,
+})
+
+-- 2. Launch All Parts (Toggle Version)
+local _launchActive = false
+task.spawn(function()
+    while true do
+        if _launchActive then
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                    v.AssemblyLinearVelocity = Vector3.new(0, 500, 0) -- Constant upward force
+                end
+            end
+        end
+        task.wait(0.5) -- Frequency of the launch blast
+    end
+end)
+
+Tab:CreateToggle({
+   Name = "Launch All (Persistent)",
+   CurrentValue = false,
+   Callback = function(Value)
+      _launchActive = Value
+      _G.EliteLog("Space Launch: " .. (Value and "Active" or "Stopped"), Value and "warn" or "info")
+   end,
+})
+
+-- 3. Highlight Moveable Parts
+local _movableHigh = false
+Tab:CreateToggle({
+   Name = "Highlight Moveable Parts",
+   CurrentValue = false,
+   Callback = function(Value)
+      _movableHigh = Value
+      _G.EliteLog("Movable Highlights: " .. (Value and "ON" or "OFF"), "info")
+      
+      task.spawn(function()
+          for _, v in pairs(workspace:GetDescendants()) do
+              if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                  if Value then
+                      local h = v:FindFirstChild("EliteMoveHigh") or Instance.new("Highlight", v)
+                      h.Name = "EliteMoveHigh"
+                      h.FillColor = Color3.fromRGB(0, 255, 150)
+                      h.OutlineColor = Color3.new(1,1,1)
+                      h.FillTransparency = 0.5
+                  else
+                      if v:FindFirstChild("EliteMoveHigh") then v.EliteMoveHigh:Destroy() end
+                  end
+              end
+              -- Performance safety for large maps
+              if _movableHigh ~= Value then break end 
+          end
+      end)
+   end,
+})
