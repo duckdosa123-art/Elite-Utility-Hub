@@ -566,6 +566,16 @@ Tab:CreateSlider({
 })
 
 Tab:CreateSlider({
+   Name = "Orbit Speed",
+   Range = {1, 20},
+   Increment = 1,
+   CurrentValue = 4,
+   Callback = function(V)
+      ManipSettings.Speed = V
+   end,
+})
+
+Tab:CreateSlider({
    Name = "Throw Velocity",
    Range = {100, 500},
    Increment = 10,
