@@ -223,24 +223,163 @@ Players.PlayerAdded:Connect(function(p) if p ~= LP then CreateESP(p) end end)
 
 -- [ UI CONSTRUCTION ]
 Tab:CreateSection("Tactical Combat")
-Tab:CreateToggle({Name = "Master Enable", CurrentValue = false, Flag = "V_M", Callback = function(V) _G.ESPSettings.Enabled = V end})
-Tab:CreateToggle({Name = "3D Hitbox", CurrentValue = false, Flag = "V_3B", Callback = function(V) _G.ESPSettings.Box3D = V end})
-Tab:CreateToggle({Name = "Look Direction", CurrentValue = false, Flag = "V_LD", Callback = function(V) _G.ESPSettings.LookLines = V end})
-Tab:CreateToggle({Name = "Dynamic Health Bar", CurrentValue = false, Flag = "V_HB", Callback = function(V) _G.ESPSettings.HealthBars = V end})
-Tab:CreateToggle({Name = "Show Distance", CurrentValue = false, Flag = "V_SD", Callback = function(V) _G.ESPSettings.Distance = V end})
-Tab:CreateToggle({Name = "Breadcrumbs (Trails)", CurrentValue = false, Flag = "V_BC", Callback = function(V) _G.ESPSettings.Breadcrumbs = V end})
+
+Tab:CreateToggle({
+   Name = "Master Enable", 
+   CurrentValue = false, 
+   Flag = "V_M", 
+   Callback = function(V) 
+      _G.ESPSettings.Enabled = V 
+      _G.EliteLog("ESP System " .. (V and "Activated" or "Deactivated"), V and "success" or "warn")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "3D Hitbox", 
+   CurrentValue = false, 
+   Flag = "V_3B", 
+   Callback = function(V) 
+      _G.ESPSettings.Box3D = V 
+      _G.EliteLog("3D Hitbox ESP " .. (V and "On" or "Off"), "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Look Direction", 
+   CurrentValue = false, 
+   Flag = "V_LD", 
+   Callback = function(V) 
+      _G.ESPSettings.LookLines = V 
+      _G.EliteLog("Look Lines " .. (V and "Visible" or "Hidden"), "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Dynamic Health Bar", 
+   CurrentValue = false, 
+   Flag = "V_HB", 
+   Callback = function(V) 
+      _G.ESPSettings.HealthBars = V 
+      _G.EliteLog("Health Bars " .. (V and "Visible" or "Hidden"), "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Show Distance", 
+   CurrentValue = false, 
+   Flag = "V_SD", 
+   Callback = function(V) 
+      _G.ESPSettings.Distance = V 
+      _G.EliteLog("Distance ESP " .. (V and "Enabled" or "Disabled"), "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Breadcrumbs (Trails)", 
+   CurrentValue = false, 
+   Flag = "V_BC", 
+   Callback = function(V) 
+      _G.ESPSettings.Breadcrumbs = V 
+      _G.EliteLog("Player Trails " .. (V and "Active" or "Inactive"), "info")
+   end
+})
 
 Tab:CreateSection("Map & Environment")
-Tab:CreateToggle({Name = "Fullbright", CurrentValue = false, Flag = "V_FB", Callback = function(V) _G.ESPSettings.Fullbright = V end})
-Tab:CreateToggle({Name = "No Fog", CurrentValue = false, Flag = "V_NF", Callback = function(V) _G.ESPSettings.NoFog = V end})
+
+Tab:CreateToggle({
+   Name = "Fullbright", 
+   CurrentValue = false, 
+   Flag = "V_FB", 
+   Callback = function(V) 
+      _G.ESPSettings.Fullbright = V 
+      _G.EliteLog("Fullbright Mode " .. (V and "Active" or "Disabled"), V and "success" or "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "No Fog", 
+   CurrentValue = false, 
+   Flag = "V_NF", 
+   Callback = function(V) 
+      _G.ESPSettings.NoFog = V 
+      _G.EliteLog("Fog Removal " .. (V and "Active" or "Disabled"), "info")
+   end
+})
 
 Tab:CreateSection("Local Enhancements")
-Tab:CreateSlider({Name = "FOV Changer", Range = {70, 120}, Increment = 1, CurrentValue = 70, Flag = "V_FOV", Callback = function(V) _G.ESPSettings.FOV = V end})
-Tab:CreateSlider({Name = "VM Transparency", Range = {0, 1}, Increment = 0.1, CurrentValue = 0, Flag = "V_VM", Callback = function(V) _G.ESPSettings.VMTrans = V end})
-Tab:CreateToggle({Name = "Force Third Person", CurrentValue = false, Flag = "V_TP", Callback = function(V) _G.ESPSettings.ThirdPerson = V end})
+
+Tab:CreateSlider({
+   Name = "FOV Changer", 
+   Range = {70, 120}, 
+   Increment = 1, 
+   CurrentValue = 70, 
+   Flag = "V_FOV", 
+   Callback = function(V) 
+      _G.ESPSettings.FOV = V 
+      _G.EliteLog("Field of View updated: " .. V, "info")
+   end
+})
+
+Tab:CreateSlider({
+   Name = "VM Transparency", 
+   Range = {0, 1}, 
+   Increment = 0.1, 
+   CurrentValue = 0, 
+   Flag = "V_VM", 
+   Callback = function(V) 
+      _G.ESPSettings.VMTrans = V 
+      _G.EliteLog("Viewmodel Transparency: " .. V, "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Force Third Person", 
+   CurrentValue = false, 
+   Flag = "V_TP", 
+   Callback = function(V) 
+      _G.ESPSettings.ThirdPerson = V 
+      _G.EliteLog("Force Third Person " .. (V and "Enabled" or "Disabled"), "info")
+   end
+})
 
 Tab:CreateSection("Elite Aesthetic")
-Tab:CreateToggle({Name = "Cartoon Outline", CurrentValue = false, Flag = "V_OL", Callback = function(V) _G.ESPSettings.Outline = V end})
-Tab:CreateToggle({Name = "Rainbow RGB Mode", CurrentValue = false, Flag = "V_RB", Callback = function(V) _G.ESPSettings.Rainbow = V end})
-Tab:CreateToggle({Name = "Center Crosshair", CurrentValue = false, Flag = "V_CH", Callback = function(V) _G.ESPSettings.Crosshair = V end})
-Tab:CreateColorPicker({Name = "Crosshair Color", Color = Color3.new(0,1,0), Flag = "V_CHC", Callback = function(V) _G.ESPSettings.CrossColor = V end})
+
+Tab:CreateToggle({
+   Name = "Cartoon Outline", 
+   CurrentValue = false, 
+   Flag = "V_OL", 
+   Callback = function(V) 
+      _G.ESPSettings.Outline = V 
+      _G.EliteLog("Cartoon Outlines " .. (V and "Enabled" or "Disabled"), "info")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Rainbow RGB Mode", 
+   CurrentValue = false, 
+   Flag = "V_RB", 
+   Callback = function(V) 
+      _G.ESPSettings.Rainbow = V 
+      _G.EliteLog("Rainbow RGB Mode " .. (V and "Active" or "Inactive"), "success")
+   end
+})
+
+Tab:CreateToggle({
+   Name = "Center Crosshair", 
+   CurrentValue = false, 
+   Flag = "V_CH", 
+   Callback = function(V) 
+      _G.ESPSettings.Crosshair = V 
+      _G.EliteLog("Custom Crosshair " .. (V and "Visible" or "Hidden"), "info")
+   end
+})
+
+Tab:CreateColorPicker({
+   Name = "Crosshair Color", 
+   Color = Color3.new(0,1,0), 
+   Flag = "V_CHC", 
+   Callback = function(V) 
+      _G.ESPSettings.CrossColor = V 
+      _G.EliteLog("Crosshair Color updated", "info")
+   end
+})
