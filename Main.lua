@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
+_G.Rayfield = Rayfield
 local Window = Rayfield:CreateWindow({
    Name = "Elite-Utility-Hub",
    LoadingTitle = "Modular System Loading...",
