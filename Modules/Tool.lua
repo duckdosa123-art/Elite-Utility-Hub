@@ -5,7 +5,7 @@ local RunService = game:GetService("RunService")
 local Mouse = LP:GetMouse()
 local Tab = _G.ToolTab
 
--- [ 1. DYNAMIC GRAVITY GUI SETUP ]
+-- [ 1. DYNAMIC GRAVITY GUI & CROSSHAIR SETUP ]
 local GravityGui = Instance.new("ScreenGui")
 GravityGui.Name = "EliteGravGui"
 GravityGui.Enabled = false
@@ -13,10 +13,11 @@ GravityGui.ResetOnSpawn = false
 GravityGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GravityGui.Parent = LP:WaitForChild("PlayerGui")
 
+-- Buttons moved to top-center (Safe Zone)
 local function CreateGravButton(name, pos, color)
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.Size = UDim2.new(0, 120, 0, 45)
+    btn.Size = UDim2.new(0, 110, 0, 40)
     btn.Position = pos
     btn.BackgroundColor3 = color
     btn.Text = name
@@ -30,16 +31,28 @@ local function CreateGravButton(name, pos, color)
     return btn
 end
 
-local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.85, 0, 0.75, 0), Color3.fromRGB(200, 50, 50))
-local StopBtn = CreateGravButton("STOP", UDim2.new(0.85, 0, 0.83, 0), Color3.fromRGB(50, 50, 50))
+-- Horizontal Layout at the Top
+local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.5, -115, 0, 60), Color3.fromRGB(200, 50, 50))
+local StopBtn = CreateGravButton("DROP", UDim2.new(0.5, 5, 0, 60), Color3.fromRGB(50, 50, 50))
+
+-- Aiming Crosshair
+local CH_V = Instance.new("Frame", GravityGui)
+CH_V.Size = UDim2.new(0, 2, 0, 20)
+CH_V.Position = UDim2.new(0.5, -1, 0.5, -10)
+CH_V.BackgroundColor3 = Color3.new(1, 1, 1)
+CH_V.BorderSizePixel = 0
+
+local CH_H = Instance.new("Frame", GravityGui)
+CH_H.Size = UDim2.new(0, 20, 0, 2)
+CH_H.Position = UDim2.new(0.5, -10, 0.5, -1)
+CH_H.BackgroundColor3 = Color3.new(1, 1, 1)
+CH_H.BorderSizePixel = 0
 
 -- [ 2. GLOBAL TOOL VARIABLES ]
 local ActiveTools = {}
 local grabbing = false
 local grabPart = nil
 local bp, bg, highlight
-
--- [ 3. LOGIC FUNCTIONS ]
 
 -- Gravity Gun Logic
 local function Release()
@@ -53,10 +66,11 @@ end
 local function Throw()
     if grabPart then
         local p = grabPart
-        local look = Mouse.Hit.LookVector
+        -- Uses Camera direction for crosshair accuracy
+        local look = workspace.CurrentCamera.CFrame.LookVector
         Release()
-        p.AssemblyLinearVelocity = look * 250
-        _G.EliteLog("Object Thrown!", "success")
+        p.AssemblyLinearVelocity = look * 280 -- Increased Elite Power
+        _G.EliteLog("Object Thrown toward Crosshair", "success")
     end
 end
 
