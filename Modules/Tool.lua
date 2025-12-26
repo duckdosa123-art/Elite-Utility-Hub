@@ -339,3 +339,199 @@ Tab:CreateButton({
        end)
    end,
 })
+-- [ PART CONTROL - ELITE EXTENSION ]
+
+-- 1. Elite Network Claimer
+local _netClaim = false
+task.spawn(function()
+    RunService.Heartbeat:Connect(function()
+        if _netClaim then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                        if (v.Position - hrp.Position).Magnitude < 100 then
+                            -- Velocity spiking forces Network Ownership to the client
+                            v.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+Tab:CreateToggle({
+   Name = "Elite Network Claimer",
+   CurrentValue = false,
+   Callback = function(Value)
+      _netClaim = Value
+      _G.EliteLog("Network Claimer: " .. (Value and "Active" or "Disabled"), "info")
+   end,
+})
+
+-- 2. Massless Parts
+Tab:CreateButton({
+   Name = "Make Nearby Parts Massless",
+   Callback = function()
+       local count = 0
+       local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if hrp then
+           for _, v in pairs(workspace:GetDescendants()) do
+               if v:IsA("BasePart") and not v.Anchored and (v.Position - hrp.Position).Magnitude < 60 then
+                   v.Massless = true
+                   count = count + 1
+               end
+           end
+           _G.EliteLog("Made " .. count .. " parts massless", "success")
+       end
+   end,
+})
+
+-- 3. Anchor/Unanchor Toggle
+Tab:CreateButton({
+   Name = "Toggle Anchor (50 Studs)",
+   Callback = function()
+       local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+       if hrp then
+           for _, v in pairs(workspace:GetDescendants()) do
+               if v:IsA("BasePart") and v.Parent ~= LP.Character and (v.Position - hrp.Position).Magnitude < 50 then
+                   v.Anchored = not v.Anchored
+               end
+           end
+           _G.EliteLog("Toggled anchoring for nearby parts", "info")
+       end
+   end,
+})
+
+-- 4. Parts Shield (Orbit)
+local _shieldActive = false
+task.spawn(function()
+    local orbitAngle = 0
+    RunService.Heartbeat:Connect(function()
+        if _shieldActive then
+            orbitAngle = orbitAngle + 0.05
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local center = hrp.Position
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                        if (v.Position - center).Magnitude < 30 then
+                            local x = math.cos(orbitAngle) * 15
+                            local z = math.sin(orbitAngle) * 15
+                            v.AssemblyLinearVelocity = (Vector3.new(center.X + x, center.Y, center.Z + z) - v.Position) * 10
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+Tab:CreateToggle({
+   Name = "Parts Shield (Orbit)",
+   CurrentValue = false,
+   Callback = function(Value) 
+       _shieldActive = Value 
+       _G.EliteLog("Shield: " .. (Value and "Active" or "Inactive"), "info")
+   end,
+})
+
+-- 5. Parts Vortex (Black Hole)
+local _vortexActive = false
+task.spawn(function()
+    RunService.Heartbeat:Connect(function()
+        if _vortexActive then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+                        local dist = (v.Position - hrp.Position).Magnitude
+                        if dist < 150 then
+                            v.AssemblyLinearVelocity = (hrp.Position - v.Position).Unit * 50
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+Tab:CreateToggle({
+   Name = "Parts Vortex (Black Hole)",
+   CurrentValue = false,
+   Callback = function(Value) 
+       _vortexActive = Value 
+       _G.EliteLog("Black Hole: " .. (Value and "Active" or "Inactive"), "info")
+   end,
+})
+
+-- 6. Highlight All Moveable
+local _highEnable = false
+Tab:CreateToggle({
+   Name = "Highlight All Moveable",
+   CurrentValue = false,
+   Callback = function(Value)
+       _highEnable = Value
+       for _, v in pairs(workspace:GetDescendants()) do
+           if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+               if Value then
+                   local h = Instance.new("Highlight", v)
+                   h.Name = "MoveableHighlight"
+                   h.FillColor = Color3.fromRGB(0, 255, 100)
+               else
+                   if v:FindFirstChild("MoveableHighlight") then v.MoveableHighlight:Destroy() end
+               end
+           end
+       end
+       _G.EliteLog("Movable Highlights: " .. (Value and "Shown" or "Hidden"), "info")
+   end,
+})
+
+-- 7. Part Welder Tool
+Tab:CreateToggle({
+   Name = "Elite Welder Tool",
+   CurrentValue = false,
+   Callback = function(Value)
+       if Value then
+           local part1 = nil
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: Welder"
+           t.RequiresHandle = false
+           t.Activated:Connect(function()
+               local target = Mouse.Target
+               if target and target:IsA("BasePart") then
+                   if not part1 then
+                       part1 = target
+                       _G.EliteLog("Welder: Selected Part 1", "info")
+                   else
+                       local weld = Instance.new("WeldConstraint", part1)
+                       weld.Part0 = part1
+                       weld.Part1 = target
+                       _G.EliteLog("Welded " .. part1.Name .. " to " .. target.Name, "success")
+                       part1 = nil
+                   end
+               end
+           end)
+           _G.WeldTool = t
+       elseif _G.WeldTool then _G.WeldTool:Destroy() end
+   end,
+})
+
+-- 8. Explode Parts
+Tab:CreateButton({
+   Name = "Explode All Unanchored",
+   Callback = function()
+       local count = 0
+       for _, v in pairs(workspace:GetDescendants()) do
+           if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+               local ex = Instance.new("Explosion", v)
+               ex.Position = v.Position
+               ex.BlastRadius = 5
+               ex.BlastPressure = 100000
+               count = count + 1
+           end
+       end
+       _G.EliteLog("Detonated " .. count .. " unanchored parts", "warn")
+   end,
+})
