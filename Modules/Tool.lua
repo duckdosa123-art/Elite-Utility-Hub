@@ -230,29 +230,6 @@ Tab:CreateSlider({
 -- PART CONTROL
 Tab:CreateSection("Part Control")
 
-local _netClaim = false
-task.spawn(function()
-    RunService.Heartbeat:Connect(function()
-        if _netClaim then
-            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                for _, v in pairs(workspace:GetDescendants()) do
-                    if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
-                        if (v.Position - hrp.Position).Magnitude < 100 then
-                            v.AssemblyLinearVelocity = Vector3.new(0, 0.01, 0)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end)
-
-Tab:CreateToggle({
-   Name = "Elite Network Claimer",
-   CurrentValue = false,
-   Callback = function(V) _netClaim = V; _G.EliteLog("Network Claimer: "..tostring(V), "info") end
-})
 
 Tab:CreateToggle({
    Name = "Immune to Kill Bricks",
