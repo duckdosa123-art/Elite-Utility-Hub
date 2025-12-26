@@ -6,8 +6,8 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local StarterGui = game:GetService("StarterGui")
 
--- [ ELITE BRUTE-FORCE NOTIFICATION HELPER ]
-local function BruteNotify(title, text)
+-- [ ELITE BRUTE-FORCE NOTIFICATION & LOG HELPER ]
+local function BruteNotify(title, text, logType)
     -- Rayfield Notify
     Rayfield:Notify({
         Title = title,
@@ -15,7 +15,7 @@ local function BruteNotify(title, text)
         Duration = 3,
         Image = 4483362458,
     })
-    -- Roblox System Notify (Brute Force Confirmation)
+    -- Roblox System Notify
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = title,
@@ -26,14 +26,16 @@ local function BruteNotify(title, text)
 end
 
 -- [ THE BRUTE-FORCE CALLBACK WRAPPER ]
--- This ensures Rayfield never sees a "delay", preventing the Callback Error
+-- Automatically logs to the Elite Console upon execution
 local function BruteExecute(name, func)
     task.spawn(function()
         local success, err = pcall(func)
         if success then
-            BruteNotify("Elite Hub: Success", name .. " executed successfully!")
+            BruteNotify("Elite Hub: Success", name .. " executed!")
+            _G.EliteLog(name .. " executed successfully", "success")
         else
-            BruteNotify("Elite Hub: ERROR", name .. " failed: " .. tostring(err))
+            BruteNotify("Elite Hub: ERROR", name .. " failed!")
+            _G.EliteLog(name .. " Error: " .. tostring(err), "error")
         end
     end)
 end
@@ -138,7 +140,10 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "ChatLog",
         Callback = function(Value) 
-            BruteExecute("Chat Logger", function() _chatlog = Value end)
+            BruteExecute("Chat Logger", function() 
+                _chatlog = Value 
+                _G.EliteLog("Chat Logger " .. (Value and "Enabled" or "Disabled"), "info")
+            end)
         end,
     })
 
@@ -147,11 +152,14 @@ if _G.MiscTab then
         Callback = function()
             BruteExecute("Audio Logger", function()
                 print("--- ELITE AUDIO LOG ---")
+                local count = 0
                 for _, v in pairs(game:GetDescendants()) do
                     if v:IsA("Sound") and v.Playing then
+                        count = count + 1
                         print("Audio: " .. v.Name .. " | ID: " .. v.SoundId)
                     end
                 end
+                _G.EliteLog("Logged " .. count .. " active audio IDs", "success")
             end)
         end,
     })
@@ -161,6 +169,7 @@ if _G.MiscTab then
         Callback = function()
             BruteExecute("JobID Copier", function()
                 setclipboard(tostring(game.JobId))
+                _G.EliteLog("JobID copied to clipboard", "success")
             end)
         end,
     })
@@ -172,7 +181,10 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "AutoClick",
         Callback = function(Value) 
-            BruteExecute("Auto-Clicker", function() _autoclick = Value end)
+            BruteExecute("Auto-Clicker", function() 
+                _autoclick = Value 
+                _G.EliteLog("Auto-Clicker " .. (Value and "Enabled" or "Disabled"), "info")
+            end)
         end,
     })
 
@@ -182,7 +194,10 @@ if _G.MiscTab then
         Increment = 1,
         CurrentValue = 10,
         Flag = "CPS_Slider",
-        Callback = function(Value) _cps = Value end,
+        Callback = function(Value) 
+            _cps = Value 
+            _G.EliteLog("Auto-Click CPS set to: " .. Value, "info")
+        end,
     })
 
     Tab:CreateSection("Elite Protection")
@@ -192,7 +207,10 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "AntiFling",
         Callback = function(Value) 
-            BruteExecute("Anti-Fling", function() _antifling = Value end)
+            BruteExecute("Anti-Fling", function() 
+                _antifling = Value 
+                _G.EliteLog("Anti-Fling Guard " .. (Value and "Active" or "Inactive"), "info")
+            end)
         end,
     })
 
@@ -203,7 +221,10 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "EliteFPS",
         Callback = function(Value) 
-            BruteExecute("FPS Booster", function() ToggleEliteFPS(Value) end)
+            BruteExecute("FPS Booster", function() 
+                ToggleEliteFPS(Value) 
+                _G.EliteLog("FPS Booster " .. (Value and "Enabled" or "Disabled"), "info")
+            end)
         end,
     })
 
@@ -212,7 +233,10 @@ if _G.MiscTab then
         CurrentValue = false,
         Flag = "AntiAFK",
         Callback = function(Value)
-            BruteExecute("Anti-AFK", function() _aafk = Value end)
+            BruteExecute("Anti-AFK", function() 
+                _aafk = Value 
+                _G.EliteLog("Anti-AFK " .. (Value and "Enabled" or "Disabled"), "info")
+            end)
         end,
     })
 
@@ -223,7 +247,12 @@ if _G.MiscTab then
         CurrentValue = 60,
         Flag = "FPSCap",
         Callback = function(Value)
-            BruteExecute("FPS Cap", function() if setfpscap then setfpscap(Value) end end)
+            task.spawn(function()
+                if setfpscap then 
+                    setfpscap(Value) 
+                    _G.EliteLog("FPS Cap set to: " .. Value, "info")
+                end
+            end)
         end,
     })
 
@@ -233,6 +262,7 @@ if _G.MiscTab then
         Name = "Rejoin Server",
         Callback = function() 
             BruteExecute("Rejoin", function()
+                _G.EliteLog("Attempting server rejoin...", "warn")
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP) 
             end)
         end,
@@ -242,6 +272,7 @@ if _G.MiscTab then
         Name = "Server Hop",
         Callback = function()
             BruteExecute("Server Hop", function()
+                _G.EliteLog("Searching for new server...", "info")
                 local Http = game:GetService("HttpService")
                 local Api = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
                 local _list = Http:JSONDecode(game:HttpGet(Api))
