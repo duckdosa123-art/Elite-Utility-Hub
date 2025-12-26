@@ -5,93 +5,125 @@ local RunService = game:GetService("RunService")
 local Mouse = LP:GetMouse()
 local Tab = _G.ToolTab
 
--- [ TOOL STORAGE ]
+-- [ 1. DYNAMIC GRAVITY GUI SETUP ]
+local GravityGui = Instance.new("ScreenGui")
+GravityGui.Name = "EliteGravGui"
+GravityGui.Enabled = false
+GravityGui.ResetOnSpawn = false
+GravityGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GravityGui.Parent = LP:WaitForChild("PlayerGui")
+
+local function CreateGravButton(name, pos, color)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0, 120, 0, 45)
+    btn.Position = pos
+    btn.BackgroundColor3 = color
+    btn.Text = name
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.Parent = GravityGui
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+    return btn
+end
+
+local ThrowBtn = CreateGravButton("THROW", UDim2.new(0.85, 0, 0.75, 0), Color3.fromRGB(200, 50, 50))
+local StopBtn = CreateGravButton("STOP", UDim2.new(0.85, 0, 0.83, 0), Color3.fromRGB(50, 50, 50))
+
+-- [ 2. GLOBAL TOOL VARIABLES ]
 local ActiveTools = {}
-
--- [ HELPER: CREATE ELITE TOOL ]
-local function CreateEliteTool(name, icon, callback)
-    local tool = Instance.new("Tool")
-    tool.Name = "Elite: " .. name
-    tool.RequiresHandle = false
-    tool.CanBeDropped = false
-    tool.ToolTip = "Elite-Utility-Hub Tool"
-    
-    tool.Activated:Connect(function()
-        local success, err = pcall(callback)
-        if not success then
-            _G.EliteLog("Tool Error ("..name.."): "..tostring(err), "error")
-        end
-    end)
-    
-    return tool
-end
-
--- [ ARCHITECT LOGIC ]
-local function GiveBTools(Value)
-    if Value then
-        for i = 1, 4 do
-            local hb = Instance.new("HopperBin")
-            hb.BinType = i
-            hb.Parent = LP.Backpack
-            table.insert(ActiveTools, hb)
-        end
-        _G.EliteLog("Classic BTools Granted", "success")
-    end
-end
-
--- [ TACTICAL TP LOGIC ]
-local function TeleportToMouse()
-    local char = LP.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        local target = Mouse.Hit.Position + Vector3.new(0, 3, 0)
-        char.HumanoidRootPart.CFrame = CFrame.new(target)
-        _G.EliteLog("Teleported to Mouse Position", "info")
-    end
-end
-
--- [ GRAVITY GUN LOGIC ]
 local grabbing = false
 local grabPart = nil
+local bp, bg, highlight
+
+-- [ 3. LOGIC FUNCTIONS ]
+
+-- Gravity Gun Logic
+local function Release()
+    grabbing = false
+    if bp then bp:Destroy() bp = nil end
+    if bg then bg:Destroy() bg = nil end
+    if highlight then highlight:Destroy() highlight = nil end
+    if grabPart then grabPart = nil end
+end
+
+local function Throw()
+    if grabPart then
+        local p = grabPart
+        local look = Mouse.Hit.LookVector
+        Release()
+        p.AssemblyLinearVelocity = look * 250
+        _G.EliteLog("Object Thrown!", "success")
+    end
+end
+
+ThrowBtn.MouseButton1Click:Connect(Throw)
+StopBtn.MouseButton1Click:Connect(Release)
+
 local function GravityGunLogic()
     if not grabbing then
         local target = Mouse.Target
         if target and not target.Anchored then
             grabbing = true
             grabPart = target
-            local bg = Instance.new("BodyGyro", grabPart)
-            local bp = Instance.new("BodyPosition", grabPart)
+            highlight = Instance.new("Highlight", grabPart)
+            highlight.FillColor = Color3.fromRGB(200, 50, 50)
+            bg = Instance.new("BodyGyro", grabPart)
+            bg.MaxTorque = Vector3.new(1,1,1) * math.huge
+            bp = Instance.new("BodyPosition", grabPart)
             bp.MaxForce = Vector3.new(1,1,1) * math.huge
-            bp.P = 10000
-            
+            bp.P = 15000
+            _G.EliteLog("Holding: " .. grabPart.Name, "info")
             task.spawn(function()
-                while grabbing and grabPart do
-                    bp.Position = LP.Character.HumanoidRootPart.Position + (Mouse.Hit.LookVector * 15)
+                while grabbing and grabPart and grabPart.Parent do
+                    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        bp.Position = hrp.Position + (Mouse.Hit.LookVector * 15)
+                        bg.CFrame = hrp.CFrame
+                    end
                     task.wait()
                 end
-                bg:Destroy()
-                bp:Destroy()
+                Release()
             end)
-        end
-    else
-        grabbing = false
-        grabPart = nil
+        else _G.EliteLog("Target is anchored/unmovable", "warn") end
+    else Release() end
+end
+
+-- Grapple Logic
+local function GrappleLogic()
+    local target = Mouse.Hit.Position
+    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local bv = Instance.new("BodyVelocity", hrp)
+        bv.MaxForce = Vector3.new(1,1,1) * math.huge
+        bv.Velocity = (target - hrp.Position).Unit * 120
+        task.wait(0.5)
+        bv:Destroy()
     end
 end
 
--- [ UI CONSTRUCTION ]
+-- [ 4. UI SECTIONS ]
 
--- 1. ARCHITECT SECTION
+-- ARCHITECT
 Tab:CreateSection("Architect Tools")
 
 Tab:CreateToggle({
    Name = "Elite BTools",
    CurrentValue = false,
    Callback = function(Value)
-       if Value then GiveBTools(true)
-       else 
-           for _, t in pairs(LP.Backpack:GetChildren()) do if t:IsA("HopperBin") then t:Destroy() end end
-           _G.EliteLog("BTools Removed", "warn")
-       end
+      if Value then
+          for i = 1, 4 do
+              local hb = Instance.new("HopperBin", LP.Backpack)
+              hb.BinType = i
+              table.insert(ActiveTools, hb)
+          end
+          _G.EliteLog("Classic BTools Granted", "success")
+      else
+          for _, v in pairs(LP.Backpack:GetChildren()) do if v:IsA("HopperBin") then v:Destroy() end end
+      end
    end,
 })
 
@@ -100,22 +132,37 @@ Tab:CreateToggle({
    CurrentValue = false,
    Callback = function(Value)
        if Value then
-           local tool = CreateEliteTool("Deleter", "", function()
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: Deleter"
+           t.RequiresHandle = false
+           t.Activated:Connect(function()
                if Mouse.Target then 
                    _G.EliteLog("Locally Deleted: "..Mouse.Target.Name, "info")
-                   Mouse.Target.Transparency = 1
-                   Mouse.Target.CanCollide = false
+                   Mouse.Target.Transparency = 1; Mouse.Target.CanCollide = false 
                end
            end)
-           tool.Parent = LP.Backpack
-           ActiveTools["Deleter"] = tool
-       else
-           if ActiveTools["Deleter"] then ActiveTools["Deleter"]:Destroy() end
-       end
+           ActiveTools["Deleter"] = t
+       elseif ActiveTools["Deleter"] then ActiveTools["Deleter"]:Destroy() end
    end,
 })
 
--- 2. TACTICAL SECTION
+Tab:CreateToggle({
+   Name = "Part Inspector Tool",
+   CurrentValue = false,
+   Callback = function(Value)
+       if Value then
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: Inspector"
+           t.RequiresHandle = false
+           t.Activated:Connect(function()
+               if Mouse.Target then _G.EliteLog("Part: "..Mouse.Target.Name.." | Class: "..Mouse.Target.ClassName, "info") end
+           end)
+           ActiveTools["Inspector"] = t
+       elseif ActiveTools["Inspector"] then ActiveTools["Inspector"]:Destroy() end
+   end,
+})
+
+-- TACTICAL
 Tab:CreateSection("Tactical Movement")
 
 Tab:CreateToggle({
@@ -123,27 +170,45 @@ Tab:CreateToggle({
    CurrentValue = false,
    Callback = function(Value)
        if Value then
-           local tool = CreateEliteTool("TP Tool", "", TeleportToMouse)
-           tool.Parent = LP.Backpack
-           ActiveTools["TP"] = tool
-       else
-           if ActiveTools["TP"] then ActiveTools["TP"]:Destroy() end
-       end
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: TP Tool"
+           t.RequiresHandle = false
+           t.Activated:Connect(function()
+               local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+               if hrp then hrp.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0,3,0)) end
+               _G.EliteLog("Click Teleport Success", "success")
+           end)
+           ActiveTools["TP"] = t
+       elseif ActiveTools["TP"] then ActiveTools["TP"]:Destroy() end
    end,
 })
 
--- 3. INTERACTION SECTION
-Tab:CreateSection("Interaction Tools")
-
-local reachEnabled = false
 Tab:CreateToggle({
-   Name = "Infinite Reach (Interaction)",
+   Name = "Elite Grapple Hook",
    CurrentValue = false,
    Callback = function(Value)
-       reachEnabled = Value
+       if Value then
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: Grapple"
+           t.RequiresHandle = false
+           t.Activated:Connect(GrappleLogic)
+           ActiveTools["Grapple"] = t
+       elseif ActiveTools["Grapple"] then ActiveTools["Grapple"]:Destroy() end
+   end,
+})
+
+-- INTERACTION
+Tab:CreateSection("Interaction")
+
+local reachOn = false
+Tab:CreateToggle({
+   Name = "Infinite Reach",
+   CurrentValue = false,
+   Callback = function(Value)
+       reachOn = Value
        _G.EliteLog("Inf Reach: " .. (Value and "Enabled" or "Disabled"), "info")
        task.spawn(function()
-           while reachEnabled do
+           while reachOn do
                for _, v in pairs(game:GetDescendants()) do
                    if v:IsA("ClickDetector") or v:IsA("ProximityPrompt") then
                        v.MaxActivationDistance = Value and 1000 or 32
@@ -155,54 +220,51 @@ Tab:CreateToggle({
    end,
 })
 
--- 4. CHAOS SECTION
+-- CHAOS
 Tab:CreateSection("Physics & Fun")
 
 Tab:CreateToggle({
-   Name = "Gravity Gun",
+   Name = "Elite Gravity Gun",
    CurrentValue = false,
    Callback = function(Value)
        if Value then
-           local tool = CreateEliteTool("Gravity Gun", "", GravityGunLogic)
-           tool.Parent = LP.Backpack
+           local tool = Instance.new("Tool", LP.Backpack)
+           tool.Name = "Elite: Grav-Gun"
+           tool.RequiresHandle = false
+           tool.Equipped:Connect(function() GravityGui.Enabled = true end)
+           tool.Unequipped:Connect(function() GravityGui.Enabled = false; Release() end)
+           tool.Activated:Connect(GravityGunLogic)
            ActiveTools["Grav"] = tool
-       else
-           if ActiveTools["Grav"] then ActiveTools["Grav"]:Destroy() end
-       end
+       elseif ActiveTools["Grav"] then ActiveTools["Grav"]:Destroy(); GravityGui.Enabled = false; Release() end
    end,
 })
 
 Tab:CreateToggle({
-   Name = "Fire/Smoke Tool",
+   Name = "Local Fire Tool",
    CurrentValue = false,
    Callback = function(Value)
        if Value then
-           local tool = CreateEliteTool("Effect Tool", "", function()
-                if Mouse.Target then
-                    local f = Instance.new("Fire", Mouse.Target)
-                    f.Size = 5
-                    _G.EliteLog("Applied Local Effect to "..Mouse.Target.Name, "info")
-                end
-           end)
-           tool.Parent = LP.Backpack
-           ActiveTools["Effect"] = tool
-       else
-           if ActiveTools["Effect"] then ActiveTools["Effect"]:Destroy() end
-       end
+           local t = Instance.new("Tool", LP.Backpack)
+           t.Name = "Elite: Fire"
+           t.RequiresHandle = false
+           t.Activated:Connect(function() if Mouse.Target then Instance.new("Fire", Mouse.Target) end end)
+           ActiveTools["Fire"] = t
+       elseif ActiveTools["Fire"] then ActiveTools["Fire"]:Destroy() end
    end,
 })
 
--- 5. AUTOMATION SECTION
-Tab:CreateSection("Server Utilities")
+-- AUTOMATION
+Tab:CreateSection("Automation")
 
+local autouseOn = false
 Tab:CreateToggle({
-   Name = "Auto-Use Tool",
+   Name = "Auto-Use Held Tool",
    CurrentValue = false,
    Callback = function(Value)
-       _G.AutoUse = Value
-       _G.EliteLog("Auto-Use "..(Value and "Enabled" or "Disabled"), "info")
+       autouseOn = Value
+       _G.EliteLog("Auto-Use: " .. (Value and "Active" or "Inactive"), "info")
        task.spawn(function()
-           while _G.AutoUse do
+           while autouseOn do
                local tool = LP.Character and LP.Character:FindFirstChildOfClass("Tool")
                if tool then tool:Activate() end
                task.wait(0.1)
