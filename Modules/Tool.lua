@@ -141,8 +141,34 @@ end
 
 -- [ 4. UI SECTIONS ]
 
--- ARCHITECT TOOLS (Improved)
+-- ARCHITECT TOOLS (Mobile Optimized)
 Tab:CreateSection("Architect Tools")
+
+local BToolFolder = nil
+local Mouse = LP:GetMouse()
+
+-- Helper to create mobile-compatible tools
+local function CreateMobileTool(name, color, callback)
+    local tool = Instance.new("Tool")
+    tool.Name = "Elite " .. name
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+    
+    -- Mobile users need visual feedback since there are no icons
+    tool.Equipped:Connect(function()
+        _G.EliteLog(name .. " Tool Equipped", "info")
+    end)
+
+    tool.Activated:Connect(function()
+        local target = Mouse.Target
+        if target and target.Parent and not target:IsA("Terrain") then
+            callback(target)
+        end
+    end)
+    
+    return tool
+end
+
 Tab:CreateToggle({
    Name = "Elite BTools",
    CurrentValue = false,
@@ -151,43 +177,55 @@ Tab:CreateToggle({
          local Backpack = LP:FindFirstChild("Backpack")
          local StarterGear = LP:FindFirstChild("StarterGear")
          
-         -- Cleanup function to ensure no duplicate or lingering tools
-         local function RemoveBTools()
-            local targets = {Backpack, StarterGear}
-            for _, folder in pairs(targets) do
-               if folder then
-                  for _, tool in pairs(folder:GetChildren()) do
-                     if tool:IsA("HopperBin") or tool.Name:find("EliteTool_") then
-                        tool:Destroy()
-                     end
-                  end
-               end
+         -- Cleanup
+         if BToolFolder then BToolFolder:Destroy() BToolFolder = nil end
+         for _, v in pairs(LP.Backpack:GetChildren()) do 
+            if v.Name:find("Elite ") then v:Destroy() end 
+         end
+         if StarterGear then
+            for _, v in pairs(StarterGear:GetChildren()) do 
+               if v.Name:find("Elite ") then v:Destroy() end 
             end
          end
 
          if Value then
-            -- Remove any existing first to prevent stacking
-            RemoveBTools()
+            if not Backpack or not StarterGear then return end
             
-            if Backpack and StarterGear then
-               for i = 1, 4 do
-                  -- Create Tool for current session
-                  local hb = Instance.new("HopperBin")
-                  hb.Name = "EliteTool_" .. i
-                  hb.BinType = i
-                  hb.Parent = Backpack
-                  
-                  -- Create Tool for respawn persistence
-                  local hbSaved = hb:Clone()
-                  hbSaved.Parent = StarterGear
-               end
-               _G.EliteLog("BTools Granted (Death-Proof)", "success")
-            else
-               _G.EliteLog("BTools Error: Inventory Missing", "error")
+            -- 1. DELETE TOOL
+            local deleteTool = CreateMobileTool("Deleter", Color3.fromRGB(255,0,0), function(target)
+                _G.EliteLog("Deleted: " .. target.Name, "info")
+                target:Destroy()
+            end)
+            
+            -- 2. CLONE TOOL
+            local cloneTool = CreateMobileTool("Cloner", Color3.fromRGB(0,255,0), function(target)
+                local cl = target:Clone()
+                cl.Parent = target.Parent
+                cl.CFrame = target.CFrame + Vector3.new(0, 5, 0)
+                _G.EliteLog("Cloned: " .. target.Name, "success")
+            end)
+
+            -- 3. MOVE (TP TO PLAYER) TOOL
+            local moveTool = CreateMobileTool("Grabber", Color3.fromRGB(0,0,255), function(target)
+                local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and not target.Anchored then
+                    target.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * 5)
+                    _G.EliteLog("Moved: " .. target.Name, "info")
+                else
+                    _G.EliteLog("Cannot move anchored part", "error")
+                end
+            end)
+
+            -- Parent to Backpack and StarterGear for death-persistence
+            local tools = {deleteTool, cloneTool, moveTool}
+            for _, t in pairs(tools) do
+                t.Parent = Backpack
+                t:Clone().Parent = StarterGear
             end
+
+            _G.EliteLog("Mobile BTools Ready", "success")
          else
-            RemoveBTools()
-            _G.EliteLog("BTools Removed", "info")
+            _G.EliteLog("BTools Disabled", "info")
          end
       end)
    end,
