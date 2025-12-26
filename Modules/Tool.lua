@@ -432,6 +432,144 @@ Tab:CreateToggle({
    end,
 })
 
+-- [[ ELITE PART MANIPULATOR: ORBIT ENGINE ]]
+local RunService = game:GetService("RunService")
+local OrbitConnection = nil
+
+-- Configuration States
+local OrbitSettings = {
+    Enabled = false,
+    Radius = 10,
+    Speed = 5,
+    Height = 0,
+    Parts = {}
+}
+
+-- [ HELPER: RE-SCAN FOR UNANCHORED PARTS ]
+local function RefreshOrbitParts()
+    OrbitSettings.Parts = {}
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(LP.Character) then
+            -- Ensure it's not a handle or a baseplate
+            if v.Size.Magnitude < 50 and v.Name ~= "Baseplate" then
+                table.insert(OrbitSettings.Parts, v)
+            end
+        end
+    end
+end
+
+Tab:CreateSection("Elite Part Manipulator")
+
+Tab:CreateToggle({
+   Name = "Elite Part Orbit",
+   CurrentValue = false,
+   Callback = function(Value)
+      OrbitSettings.Enabled = Value
+      
+      if OrbitConnection then OrbitConnection:Disconnect() end
+      
+      if Value then
+          _G.EliteLog("Part Orbit Activated", "success")
+          
+          -- Initial Scan
+          RefreshOrbitParts()
+          
+          -- Start the Physics Loop
+          OrbitConnection = RunService.Heartbeat:Connect(function()
+              if not OrbitSettings.Enabled then return end
+              
+              local Character = LP.Character
+              local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+              
+              if Root then
+                  local Time = tick() * OrbitSettings.Speed
+                  
+                  for i, part in pairs(OrbitSettings.Parts) do
+                      -- Check if part still exists and is still unanchored
+                      if part and part.Parent and not part.Anchored then
+                          -- Calculate unique angle for each part to distribute them in a ring
+                          local angle = Time + (i * (math.pi * 2 / #OrbitSettings.Parts))
+                          
+                          -- Target Position in 3D Space
+                          local targetPos = Root.Position + Vector3.new(
+                              math.cos(angle) * OrbitSettings.Radius,
+                              OrbitSettings.Height,
+                              math.sin(angle) * OrbitSettings.Radius
+                          )
+                          
+                          -- Physics Tug: Move part toward target position
+                          -- We use velocity so it's smooth and visible to others
+                          local direction = (targetPos - part.Position)
+                          part.AssemblyLinearVelocity = direction * 10 
+                          
+                          -- Anti-Gravity: Keep parts from falling while orbiting
+                          part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0, 30, 0)
+                          
+                          -- Character Safety: Prevent parts from hitting YOU (Local Only)
+                          part.CanCollide = false
+                      else
+                          -- Remove dead/anchored parts from cache
+                          table.remove(OrbitSettings.Parts, i)
+                      end
+                  end
+              end
+          end)
+          
+          -- Watchdog: Scan for new parts every 3 seconds
+          task.spawn(function()
+              while OrbitSettings.Enabled do
+                  RefreshOrbitParts()
+                  task.wait(3)
+              end
+          end)
+      else
+          _G.EliteLog("Part Orbit Disabled", "info")
+          -- Reset part collisions to normal
+          for _, part in pairs(OrbitSettings.Parts) do
+              if part and part.Parent then part.CanCollide = true end
+          end
+      end
+   end,
+})
+
+Tab:CreateSlider({
+   Name = "Orbit Radius",
+   Range = {5, 50},
+   Increment = 1,
+   CurrentValue = 10,
+   Callback = function(Value)
+      OrbitSettings.Radius = Value
+   end,
+})
+
+Tab:CreateSlider({
+   Name = "Orbit Speed",
+   Range = {1, 20},
+   Increment = 1,
+   CurrentValue = 5,
+   Callback = function(Value)
+      OrbitSettings.Speed = Value
+   end,
+})
+
+Tab:CreateSlider({
+   Name = "Orbit Height Offset",
+   Range = {-10, 20},
+   Increment = 1,
+   CurrentValue = 0,
+   Callback = function(Value)
+      OrbitSettings.Height = Value
+   end,
+})
+
+Tab:CreateButton({
+   Name = "Force Re-Scan Parts",
+   Callback = function()
+      RefreshOrbitParts()
+      _G.EliteLog("Scan complete: " .. #OrbitSettings.Parts .. " parts found.", "info")
+   end,
+})
+
 -- [ AUTOMATION ]
 Tab:CreateSection("Automation")
 
