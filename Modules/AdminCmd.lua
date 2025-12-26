@@ -41,63 +41,62 @@ Tab:CreateButton({
 
 Tab:CreateSection("Developer Tools")
 
--- 4. DARK DEX V4 (Bypassed & Optimized)
+-- 4. DARK DEX V4 (Updated Source)
 Tab:CreateButton({
    Name = "Elite Dark Dex V4",
    Callback = function()
       _G.EliteLog("Executing Dark Dex...", "info")
       task.spawn(function()
-         -- Using the Babyhamsta Bypassed source as it's the most stable for modern games
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/BypassedDex.lua"))()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/memeenjoyer43/darkdex/refs/heads/main/script"))()
       end)
    end,
 })
 
--- 5. SIMPLESPY V3 (Latest Stable)
+-- 5. SIMPLESPY (Updated Source)
 Tab:CreateButton({
    Name = "Elite SimpleSpy",
    Callback = function()
       _G.EliteLog("Executing SimpleSpy...", "info")
       task.spawn(function()
-         -- Corrected to the 2024/2025 maintained repository
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/777777777777777777777777777777777777777/SimpleSpy/main/SimpleSpySource.lua"))()
+         loadstring(game:HttpGet("https://github.com/exxtremestuffs/SimpleSpySource/raw/master/SimpleSpy.lua"))()
       end)
    end,
 })
 
 Tab:CreateSection("Bypasses")
 
--- 6. ADONIS BYPASS (Smart Hook)
+-- 6. ADONIS BYPASS (Advanced GC Hook)
 Tab:CreateButton({
    Name = "Elite Adonis Bypass",
    Callback = function()
-      _G.EliteLog("Injecting Adonis Bypass...", "success")
+      _G.EliteLog("Injecting Adonis Anti-Crash...", "success")
       task.spawn(function()
-         -- Protection check to avoid double-hooking (prevents crashes)
-         if _G.AdonisBypassed then 
-            _G.EliteLog("Adonis already bypassed!", "warn")
-            return 
-         end
-         
+         -- Load the adoniscries base bypass
          local success, err = pcall(function()
-            local old; old = hookmetamethod(game, "__namecall", function(self, ...)
-               local method = getnamecallmethod()
-               local args = {...}
-               
-               -- Block the specific validation remotes used by Adonis to flag players
-               if method == "FireServer" and (self.Name == "Adonis_Validation" or self.Name == "\2\1\ADONIS_CHECK") then
-                  return nil
-               end
-               
-               return old(self, unpack(args))
-            end)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Pixeluted/adoniscries/main/Source.lua"))()
+            
+            -- Brute-Force Hook bad functions via Garbage Collector
+            local badFunctions = {"Crash", "HardCrash", "GPUCrash", "RAMCrash", "KillClient", "SetFPS"}
+            
+            for i, v in pairs(getgc()) do 
+                if type(v) == "function" then
+                    local info = debug.getinfo(v)
+                    local functionName = info.name
+                    
+                    -- Detect and neutralize crash/lag functions from Adonis Core
+                    if info.source:find('=.Core.Functions') and table.find(badFunctions, functionName) then
+                        hookfunction(v, function()
+                            _G.EliteLog("Blocked Adonis Attempt: " .. tostring(functionName), "warn")
+                        end)
+                    end
+                end
+            end
          end)
 
          if success then
-            _G.AdonisBypassed = true
-            _G.EliteLog("Adonis Hook Successful", "success")
+            _G.EliteLog("Adonis Fully Neutralized", "success")
          else
-            _G.EliteLog("Bypass Failed: Meta-Hook Error", "error")
+            _G.EliteLog("Bypass Failed: " .. tostring(err), "error")
          end
       end)
    end,
