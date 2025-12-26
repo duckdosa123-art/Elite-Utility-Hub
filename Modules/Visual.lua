@@ -274,18 +274,25 @@ Tab:CreateToggle({
    end
 })
 
--- ELITE HEAD TAGS (Clean & Minimalist)
-local HeadTagFolder = Instance.new("Folder", game:GetService("CoreGui"))
+-- ELITE HEAD TAGS (Auto-Refreshing & Persistent)
+local HeadTagFolder = instance.new("Folder", game:GetService("CoreGui"))
 HeadTagFolder.Name = "EliteHeadTags"
 
+local TagConnections = {} -- Table to track listeners for cleanup
+
 local function CreateEliteTag(Player)
-    task.spawn(function()
-        local Char = Player.Character or Player.CharacterAdded:Wait()
-        local Head = Char:WaitForChild("Head", 5)
-        local Hum = Char:WaitForChild("Humanoid", 5)
+    if Player == LP then return end -- Don't tag ourselves
+    
+    local function SetupCharacter(Char)
+        local Head = Char:WaitForChild("Head", 10)
+        local Hum = Char:WaitForChild("Humanoid", 10)
         
         if not Head or not Hum then return end
         
+        -- Remove previous tag if it somehow exists (respawn safety)
+        local existing = HeadTagFolder:FindFirstChild("EliteTag_" .. Player.Name)
+        if existing then existing:Destroy() end
+
         -- Hide default name tag
         Hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
         
@@ -293,30 +300,33 @@ local function CreateEliteTag(Player)
         local BGui = Instance.new("BillboardGui")
         BGui.Name = "EliteTag_" .. Player.Name
         BGui.Adornee = Head
-        BGui.Size = UDim2.new(0, 150, 0, 30) -- Smaller footprint
-        BGui.StudsOffset = Vector3.new(0, 2.2, 0) -- Closer to head
+        BGui.Size = UDim2.new(0, 150, 0, 30)
+        BGui.StudsOffset = Vector3.new(0, 2.2, 0)
         BGui.AlwaysOnTop = true
-        BGui.MaxDistance = 120 -- Keeps it local to your area
+        BGui.MaxDistance = 120
         BGui.Parent = HeadTagFolder
 
-        -- Display Name Label (No Box, Just Text)
         local NameLabel = Instance.new("TextLabel")
         NameLabel.Size = UDim2.new(1, 0, 1, 0)
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = Player.DisplayName
         NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.TextSize = 12 -- Slightly smaller for that 'clean' look
+        NameLabel.TextSize = 12
         NameLabel.Font = Enum.Font.GothamBold
-        
-        -- Black Outline Logic
-        NameLabel.TextStrokeTransparency = 0 -- Full visibility
+        NameLabel.TextStrokeTransparency = 0 
         NameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        
         NameLabel.Parent = BGui
-        
-        -- Cleanup on death/leave
-        Player.CharacterRemoving:Connect(function() BGui:Destroy() end)
+    end
+
+    -- Initial setup if character already exists
+    if Player.Character then task.spawn(SetupCharacter, Player.Character) end
+    
+    -- Listen for future respawns
+    local charAdded = Player.CharacterAdded:Connect(function(Char)
+        task.spawn(SetupCharacter, Char)
     end)
+    
+    TagConnections[Player.UserId] = charAdded
 end
 
 Tab:CreateToggle({
@@ -326,27 +336,48 @@ Tab:CreateToggle({
       _G.HeadTagsEnabled = Value
       
       if Value then
-          _G.EliteLog("Head Tags: Clean Mode Enabled", "success")
+          _G.EliteLog("Head Tags: Persistent Mode Active", "success")
+          
+          -- Tag everyone currently in the game
           for _, p in pairs(game.Players:GetPlayers()) do
-              if p ~= LP then CreateEliteTag(p) end
+              CreateEliteTag(p)
           end
           
-          _G.TagConnection = game.Players.PlayerAdded:Connect(function(p)
+          -- Listen for new players joining
+          _G.GlobalPlayerAdded = game.Players.PlayerAdded:Connect(function(p)
               CreateEliteTag(p)
           end)
+          
+          -- Cleanup logic when a player leaves
+          _G.GlobalPlayerLeft = game.Players.PlayerRemoving:Connect(function(p)
+              if TagConnections[p.UserId] then
+                  TagConnections[p.UserId]:Disconnect()
+                  TagConnections[p.UserId] = nil
+              end
+              local tag = HeadTagFolder:FindFirstChild("EliteTag_" .. p.Name)
+              if tag then tag:Destroy() end
+          end)
       else
-          if _G.TagConnection then _G.TagConnection:Disconnect() end
+          -- FULL CLEANUP
+          if _G.GlobalPlayerAdded then _G.GlobalPlayerAdded:Disconnect() end
+          if _G.GlobalPlayerLeft then _G.GlobalPlayerLeft:Disconnect() end
+          
+          for id, connection in pairs(TagConnections) do
+              connection:Disconnect()
+          end
+          TagConnections = {}
           HeadTagFolder:ClearAllChildren()
           
-          -- Restore default tags
+          -- Restore default Roblox tags
           for _, p in pairs(game.Players:GetPlayers()) do
               local Hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
               if Hum then Hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer end
           end
-          _G.EliteLog("Head Tags: Disabled", "info")
+          _G.EliteLog("Head Tags: Disabled & Cleaned", "info")
       end
    end,
 })
+
 Tab:CreateToggle({
    Name = "Breadcrumbs (Trails)", 
    CurrentValue = false, 
