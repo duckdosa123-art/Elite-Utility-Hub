@@ -141,19 +141,57 @@ end
 
 -- [ 4. UI SECTIONS ]
 
--- ARCHITECT
+-- ARCHITECT TOOLS (Improved)
 Tab:CreateSection("Architect Tools")
 Tab:CreateToggle({
    Name = "Elite BTools",
    CurrentValue = false,
    Callback = function(Value)
-      if Value then
-          for i = 1, 4 do local hb = Instance.new("HopperBin", LP.Backpack); hb.BinType = i; table.insert(ActiveTools, hb) end
-          _G.EliteLog("BTools Granted", "success")
-      else for _, v in pairs(LP.Backpack:GetChildren()) do if v:IsA("HopperBin") then v:Destroy() end end end
+      task.spawn(function()
+         local Backpack = LP:FindFirstChild("Backpack")
+         local StarterGear = LP:FindFirstChild("StarterGear")
+         
+         -- Cleanup function to ensure no duplicate or lingering tools
+         local function RemoveBTools()
+            local targets = {Backpack, StarterGear}
+            for _, folder in pairs(targets) do
+               if folder then
+                  for _, tool in pairs(folder:GetChildren()) do
+                     if tool:IsA("HopperBin") or tool.Name:find("EliteTool_") then
+                        tool:Destroy()
+                     end
+                  end
+               end
+            end
+         end
+
+         if Value then
+            -- Remove any existing first to prevent stacking
+            RemoveBTools()
+            
+            if Backpack and StarterGear then
+               for i = 1, 4 do
+                  -- Create Tool for current session
+                  local hb = Instance.new("HopperBin")
+                  hb.Name = "EliteTool_" .. i
+                  hb.BinType = i
+                  hb.Parent = Backpack
+                  
+                  -- Create Tool for respawn persistence
+                  local hbSaved = hb:Clone()
+                  hbSaved.Parent = StarterGear
+               end
+               _G.EliteLog("BTools Granted (Death-Proof)", "success")
+            else
+               _G.EliteLog("BTools Error: Inventory Missing", "error")
+            end
+         else
+            RemoveBTools()
+            _G.EliteLog("BTools Removed", "info")
+         end
+      end)
    end,
 })
-
 Tab:CreateToggle({
    Name = "Local Deleter Tool",
    CurrentValue = false,
