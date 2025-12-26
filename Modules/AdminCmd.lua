@@ -4,28 +4,6 @@ local LP = _G.LP
 local CoreGui = game:GetService("CoreGui")
 local PlayerGui = LP:FindFirstChild("PlayerGui")
 
--- 1. UTILITY: CLEAR ALL ADMIN UIs
--- This is useful since we are using buttons now.
-Tab:CreateButton({
-   Name = "Clear All Admin UIs",
-   Callback = function()
-      local names = {"InfiniteYield", "IY", "Cmdbar", "Notification", "CMDX", "CMD-X", "NamelessAdmin", "AdminGui", "Dex", "DarkDex", "SimpleSpy", "Spy"}
-      task.spawn(function()
-         local targets = {CoreGui, PlayerGui}
-         for _, parent in pairs(targets) do
-            if parent then
-               for _, child in pairs(parent:GetChildren()) do
-                  for _, name in pairs(names) do
-                     if child.Name:lower():find(name:lower()) then child:Destroy() end
-                  end
-               end
-            end
-         end
-         _G.EliteLog("Admin UIs Purged", "success")
-      end)
-   end,
-})
-
 Tab:CreateSection("Admin Scripts")
 
 -- 1. INFINITE YIELD
