@@ -309,21 +309,10 @@ end)
 
 Tab:CreateToggle({ Name = "Parts Vortex (Black Hole)", CurrentValue = false, Callback = function(V) _vortex = V end })
 
-Tab:CreateButton({
-   Name = "Launch All Parts to Space",
-   Callback = function()
-       for _, v in pairs(workspace:GetDescendants()) do
-           if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
-               v.AssemblyLinearVelocity = Vector3.new(0, 1000, 0)
-           end
-       end
-       _G.EliteLog("Orbit Launch Initiated", "warn")
-   end,
-})
 -- [ ELITE ADVANCED PHYSICS EXTENSION ]
-Tab:CreateSection("Physics Manipulation")
+Tab:CreateSection("Advanced Part Control")
 
--- 1. Pop Nearby Parts (Wake up logic for Telekinesis)
+-- 1. Pop Nearby Parts (One-time "Wake Up" for Telekinesis)
 Tab:CreateButton({
    Name = "Pop Nearby Parts (Wake Up)",
    Callback = function()
@@ -331,26 +320,32 @@ Tab:CreateButton({
        if not hrp then return end
        local count = 0
        for _, v in pairs(workspace:GetDescendants()) do
-           if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
-               if (v.Position - hrp.Position).Magnitude < 60 then
-                   v.AssemblyLinearVelocity = Vector3.new(0, 30, 0) -- Small vertical nudge
+           -- Only affect BaseParts that are NOT anchored and NOT part of the player
+           if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(LP.Character) then
+               local dist = (v.Position - hrp.Position).Magnitude
+               if dist < 60 then
+                   v.AssemblyLinearVelocity = Vector3.new(0, 35, 0) -- Small pop
                    count = count + 1
                end
            end
        end
-       _G.EliteLog("Popped " .. count .. " nearby parts for control", "success")
+       _G.EliteLog("Popped " .. count .. " unanchored parts nearby", "success")
    end,
 })
 
--- 2. Launch All Parts (Toggle Version)
-local _launchLoop = false
+-- 2. Launch Nearby Parts (Toggle Loop)
+local _launchNearby = false
 task.spawn(function()
     RunService.Heartbeat:Connect(function()
-        if _launchLoop then
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
-                    -- High velocity launch
-                    v.AssemblyLinearVelocity = Vector3.new(0, 150, 0) 
+        if _launchNearby then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(LP.Character) then
+                        if (v.Position - hrp.Position).Magnitude < 60 then
+                            v.AssemblyLinearVelocity = Vector3.new(0, 150, 0) -- Continuous launch force
+                        end
+                    end
                 end
             end
         end
@@ -358,34 +353,38 @@ task.spawn(function()
 end)
 
 Tab:CreateToggle({
-   Name = "Launch All Parts (Loop)",
+   Name = "Launch Nearby Parts (Toggle)",
    CurrentValue = false,
    Callback = function(Value)
-       _launchLoop = Value
+       _launchNearby = Value
        if not Value then
-           -- Stop momentum instantly when disabled
-           for _, v in pairs(workspace:GetDescendants()) do
-               if v:IsA("BasePart") and not v.Anchored then
-                   v.AssemblyLinearVelocity = Vector3.zero
+           -- Reset velocity of nearby parts when turned off
+           local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+           if hrp then
+               for _, v in pairs(workspace:GetDescendants()) do
+                   if v:IsA("BasePart") and not v.Anchored and (v.Position - hrp.Position).Magnitude < 60 then
+                       v.AssemblyLinearVelocity = Vector3.zero
+                   end
                end
            end
        end
-       _G.EliteLog("Space Launch " .. (Value and "Enabled" or "Disabled"), Value and "warn" or "info")
+       _G.EliteLog("Launch Nearby: " .. (Value and "Active" or "Disabled"), Value and "success" or "warn")
    end,
 })
 
--- 3. Highlight Moveable Parts
+-- 3. Highlight Moveable Parts (Toggle)
 Tab:CreateToggle({
    Name = "Highlight Moveable Parts",
    CurrentValue = false,
    Callback = function(Value)
        _G.EliteLog("Movable Highlights: " .. (Value and "ON" or "OFF"), "info")
        for _, v in pairs(workspace:GetDescendants()) do
-           if v:IsA("BasePart") and not v.Anchored and v.Parent ~= LP.Character then
+           -- Only highlight parts you can actually control
+           if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(LP.Character) then
                if Value then
                    local hl = v:FindFirstChild("EliteMoveHL") or Instance.new("Highlight")
                    hl.Name = "EliteMoveHL"
-                   hl.FillColor = Color3.fromRGB(0, 255, 120)
+                   hl.FillColor = Color3.fromRGB(0, 255, 120) -- Emerald Green
                    hl.OutlineColor = Color3.new(1, 1, 1)
                    hl.FillTransparency = 0.5
                    hl.Parent = v
@@ -402,7 +401,7 @@ Tab:CreateToggle({
 Tab:CreateSection("Automation")
 local autouseOn = false
 Tab:CreateToggle({
-   Name = "Auto-Use Held Tool",
+   Name = "Auto-Use Held Tool(EQUIP TOOL)",
    CurrentValue = false,
    Callback = function(Value)
        autouseOn = Value
