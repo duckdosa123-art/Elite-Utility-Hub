@@ -432,8 +432,7 @@ Tab:CreateToggle({
    end,
 })
 
--- [[ ELITE PART MANIPULATOR V3: STABLE ORBIT & THROW ]]
-local Mouse = LP:GetMouse()
+-- [[ ELITE PART MANIPULATOR V3: STICKY ORBIT ]]
 local OrbitParts = {}
 local OrbitConn = nil
 
@@ -442,36 +441,35 @@ local ManipSettings = {
     Radius = 12,
     Speed = 4,
     Height = 1,
-    ThrowPower = 250,
-    MaxParts = 40 -- Reduced slightly for better physics stability
+    Bobbing = 0, -- Vertical wave
+    Trans = 0.5,
+    MaxParts = 50
 }
 
--- [ HELPER: GHOST MODE & NETWORK CLAIM ]
-local function PreparePart(part)
+-- [ HELPER: GHOST MODE & REFRESH ]
+local function SetupManipPart(part)
     if part:IsA("BasePart") then
-        -- Ghost Mode (Local Only)
         part.CanCollide = false
         part.CanTouch = false
-        part.CanQuery = false 
-        part.LocalTransparencyModifier = 0.5
-        
-        -- Reset physics to "claim" network ownership
-        part.AssemblyLinearVelocity = Vector3.zero
-        part.AssemblyAngularVelocity = Vector3.zero
+        part.CanQuery = false -- Camera safe
+        part.LocalTransparencyModifier = ManipSettings.Trans
     end
 end
 
 local function RefreshManipParts()
     OrbitParts = {}
     local count = 0
-    local rootPos = LP.Character and LP.Character.PrimaryPart and LP.Character.PrimaryPart.Position or Vector3.zero
-    
-    -- Only grab parts within a 150-stud radius to prevent map-wide lag
+    -- Priority: Search near the player first for better Network Ownership
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
     for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
         if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(game.Players) then
-            if (v.Position - rootPos).Magnitude < 150 and v.Size.Magnitude < 30 and v.Name ~= "Baseplate" then
-                PreparePart(v)
+            local dist = (v.Position - root.Position).Magnitude
+            if dist < 100 and v.Size.Magnitude < 30 and v.Name ~= "Baseplate" then
+                SetupManipPart(v)
                 table.insert(OrbitParts, v)
                 count = count + 1
             end
@@ -489,82 +487,60 @@ Tab:CreateToggle({
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Orbit Active: Stable Mode", "success")
+          _G.EliteLog("Orbit Active: Sticky Physics Engaged", "success")
           RefreshManipParts()
           
           OrbitConn = game:GetService("RunService").Heartbeat:Connect(function()
               local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-              if not Root then return end
+              if not Root or not ManipSettings.Enabled then return end
               
-              local Time = tick() * ManipSettings.Speed
-              local numParts = #OrbitParts
-              
+              local Time = tick()
               for i, part in pairs(OrbitParts) do
                   if part and part.Parent and not part.Anchored then
-                      -- 1. CALCULATE STABLE TARGET
-                      local angle = Time + (i * (math.pi * 2 / numParts))
+                      -- 1. CALCULATE TARGET POSITION
+                      local angle = (Time * ManipSettings.Speed) + (i * (math.pi * 2 / #OrbitParts))
+                      local bob = math.sin(Time * 2 + i) * ManipSettings.Bobbing
+                      
                       local targetPos = Root.Position + Vector3.new(
                           math.cos(angle) * ManipSettings.Radius,
-                          ManipSettings.Height,
+                          ManipSettings.Height + bob,
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. PROPORTIONAL TUG (P-Controller style)
-                      -- We calculate the distance and apply a velocity that gets stronger as it gets further
-                      local diff = (targetPos - part.Position)
-                      local dist = diff.Magnitude
+                      -- 2. STICKY PHYSICS (Calculates exactly what velocity is needed)
+                      -- We use a lower multiplier (8) to prevent "flinging"
+                      local velocity = (targetPos - part.Position) * 8
+                      part.AssemblyLinearVelocity = velocity
                       
-                      -- Anti-Fling: If part is too far, don't teleport it, just tug it harder
-                      local dragSpeed = dist > 20 and 35 or 25
+                      -- Spin the parts for aesthetic
+                      part.AssemblyAngularVelocity = Vector3.new(0, 10, 0)
                       
-                      part.AssemblyLinearVelocity = (diff * dragSpeed) + Vector3.new(0, 25, 0)
-                      part.AssemblyAngularVelocity = Vector3.zero -- STOP THE SPINNING
-                      
-                      -- 3. FORCED GHOSTING (Every frame to prevent collisions)
+                      -- Constant Ghost Guard
                       part.CanCollide = false
                       part.CanQuery = false
+                      part.LocalTransparencyModifier = ManipSettings.Trans
                   else
                       table.remove(OrbitParts, i)
                   end
               end
           end)
           
-          -- Refresh Watchdog
+          -- Watchdog: Scans for new parts occasionally
           task.spawn(function()
               while ManipSettings.Enabled do
                   task.wait(3)
-                  if #OrbitParts < 5 then RefreshManipParts() end
+                  if #OrbitParts < ManipSettings.MaxParts then RefreshManipParts() end
               end
           end)
       else
-          _G.EliteLog("Orbit Released", "info")
+          _G.EliteLog("Orbit Disengaged", "info")
           for _, v in pairs(OrbitParts) do 
-             if v and v.Parent then 
-                v.CanCollide = true 
-                v.CanQuery = true 
-                v.LocalTransparencyModifier = 0
-             end 
-          end
-          OrbitParts = {}
-      end
-   end,
-})
-
-Tab:CreateButton({
-   Name = "Elite Throw Parts (Crosshair)",
-   Callback = function()
-      if #OrbitParts == 0 then return _G.EliteLog("No parts found!", "error") end
-      
-      local target = Mouse.Hit.Position
-      _G.EliteLog("Firing Projectiles!", "success")
-      
-      -- Launch all parts toward crosshair
-      for i = #OrbitParts, 1, -1 do
-          local part = OrbitParts[i]
-          if part and part.Parent then
-              local dir = (target - part.Position).Unit
-              part.AssemblyLinearVelocity = dir * ManipSettings.ThrowPower
-              table.remove(OrbitParts, i) -- Release from orbit
+              if v and v.Parent then 
+                  v.CanCollide = true 
+                  v.CanQuery = true 
+                  v.LocalTransparencyModifier = 0
+                  v.AssemblyLinearVelocity = Vector3.zero
+              end 
           end
       end
    end,
@@ -573,28 +549,44 @@ Tab:CreateButton({
 Tab:CreateSlider({
    Name = "Orbit Radius",
    Range = {5, 50},
-   CurrentValue = 12,
    Increment = 1,
+   CurrentValue = 12,
    Callback = function(V) ManipSettings.Radius = V end,
 })
 
 Tab:CreateSlider({
    Name = "Orbit Speed",
    Range = {1, 20},
-   CurrentValue = 4,
    Increment = 1,
+   CurrentValue = 4,
    Callback = function(V) ManipSettings.Speed = V end,
 })
 
 Tab:CreateSlider({
-   Name = "Throw Velocity",
-   Range = {100, 1000},
-   CurrentValue = 250,
-   Increment = 50,
-   Callback = function(V) ManipSettings.ThrowPower = V end,
+   Name = "Vertical Offset",
+   Range = {-5, 15},
+   Increment = 1,
+   CurrentValue = 1,
+   Callback = function(V) ManipSettings.Height = V end,
+})
+
+Tab:CreateSlider({
+   Name = "Vertical Bobbing",
+   Range = {0, 10},
+   Increment = 1,
+   CurrentValue = 0,
+   Callback = function(V) ManipSettings.Bobbing = V end,
+})
+
+Tab:CreateSlider({
+   Name = "Ghost Transparency",
+   Range = {0, 1},
+   Increment = 0.1,
+   CurrentValue = 0.5,
+   Callback = function(V) ManipSettings.Trans = V end,
 })
 
 Tab:CreateButton({
-   Name = "Force Re-Scan",
+   Name = "Force Re-Scan Props",
    Callback = function() RefreshManipParts() end,
 })
