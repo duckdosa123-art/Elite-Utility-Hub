@@ -217,8 +217,8 @@ Tab:CreateToggle({
       end
    end,
 })
--- ELITE NO-FALL (Multi-Method Brute Force)
-local NoFallHeartbeat = nil
+-- ELITE NO-FALL (Reactive Impact Guard)
+local NoFallConnection = nil
 
 Tab:CreateToggle({
    Name = "Elite No-Fall",
@@ -226,12 +226,15 @@ Tab:CreateToggle({
    Callback = function(Value)
       _G.NoFallEnabled = Value
       
-      if NoFallHeartbeat then NoFallHeartbeat:Disconnect() end
+      if NoFallConnection then NoFallConnection:Disconnect() end
 
       if Value then
-         _G.EliteLog("No-Fall: Brute-Force Mode Active", "success")
+         _G.EliteLog("No-Fall: Reactive Mode Active", "success")
          
-         NoFallHeartbeat = game:GetService("RunService").PreSimulation:Connect(function()
+         local rayParams = RaycastParams.new()
+         -- Update filter inside the loop to handle character respawns
+         
+         NoFallConnection = game:GetService("RunService").PreSimulation:Connect(function()
             if not _G.NoFallEnabled then return end
             
             local Char = LP.Character
@@ -239,38 +242,43 @@ Tab:CreateToggle({
             local Root = Char and Char:FindFirstChild("HumanoidRootPart")
             
             if Hum and Root then
-               -- METHOD 1: Velocity Clamping (The "NDS Killer")
-               -- If falling faster than -20 (safe speed), we force it back to -15.
-               -- The game server never sees a "lethal" impact velocity.
-               if Root.AssemblyLinearVelocity.Y < -20 then
-                  Root.AssemblyLinearVelocity = Vector3.new(
-                     Root.AssemblyLinearVelocity.X, 
-                     -15, -- Cap fall speed at a non-lethal value
-                     Root.AssemblyLinearVelocity.Z
-                  )
+               -- 1. UX CHECK: Only trigger if falling at LETHAL speeds (usually > 55)
+               -- This prevents interference with normal jumping or small hops.
+               local fallVelocity = Root.AssemblyLinearVelocity.Y
+               
+               if fallVelocity < -50 then
+                  -- 2. PROXIMITY CHECK: Look for the ground 8 studs below
+                  rayParams.FilterDescendantsInstances = {Char}
+                  rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                  
+                  local groundCheck = workspace:Raycast(Root.Position, Vector3.new(0, -10, 0), rayParams)
+                  
+                  if groundCheck then
+                     -- 3. BRUTE FORCE IMPACT RESET
+                     -- We set Y velocity to a safe landing speed only at the last split second.
+                     Root.AssemblyLinearVelocity = Vector3.new(
+                        Root.AssemblyLinearVelocity.X, 
+                        -2, -- Safe landing speed
+                        Root.AssemblyLinearVelocity.Z
+                     )
+                     
+                     -- Force state to Running to clear the internal fall-damage timer
+                     Hum:ChangeState(Enum.HumanoidStateType.Running)
+                  end
                end
 
-               -- METHOD 2: State Jamming
-               -- Rapidly switches states to break 'FallDistance' accumulation in standard scripts.
-               if Hum:GetState() == Enum.HumanoidStateType.Freefall then
-                  Hum:ChangeState(Enum.HumanoidStateType.Running)
-               end
-               
-               -- METHOD 3: Physics Guard
-               -- Disables the states that trigger 'Land' animations and damage events.
+               -- Backup: Block the damage-triggering states without affecting velocity
                Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-               Hum:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
             end
          end)
       else
-         -- Cleanup and Restore
-         if NoFallHeartbeat then NoFallHeartbeat:Disconnect() end
+         -- Cleanup
+         if NoFallConnection then NoFallConnection:Disconnect() end
          local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
          if Hum then
             Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            Hum:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
          end
          _G.EliteLog("No-Fall: Disabled", "info")
       end
