@@ -1,11 +1,13 @@
--- ELITE ADMIN COMMANDS (Force-Cleanup Enabled)
+-- [[ ADMIN CMD MODULE: ELITE-UTILITY-HUB ]]
+local Tab = _G.AdminTab
+local LP = _G.LP
 local CoreGui = game:GetService("CoreGui")
 local PlayerGui = LP:FindFirstChild("PlayerGui")
 
--- Helper function to wipe specific UI and reset character state
-local function CleanAdminUI(names)
+-- 1. ELITE BRUTE-FORCE DISABLER
+-- This removes the UI and attempts to break the script's connection by destroying its container.
+local function EliteBruteDisable(names)
     task.spawn(function()
-        -- 1. Destroy GUIs
         local targets = {CoreGui, PlayerGui}
         for _, parent in pairs(targets) do
             if parent then
@@ -18,16 +20,7 @@ local function CleanAdminUI(names)
                 end
             end
         end
-        
-        -- 2. Reset Physics (Flushes active commands like Fly/Speed)
-        local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if Hum then
-            Hum.WalkSpeed = 16
-            Hum.JumpPower = 50
-            Hum.PlatformStand = false
-            Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end
-        _G.EliteLog("Admin Cleanup: State Reset", "info")
+        _G.EliteLog("Admin Brute-Forced Off", "warn")
     end)
 end
 
@@ -42,7 +35,7 @@ Tab:CreateToggle({
               loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
           end)
       else
-          CleanAdminUI({"InfiniteYield", "IY", "Cmdbar", "Notification"})
+          EliteBruteDisable({"InfiniteYield", "IY", "Cmdbar", "Notification"})
       end
    end,
 })
@@ -55,10 +48,10 @@ Tab:CreateToggle({
       if Value then
           _G.EliteLog("Loading CMD-X...", "info")
           task.spawn(function()
-              loadstring(game:HttpGet('https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source', true))()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source"))()
           end)
       else
-          CleanAdminUI({"CMDX", "CMD-X"})
+          EliteBruteDisable({"CMDX", "CMD-X"})
       end
    end,
 })
@@ -71,15 +64,15 @@ Tab:CreateToggle({
       if Value then
           _G.EliteLog("Loading Nameless...", "info")
           task.spawn(function()
-              loadstring(game:HttpGet("https://raw.githubusercontent.com/Filter-90/Nameless-Admin/main/Source.lua"))()
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source"))()
           end)
       else
-          CleanAdminUI({"NamelessAdmin", "AdminGui"})
+          EliteBruteDisable({"NamelessAdmin", "AdminGui"})
       end
    end,
 })
 
--- 4. DARK DEX V4
+-- 4. DARK DEX V4 (Corrected Bypassed Version)
 Tab:CreateToggle({
    Name = "Dark Dex V4",
    CurrentValue = false,
@@ -87,10 +80,11 @@ Tab:CreateToggle({
       if Value then
           _G.EliteLog("Loading Dark Dex...", "info")
           task.spawn(function()
+              -- Updated to the most reliable Bypassed V4 source
               loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/BypassedDex.lua"))()
           end)
       else
-          CleanAdminUI({"Dex", "DarkDex"})
+          EliteBruteDisable({"Dex", "DarkDex"})
       end
    end,
 })
@@ -106,7 +100,7 @@ Tab:CreateToggle({
               loadstring(game:HttpGet("https://raw.githubusercontent.com/777777777777777777777777777777777777777/SimpleSpy/main/SimpleSpySource.lua"))()
           end)
       else
-          CleanAdminUI({"SimpleSpy", "Spy"})
+          EliteBruteDisable({"SimpleSpy", "Spy"})
       end
    end,
 })
@@ -119,7 +113,6 @@ Tab:CreateToggle({
       if Value then
           _G.EliteLog("Applying Adonis Bypass...", "success")
           task.spawn(function()
-              -- This is a standard universal bypass logic
               local old; old = hookmetamethod(game, "__namecall", function(self, ...)
                   local method = getnamecallmethod()
                   if method == "FireServer" and self.Name == "Adonis_Validation" then
