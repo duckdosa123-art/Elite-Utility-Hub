@@ -432,7 +432,7 @@ Tab:CreateToggle({
    end,
 })
 
--- [[ ELITE PART MANIPULATOR V2: ORBIT & THROW ]]
+-- [[ ELITE PART MANIPULATOR V3: STABLE ORBIT & THROW ]]
 local Mouse = LP:GetMouse()
 local OrbitParts = {}
 local OrbitConn = nil
@@ -443,28 +443,35 @@ local ManipSettings = {
     Speed = 4,
     Height = 1,
     ThrowPower = 250,
-    MaxParts = 50 -- Lag prevention
+    MaxParts = 40 -- Reduced slightly for better physics stability
 }
 
--- [ HELPER: GHOST MODE & SCAN ]
--- Makes parts non-collidable for YOU and invisible to your CAMERA
-local function MakeGhost(part)
+-- [ HELPER: GHOST MODE & NETWORK CLAIM ]
+local function PreparePart(part)
     if part:IsA("BasePart") then
+        -- Ghost Mode (Local Only)
         part.CanCollide = false
         part.CanTouch = false
-        part.CanQuery = false -- Prevents camera from zooming in when part passes your face
-        part.LocalTransparencyModifier = 0.5 -- Makes them ghost-like for you
+        part.CanQuery = false 
+        part.LocalTransparencyModifier = 0.5
+        
+        -- Reset physics to "claim" network ownership
+        part.AssemblyLinearVelocity = Vector3.zero
+        part.AssemblyAngularVelocity = Vector3.zero
     end
 end
 
 local function RefreshManipParts()
     OrbitParts = {}
     local count = 0
+    local rootPos = LP.Character and LP.Character.PrimaryPart and LP.Character.PrimaryPart.Position or Vector3.zero
+    
+    -- Only grab parts within a 150-stud radius to prevent map-wide lag
     for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
         if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(game.Players) then
-            if v.Size.Magnitude < 40 and v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
-                MakeGhost(v)
+            if (v.Position - rootPos).Magnitude < 150 and v.Size.Magnitude < 30 and v.Name ~= "Baseplate" then
+                PreparePart(v)
                 table.insert(OrbitParts, v)
                 count = count + 1
             end
@@ -482,7 +489,7 @@ Tab:CreateToggle({
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Orbit Active: You are now a Ghost", "success")
+          _G.EliteLog("Orbit Active: Stable Mode", "success")
           RefreshManipParts()
           
           OrbitConn = game:GetService("RunService").Heartbeat:Connect(function()
@@ -490,21 +497,30 @@ Tab:CreateToggle({
               if not Root then return end
               
               local Time = tick() * ManipSettings.Speed
+              local numParts = #OrbitParts
+              
               for i, part in pairs(OrbitParts) do
                   if part and part.Parent and not part.Anchored then
-                      -- 1. CALCULATE POSITION
-                      local angle = Time + (i * (math.pi * 2 / #OrbitParts))
+                      -- 1. CALCULATE STABLE TARGET
+                      local angle = Time + (i * (math.pi * 2 / numParts))
                       local targetPos = Root.Position + Vector3.new(
                           math.cos(angle) * ManipSettings.Radius,
                           ManipSettings.Height,
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. LAG-FREE PHYSICS TUG (FE Compatible)
-                      local velocity = (targetPos - part.Position) * 15
-                      part.AssemblyLinearVelocity = velocity + Vector3.new(0, 30, 0) -- Counter gravity
+                      -- 2. PROPORTIONAL TUG (P-Controller style)
+                      -- We calculate the distance and apply a velocity that gets stronger as it gets further
+                      local diff = (targetPos - part.Position)
+                      local dist = diff.Magnitude
                       
-                      -- 3. CONSTANT GHOST CHECK
+                      -- Anti-Fling: If part is too far, don't teleport it, just tug it harder
+                      local dragSpeed = dist > 20 and 35 or 25
+                      
+                      part.AssemblyLinearVelocity = (diff * dragSpeed) + Vector3.new(0, 25, 0)
+                      part.AssemblyAngularVelocity = Vector3.zero -- STOP THE SPINNING
+                      
+                      -- 3. FORCED GHOSTING (Every frame to prevent collisions)
                       part.CanCollide = false
                       part.CanQuery = false
                   else
@@ -513,16 +529,23 @@ Tab:CreateToggle({
               end
           end)
           
-          -- Auto-Refresh Watchdog
+          -- Refresh Watchdog
           task.spawn(function()
               while ManipSettings.Enabled do
-                  task.wait(2)
-                  if #OrbitParts < ManipSettings.MaxParts then RefreshManipParts() end
+                  task.wait(3)
+                  if #OrbitParts < 5 then RefreshManipParts() end
               end
           end)
       else
           _G.EliteLog("Orbit Released", "info")
-          for _, v in pairs(OrbitParts) do if v and v.Parent then v.CanCollide = true v.CanQuery = true end end
+          for _, v in pairs(OrbitParts) do 
+             if v and v.Parent then 
+                v.CanCollide = true 
+                v.CanQuery = true 
+                v.LocalTransparencyModifier = 0
+             end 
+          end
+          OrbitParts = {}
       end
    end,
 })
@@ -530,28 +553,18 @@ Tab:CreateToggle({
 Tab:CreateButton({
    Name = "Elite Throw Parts (Crosshair)",
    Callback = function()
-      if #OrbitParts == 0 then return _G.EliteLog("No parts to throw!", "error") end
+      if #OrbitParts == 0 then return _G.EliteLog("No parts found!", "error") end
       
       local target = Mouse.Hit.Position
       _G.EliteLog("Firing Projectiles!", "success")
       
-      -- We take half the orbiting parts and "launch" them
-      for i = 1, #OrbitParts do
+      -- Launch all parts toward crosshair
+      for i = #OrbitParts, 1, -1 do
           local part = OrbitParts[i]
           if part and part.Parent then
-              task.spawn(function()
-                  -- Calculate direction to crosshair
-                  local dir = (target - part.Position).Unit
-                  
-                  -- Apply Massive Impulse
-                  part.AssemblyLinearVelocity = dir * ManipSettings.ThrowPower
-                  
-                  -- Temporarily remove from orbit so it can fly away
-                  local originalPart = part
-                  table.remove(OrbitParts, i)
-                  task.wait(1.5)
-                  -- Part will be picked up by the Watchdog again later
-              end)
+              local dir = (target - part.Position).Unit
+              part.AssemblyLinearVelocity = dir * ManipSettings.ThrowPower
+              table.remove(OrbitParts, i) -- Release from orbit
           end
       end
    end,
@@ -560,50 +573,28 @@ Tab:CreateButton({
 Tab:CreateSlider({
    Name = "Orbit Radius",
    Range = {5, 50},
-   Increment = 1,
    CurrentValue = 12,
+   Increment = 1,
    Callback = function(V) ManipSettings.Radius = V end,
 })
 
 Tab:CreateSlider({
    Name = "Orbit Speed",
    Range = {1, 20},
-   Increment = 1,
    CurrentValue = 4,
-   Callback = function(V)
-      ManipSettings.Speed = V
-   end,
+   Increment = 1,
+   Callback = function(V) ManipSettings.Speed = V end,
 })
 
 Tab:CreateSlider({
    Name = "Throw Velocity",
-   Range = {100, 500},
-   Increment = 10,
+   Range = {100, 1000},
    CurrentValue = 250,
+   Increment = 50,
    Callback = function(V) ManipSettings.ThrowPower = V end,
 })
 
 Tab:CreateButton({
    Name = "Force Re-Scan",
    Callback = function() RefreshManipParts() end,
-})
--- [ AUTOMATION ]
-Tab:CreateSection("Automation")
-
-local autouseOn = false
-Tab:CreateToggle({
-   Name = "Auto-Use Held Tool",
-   CurrentValue = false,
-   Callback = function(Value)
-       autouseOn = Value
-       _G.EliteLog("Auto-Use: " .. (Value and "Started" or "Stopped"), "info")
-       task.spawn(function()
-           while autouseOn do
-               local char = LP.Character
-               local t = char and char:FindFirstChildOfClass("Tool")
-               if t then t:Activate() end
-               task.wait(0.1)
-           end
-       end)
-   end,
 })
