@@ -432,144 +432,134 @@ Tab:CreateToggle({
    end,
 })
 
--- [[ ELITE PART MANIPULATOR: ORBIT ENGINE ]]
+-- [[ ELITE PART MANIPULATOR: GHOST-ORBIT & LAUNCHER ]]
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
 local OrbitConnection = nil
 
 -- Configuration States
 local OrbitSettings = {
     Enabled = false,
-    Radius = 10,
-    Speed = 5,
-    Height = 0,
+    Radius = 12,
+    Speed = 6,
+    Height = 2,
     Parts = {}
 }
 
--- [ HELPER: RE-SCAN FOR UNANCHORED PARTS ]
+-- [ HELPER: GHOST MODE & RE-SCAN ]
 local function RefreshOrbitParts()
-    OrbitSettings.Parts = {}
+    local newParts = {}
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(LP.Character) then
-            -- Ensure it's not a handle or a baseplate
-            if v.Size.Magnitude < 50 and v.Name ~= "Baseplate" then
-                table.insert(OrbitSettings.Parts, v)
+            if v.Size.Magnitude < 40 and v.Name ~= "Baseplate" then
+                v.CanCollide = false -- Ghost Mode for Player
+                v.Massless = true    -- Prevents physics lag
+                table.insert(newParts, v)
             end
+        end
+    end
+    OrbitSettings.Parts = newParts
+end
+
+-- [ FEATURE: THE THROW ENGINE ]
+local function ThrowParts()
+    if not OrbitSettings.Enabled or #OrbitSettings.Parts == 0 then return end
+    
+    _G.EliteLog("Launching Payload!", "success")
+    
+    -- Calculate direction based on camera center (crosshair)
+    local ray = Camera:ViewportPointToRay(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    local launchDir = ray.Direction * 250 -- High velocity launch
+    
+    for _, part in pairs(OrbitSettings.Parts) do
+        if part and part.Parent then
+            part.AssemblyLinearVelocity = launchDir
+            -- Briefly remove from orbit so they can fly away
+            part:SetAttribute("Elite_Thrown", true)
+            task.delay(1.5, function()
+                if part then part:SetAttribute("Elite_Thrown", nil) end
+            end)
         end
     end
 end
 
+-- [ UI CONSTRUCTION ]
 Tab:CreateSection("Elite Part Manipulator")
 
 Tab:CreateToggle({
-   Name = "Elite Part Orbit",
+   Name = "Elite Part Orbit (Ghost Mode)",
    CurrentValue = false,
    Callback = function(Value)
       OrbitSettings.Enabled = Value
-      
       if OrbitConnection then OrbitConnection:Disconnect() end
       
       if Value then
-          _G.EliteLog("Part Orbit Activated", "success")
-          
-          -- Initial Scan
+          _G.EliteLog("Ghost Orbit Active (Click to Throw)", "success")
           RefreshOrbitParts()
           
-          -- Start the Physics Loop
-          OrbitConnection = RunService.Heartbeat:Connect(function()
-              if not OrbitSettings.Enabled then return end
+          -- RenderStepped makes it 100% lag-free on your screen
+          OrbitConnection = RunService.RenderStepped:Connect(function()
+              local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+              if not Root then return end
               
-              local Character = LP.Character
-              local Root = Character and Character:FindFirstChild("HumanoidRootPart")
-              
-              if Root then
-                  local Time = tick() * OrbitSettings.Speed
-                  
-                  for i, part in pairs(OrbitSettings.Parts) do
-                      -- Check if part still exists and is still unanchored
-                      if part and part.Parent and not part.Anchored then
-                          -- Calculate unique angle for each part to distribute them in a ring
-                          local angle = Time + (i * (math.pi * 2 / #OrbitSettings.Parts))
-                          
-                          -- Target Position in 3D Space
-                          local targetPos = Root.Position + Vector3.new(
-                              math.cos(angle) * OrbitSettings.Radius,
-                              OrbitSettings.Height,
-                              math.sin(angle) * OrbitSettings.Radius
-                          )
-                          
-                          -- Physics Tug: Move part toward target position
-                          -- We use velocity so it's smooth and visible to others
-                          local direction = (targetPos - part.Position)
-                          part.AssemblyLinearVelocity = direction * 10 
-                          
-                          -- Anti-Gravity: Keep parts from falling while orbiting
-                          part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0, 30, 0)
-                          
-                          -- Character Safety: Prevent parts from hitting YOU (Local Only)
-                          part.CanCollide = false
-                      else
-                          -- Remove dead/anchored parts from cache
-                          table.remove(OrbitSettings.Parts, i)
-                      end
+              local Time = tick() * OrbitSettings.Speed
+              local centerPos = Root.Position + Vector3.new(0, OrbitSettings.Height, 0)
+
+              for i, part in pairs(OrbitSettings.Parts) do
+                  if part and part.Parent and not part.Anchored and not part:GetAttribute("Elite_Thrown") then
+                      local angle = Time + (i * (math.pi * 2 / #OrbitSettings.Parts))
+                      local targetPos = centerPos + Vector3.new(
+                          math.cos(angle) * OrbitSettings.Radius,
+                          0,
+                          math.sin(angle) * OrbitSettings.Radius
+                      )
+                      
+                      -- Precise Client-Side Positioning (Smooth as silk)
+                      part.CFrame = part.CFrame:Lerp(CFrame.new(targetPos), 0.2)
+                      part.AssemblyLinearVelocity = Vector3.new(0, 0.5, 0) -- Combat gravity
+                  elseif not part or not part.Parent then
+                      table.remove(OrbitSettings.Parts, i)
                   end
               end
           end)
           
-          -- Watchdog: Scan for new parts every 3 seconds
-          task.spawn(function()
-              while OrbitSettings.Enabled do
-                  RefreshOrbitParts()
-                  task.wait(3)
+          -- Listen for Mouse Click / Touch to Throw
+          _G.ThrowInput = UserInputService.InputBegan:Connect(function(input, proc)
+              if proc then return end
+              if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                  ThrowParts()
               end
           end)
       else
-          _G.EliteLog("Part Orbit Disabled", "info")
-          -- Reset part collisions to normal
-          for _, part in pairs(OrbitSettings.Parts) do
-              if part and part.Parent then part.CanCollide = true end
-          end
+          if _G.ThrowInput then _G.ThrowInput:Disconnect() end
+          _G.EliteLog("Orbit Disengaged", "info")
+          -- Restore collisions
+          for _, p in pairs(OrbitSettings.Parts) do if p and p.Parent then p.CanCollide = true end end
       end
    end,
 })
 
 Tab:CreateSlider({
    Name = "Orbit Radius",
-   Range = {5, 50},
+   Range = {5, 40},
    Increment = 1,
-   CurrentValue = 10,
-   Callback = function(Value)
-      OrbitSettings.Radius = Value
-   end,
+   CurrentValue = 12,
+   Callback = function(V) OrbitSettings.Radius = V end,
 })
 
 Tab:CreateSlider({
    Name = "Orbit Speed",
-   Range = {1, 20},
+   Range = {1, 15},
    Increment = 1,
-   CurrentValue = 5,
-   Callback = function(Value)
-      OrbitSettings.Speed = Value
-   end,
-})
-
-Tab:CreateSlider({
-   Name = "Orbit Height Offset",
-   Range = {-10, 20},
-   Increment = 1,
-   CurrentValue = 0,
-   Callback = function(Value)
-      OrbitSettings.Height = Value
-   end,
+   CurrentValue = 6,
+   Callback = function(V) OrbitSettings.Speed = V end,
 })
 
 Tab:CreateButton({
-   Name = "Force Re-Scan Parts",
-   Callback = function()
-      RefreshOrbitParts()
-      _G.EliteLog("Scan complete: " .. #OrbitSettings.Parts .. " parts found.", "info")
-   end,
+   Name = "Re-Scan for Parts",
+   Callback = RefreshOrbitParts
 })
-
 -- [ AUTOMATION ]
 Tab:CreateSection("Automation")
 
