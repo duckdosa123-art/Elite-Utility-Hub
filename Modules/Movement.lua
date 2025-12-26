@@ -217,8 +217,8 @@ Tab:CreateToggle({
       end
    end,
 })
--- ELITE NO-FALL (Hybrid Impact-Reset Logic)
-local NoFallConnection
+-- ELITE NO-FALL (Multi-Method Brute Force)
+local NoFallHeartbeat = nil
 
 Tab:CreateToggle({
    Name = "Elite No-Fall",
@@ -226,52 +226,51 @@ Tab:CreateToggle({
    Callback = function(Value)
       _G.NoFallEnabled = Value
       
-      -- Cleanup previous connection if it exists
-      if NoFallConnection then NoFallConnection:Disconnect() end
+      if NoFallHeartbeat then NoFallHeartbeat:Disconnect() end
 
       if Value then
-         _G.EliteLog("No-Fall: Active (Velocity Guard)", "success")
+         _G.EliteLog("No-Fall: Brute-Force Mode Active", "success")
          
-         -- Use Heartbeat for high-precision physics checks (Essential for NDS)
-         NoFallConnection = game:GetService("RunService").Heartbeat:Connect(function()
+         NoFallHeartbeat = game:GetService("RunService").PreSimulation:Connect(function()
             if not _G.NoFallEnabled then return end
             
-            local Character = LP.Character
-            local Root = Character and Character:FindFirstChild("HumanoidRootPart")
-            local Hum = Character and Character:FindFirstChildOfClass("Humanoid")
+            local Char = LP.Character
+            local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+            local Root = Char and Char:FindFirstChild("HumanoidRootPart")
             
-            if Root and Hum then
-               -- Check if the player is falling at a dangerous speed (Y < -30)
-               if Root.AssemblyLinearVelocity.Y < -30 then
-                  
-                  -- RAYCAST CHECK: Predict impact with the floor
-                  local rayParam = RaycastParams.new()
-                  rayParam.FilterDescendantsInstances = {Character}
-                  rayParam.FilterType = Enum.RaycastFilterType.Exclude
-                  
-                  -- Scan 12 studs below the player
-                  local raycastResult = workspace:Raycast(Root.Position, Vector3.new(0, -12, 0), rayParam)
-                  
-                  if raycastResult then
-                     -- IMPACT IMMINENT: Reset velocity and force state
-                     -- This tricks NDS and standard scripts into thinking you just stepped down
-                     Root.AssemblyLinearVelocity = Vector3.new(Root.AssemblyLinearVelocity.X, 0, Root.AssemblyLinearVelocity.Z)
-                     Hum:ChangeState(Enum.HumanoidStateType.Running)
-                  end
+            if Hum and Root then
+               -- METHOD 1: Velocity Clamping (The "NDS Killer")
+               -- If falling faster than -20 (safe speed), we force it back to -15.
+               -- The game server never sees a "lethal" impact velocity.
+               if Root.AssemblyLinearVelocity.Y < -20 then
+                  Root.AssemblyLinearVelocity = Vector3.new(
+                     Root.AssemblyLinearVelocity.X, 
+                     -15, -- Cap fall speed at a non-lethal value
+                     Root.AssemblyLinearVelocity.Z
+                  )
+               end
+
+               -- METHOD 2: State Jamming
+               -- Rapidly switches states to break 'FallDistance' accumulation in standard scripts.
+               if Hum:GetState() == Enum.HumanoidStateType.Freefall then
+                  Hum:ChangeState(Enum.HumanoidStateType.Running)
                end
                
-               -- BACKUP: Keep these states disabled to prevent ragdoll animations
+               -- METHOD 3: Physics Guard
+               -- Disables the states that trigger 'Land' animations and damage events.
                Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+               Hum:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
             end
          end)
       else
-         -- Reset physics states to default
-         local Character = LP.Character
-         local Hum = Character and Character:FindFirstChildOfClass("Humanoid")
+         -- Cleanup and Restore
+         if NoFallHeartbeat then NoFallHeartbeat:Disconnect() end
+         local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
          if Hum then
             Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
          end
          _G.EliteLog("No-Fall: Disabled", "info")
       end
