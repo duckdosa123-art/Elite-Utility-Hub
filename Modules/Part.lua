@@ -2,15 +2,12 @@
 Tab:CreateSection("Part Main")
 
 
--- ELITE KILL-BRICK IMMUNITY V2 (Checkpoint Compatible)
-local KillBrickConnection = nil
-local CheckpointScanner = nil
+-- [[ ELITE KILL-BRICK IMMUNITY V3: BRUTE-FORCE SENSOR ]]
+local KillBrickLoop = nil
+local CheckpointSafeTags = {"checkpoint", "spawn", "stage", "reset", "teleport", "pad", "flag", "win", "end"}
 
--- List of keywords games usually use for checkpoints
-local CheckpointNames = {"checkpoint", "spawn", "stage", "reset", "teleport", "pad", "flag"}
-
--- Helper: Disable touch on character parts
-local function SetCharacterTouch(state)
+-- Helper: Brute-force toggle character touch
+local function ToggleTouch(state)
     local char = LP.Character
     if char then
         for _, p in pairs(char:GetDescendants()) do
@@ -25,82 +22,88 @@ Tab:CreateToggle({
    Name = "Elite Kill-Brick Immunity",
    CurrentValue = false,
    Callback = function(Value)
-      _G.KillBrickImmune = Value
+      _G.KillBrickEnabled = Value
       
-      -- Cleanup old connections
-      if KillBrickConnection then KillBrickConnection:Disconnect() end
-      if CheckpointScanner then CheckpointScanner:Disconnect() end
-
+      -- Cleanup
+      if KillBrickLoop then KillBrickLoop:Disconnect() end
+      
       if Value then
-         _G.EliteLog("Immunity Active: Auto-Checkpoint Engaged", "success")
+         _G.EliteLog("Immunity: Brute-Force Sensor Active", "success")
          
-         -- 1. Apply physical immunity
-         task.spawn(function() SetCharacterTouch(false) end)
-         
-         -- 2. Persistent Respawn Logic
-         KillBrickConnection = LP.CharacterAdded:Connect(function(char)
-            task.wait(1)
-            if _G.KillBrickImmune then SetCharacterTouch(false) end
-         end)
+         -- Notifications
+         local msg = "Kill-Brick Immunity: ENABLED"
+         game:GetService("StarterGui"):SetCore("SendNotification", {
+             Title = "Elite Hub",
+             Text = msg,
+             Duration = 3,
+             Icon = "rbxassetid://4483362458"
+         })
 
-         -- 3. THE CHECKPOINT SCANNER (The Fix)
-         -- Scans the floor 10 studs below you for checkpoints
-         CheckpointScanner = game:GetService("RunService").Heartbeat:Connect(function()
+         -- START THE SENSOR LOOP
+         KillBrickLoop = game:GetService("RunService").Heartbeat:Connect(function()
+            if not _G.KillBrickEnabled then return end
+            
             local char = LP.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then return end
 
-            local rayParam = RaycastParams.new()
-            rayParam.FilterDescendantsInstances = {char}
-            rayParam.FilterType = Enum.RaycastFilterType.Exclude
-
-            local ray = workspace:Raycast(root.Position, Vector3.new(0, -10, 0), rayParam)
+            -- 1. DEFINE THE SENSOR BOX (At player's feet)
+            local sensorPos = root.Position - Vector3.new(0, 3, 0)
+            local sensorSize = Vector3.new(4, 4, 4) -- Large enough to detect buried parts
             
-            if ray and ray.Instance then
-                local hit = ray.Instance
-                local isCheckpoint = false
+            local params = OverlapParams.new()
+            params.FilterDescendantsInstances = {char}
+            params.FilterType = Enum.RaycastFilterType.Exclude
 
-                -- Check if it's a real SpawnLocation or matches keywords
-                if hit:IsA("SpawnLocation") then
-                    isCheckpoint = true
-                else
-                    for _, name in pairs(CheckpointNames) do
-                        if hit.Name:lower():find(name) then
-                            isCheckpoint = true
-                            break
-                        end
-                    end
-                end
+            -- 2. THE BRUTE-FORCE SCAN (Sees through everything)
+            local nearbyParts = workspace:GetPartBoundsInBox(CFrame.new(sensorPos), sensorSize, params)
+            
+            local overCheckpoint = false
+            for _, part in pairs(nearbyParts) do
+               -- Check if it's a SpawnLocation or matches safe keywords
+               if part:IsA("SpawnLocation") then
+                  overCheckpoint = true
+                  break
+               end
+               
+               local name = part.Name:lower()
+               for _, tag in pairs(CheckpointSafeTags) do
+                  if name:find(tag) then
+                     overCheckpoint = true
+                     break
+                  end
+               end
+               if overCheckpoint then break end
+            end
 
-                -- If it's a checkpoint, force a "Touch" event via exploit API
-                if isCheckpoint and firetouchinterest then
-                    firetouchinterest(root, hit, 0) -- Touch began
-                    task.wait()
-                    firetouchinterest(root, hit, 1) -- Touch ended
-                end
+            -- 3. STATE SWITCHING
+            -- If we are touching a checkpoint, ENABLE touch. Otherwise, DISABLE it.
+            if overCheckpoint then
+               ToggleTouch(true)
+            else
+               ToggleTouch(false)
+            end
+            
+            -- 4. FALLBACK: FireTouchInterest (Ensures 100% registration on executors that support it)
+            if overCheckpoint and firetouchinterest then
+               for _, part in pairs(nearbyParts) do
+                  firetouchinterest(root, part, 0)
+                  firetouchinterest(root, part, 1)
+               end
             end
          end)
-         
-         -- Notifications
-         game:GetService("StarterGui"):SetCore("SendNotification", {
-             Title = "Elite Hub",
-             Text = "Immunity ON (Checkpoints OK)",
-             Duration = 3
-         })
       else
-         -- Restore everything
-         _G.EliteLog("Immunity Disabled", "info")
-         SetCharacterTouch(true)
+         _G.EliteLog("Immunity: Disabled", "info")
+         ToggleTouch(true)
+         
          game:GetService("StarterGui"):SetCore("SendNotification", {
              Title = "Elite Hub",
-             Text = "Immunity OFF",
+             Text = "Kill-Brick Immunity: DISABLED",
              Duration = 3
          })
       end
    end,
 })
-
-
 Tab:CreateSection("Part Control")
 -- [[ PART MODULE: ELITE-UTILITY-HUB ]]
 local OrbitParts = {}
