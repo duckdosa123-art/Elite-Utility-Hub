@@ -127,25 +127,40 @@ _G.EliteOrbitSpeed = 4
 local function ForceMovePart(part, targetPos)
     if not part or not part.Parent then return end
     
-    -- 1. GHOST LOGIC (Fixes Camera, Damage, and Player Physics)
+    -- 1. GHOST LOGIC (Remains for Noclip & Smooth Cam)
     part.CanCollide = false
-    part.CanTouch = false -- Fixes Natural Disaster Damage
-    part.CanQuery = false -- Fixes Camera Zooming in/out
+    part.CanTouch = false 
+    part.CanQuery = false 
     
-    -- 2. CALCULATION
+    -- 2. THE NETWORK OWNERSHIP "CLAIM"
+    -- This specific vertical pulse (28.5) is a known "Netless" bypass. 
+    -- It tricks the server into thinking the part is active on your client.
+    -- We add a tiny 'math.sin' jitter to keep the part "awake" in the physics engine.
+    local netlessClaim = Vector3.new(0, 28.5 + (math.sin(tick() * 20) * 0.1), 0)
+    
+    -- 3. THE BEAST PHYSICS
     local currentPos = part.Position
     local direction = (targetPos - currentPos)
     local distance = direction.Magnitude
     
-    -- 3. ANTI-GRAVITY VELOCITY
-    -- We multiply distance by a high factor (35) and ADD a constant Y boost (25)
-    -- This creates a "magnetic" pull that gravity cannot beat.
-    local velocity = direction * (_G.ElitePartSpeed or 35) 
+    -- We calculate the speed based on your "Part Speed" slider
+    -- Multiplier of 20 makes it "Magnetic" so it doesn't drift
+    local speedPower = _G.ElitePartSpeed or 35
+    local moveVelocity = direction * (speedPower * 0.5)
+
+    -- 4. APPLYING THE FORCE
+    -- We combine the Move Velocity with the Netless Claim.
+    -- This fights gravity AND claims ownership at the same time.
+    if distance > 100 then
+        -- If part is very far, use "Lunge" velocity to bring it back instantly
+        part.AssemblyLinearVelocity = direction.Unit * 200 + netlessClaim
+    else
+        -- Close range "Sticky" physics
+        part.AssemblyLinearVelocity = moveVelocity + netlessClaim
+    end
     
-    -- Apply the velocity directly to the Assembly
-    part.AssemblyLinearVelocity = velocity + Vector3.new(0, 25, 0) 
-    
-    -- Stop it from spinning wildly (prevents flinging)
+    -- 5. STABILIZATION
+    -- Stops the parts from spinning/flinging while being claimed
     part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
 
