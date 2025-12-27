@@ -399,22 +399,47 @@ Tab:CreateToggle({
                                 finalTarget = (tCF * CFrame.new(math.cos(angle) * radius, 5 + ring, math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
+                                -- ULTRA-DETAIL ANGEL WINGS (Parametric Feathering)
                                 local side = (i % 2 == 0) and 1 or -1
-                                local halfIndex = math.floor(i / 2)
-                                local layer = i % 3
-                                local spread = (halfIndex * spacing * 0.6)
-                                local curve = math.sin(halfIndex * 0.3) * 3
-                                local height = math.cos(halfIndex * 0.2) * 5
-                                local flap = math.sin(tick() * 4) * (halfIndex * 0.5 + 1)
-                                local depth = 1.5 + (layer * 0.8) + (side * flap)
+                                local halfCount = count / 2
+                                local index = math.floor(i / 2)
+                                local progress = index / (halfCount > 0 and halfCount or 1) -- 0 to 1 along the wing
                                 
-                                finalTarget = (tCF * CFrame.new(side * (2 + spread), height + (layer * 1.5), depth)).Position
+                                -- 1. The "Angelic" Arch: Uses a parabolic curve for the top of the wing
+                                -- x: spreads out, y: goes up then curves down, z: stays behind back
+                                local x = side * (2 + (progress * 8)) -- Wingspan length
+                                local y = (math.sin(progress * math.pi) * 4) + (progress * 2) -- The "Arch"
+                                
+                                -- 2. Flap Animation: Tips flap much harder than the base
+                                local flapPower = progress * 4 -- Tip moves 4x more than the base
+                                local flap = math.sin(tick() * 5) * flapPower
+                                
+                                -- 3. Triple-Layer Depth: Makes them look thick and 3D
+                                local layerOffset = (i % 3) * 0.7 -- Adds 3 rows of "feathers"
+                                
+                                finalTarget = (tCF * CFrame.new(
+                                    x, 
+                                    y + layerOffset, 
+                                    1.5 + (side * flap) + (layerOffset * 0.5)
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                local rows = math.ceil(math.sqrt(count))
-                                local r = i % rows
-                                local c = math.floor(i / rows)
-                                finalTarget = (tCF * CFrame.new((r - rows/2) * (spacing * 1.2), (c - rows/2) * (spacing * 1.2), -5 - (spacing * 0.5))).Position
+                                -- ULTRA-DETAIL SPHERICAL DOME (Energy Forcefield)
+                                -- Uses Fibonacci Sphere mapping to place parts perfectly in a dome
+                                local goldenRatio = (1 + math.sqrt(5)) / 2
+                                local theta = 2 * math.pi * i / goldenRatio
+                                local phi = math.acos(1 - 2 * (i / count))
+                                
+                                -- Auto-Sizer Radius: Dome gets bigger if parts are bigger
+                                local radius = 6 + (spacing * 0.8)
+                                
+                                -- Calculate Sphere coordinates
+                                local x = math.cos(theta) * math.sin(phi) * radius
+                                local y = math.sin(theta) * math.sin(phi) * radius
+                                local z = math.abs(math.cos(phi) * radius) -- Only in front of player
+                                
+                                -- Push it in front of the target
+                                finalTarget = (tCF * CFrame.new(x, y, -z - 2)).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
                                 local vLimit = math.floor(count * 0.7)
