@@ -206,11 +206,17 @@ Tab:CreateToggle({
             
             task.spawn(function()
                 while _G.EliteSwarmEnabled do
-                    local parts, hrp = GetParts()
-                    local target = hrp.Position + Vector3.new(0, 2, 0)
-                    for _, part in ipairs(parts) do
-                        ForceMovePart(part, target)
-                    end
+                   local parts, hrp = GetParts()
+                   local targetHRP = _G.GetEliteTarget() or hrp -- Victim if targeted, else You
+                    
+                   if targetHRP and targetHRP.Parent then
+                       -- No math needed, just a direct point on the victim
+                       local target = targetHRP.Position + Vector3.new(0, 2, 0)
+                        
+                       for _, part in ipairs(parts) do
+                           ForceMovePart(part, target)
+                       end
+                   end
                     RunService.Heartbeat:Wait()
                 end
                 -- Cleanup when the 'while' loop breaks
@@ -238,16 +244,23 @@ Tab:CreateToggle({
                 while _G.EliteOrbitEnabled do
                     angle = angle + (0.05 * _G.EliteOrbitSpeed)
                     local parts, hrp = GetParts()
-                    local count = #parts
-                    for i, part in ipairs(parts) do
-                        local step = (math.pi * 2) / count
-                        local pAngle = angle + (i * step)
-                        local target = hrp.Position + Vector3.new(
-                            math.cos(pAngle) * _G.EliteOrbitRadius,
-                            _G.EliteOrbitHeight,
-                            math.sin(pAngle) * _G.EliteOrbitRadius
-                        )
-                        ForceMovePart(part, target)
+                    local targetHRP = _G.GetEliteTarget() or hrp -- Victim if targeted, else You
+                    
+                    if targetHRP and targetHRP.Parent then
+                        local count = #parts
+                        for i, part in ipairs(parts) do
+                            local step = (math.pi * 2) / count
+                            local pAngle = angle + (i * step)
+                            
+                            -- THE MATH: Centered on targetHRP.Position instead of hrp.Position
+                            local target = targetHRP.Position + Vector3.new(
+                                math.cos(pAngle) * _G.EliteOrbitRadius,
+                                _G.EliteOrbitHeight,
+                                math.sin(pAngle) * _G.EliteOrbitRadius
+                            )
+                            
+                            ForceMovePart(part, target)
+                        end
                     end
                     RunService.Heartbeat:Wait()
                 end
@@ -319,3 +332,68 @@ Tab:CreateSlider({
         _G.EliteOrbitSpeed = Value
     end,
 })
+
+-- Section: Elite Assassination
+Tab:CreateSection("Elite Assassination")
+
+_G.EliteTargetEnabled = false
+_G.EliteTargetName = ""
+
+-- Logic to find the target's RootPart
+_G.GetEliteTarget = function()
+    if not _G.EliteTargetEnabled or _G.EliteTargetName == "" then return nil end
+    local targetPlayer = game:GetService("Players"):FindFirstChild(_G.EliteTargetName)
+    if targetPlayer and targetPlayer.Character then
+        return targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
+end
+
+local PlayerDropdown = Tab:CreateDropdown({
+    Name = "Select Victim",
+    Options = {"Refreshing..."},
+    CurrentOption = {""},
+    MultipleOptions = false,
+    Flag = "VictimDropdown",
+    Callback = function(Option)
+        _G.EliteTargetName = Option[1]
+    end,
+})
+
+-- Function to refresh player list
+local function RefreshPlayers()
+    local pList = {}
+    for _, v in ipairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= LP then
+            table.insert(pList, v.Name) -- Using Name for technical reliability
+        end
+    end
+    PlayerDropdown:Set(pList)
+end
+
+Tab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        RefreshPlayers()
+    end,
+})
+
+Tab:CreateToggle({
+    Name = "Target: ENABLED",
+    CurrentValue = false,
+    Callback = function(Value)
+        _G.EliteTargetEnabled = Value
+        if Value then
+            if _G.EliteTargetName == "" then
+                _G.EliteLog("Select a victim first!", "Error")
+            else
+                _G.EliteLog("Targeting: " .. _G.EliteTargetName, "Info")
+            end
+        else
+            _G.EliteLog("Targeting Disabled: Returning to Self", "Info")
+        end
+    end,
+})
+
+-- Initial Refresh
+RefreshPlayers()
