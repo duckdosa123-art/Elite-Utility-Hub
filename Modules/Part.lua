@@ -412,10 +412,36 @@ Tab:CreateToggle({
 
                             -- 4. BEAST MATH (Uses 'i' and 'virtualCount' for stability)
                             if _G.EliteCurrentShape == "Halo" then
-                                local ring = (i % 2 == 0) and 1 or 1.5
-                                local angle = (i * (math.pi * 2 / virtualCount)) + (tick() * 3)
-                                local radius = (4 + (spacing * 0.5)) * ring * totalScale
-                                finalTarget = (tCF * masterOffset * CFrame.new(math.cos(angle) * radius, 5 * totalScale, math.sin(angle) * radius)).Position
+                                -- ELITE EUCLIDEAN HALO (Toroidal Aura Edition)
+                                -- 1. EUCLIDEAN GEOMETRY: The Perfect Continuous Loop
+                                local rotationSpeed = 2 -- Rad/s for a weightless drift
+                                local angle = (i * (math.pi * 2 / virtualCount)) + (tick() * rotationSpeed)
+                                
+                                -- 2. SPATIAL ORIENTATION: Weightless Planar Ring
+                                -- We add a slight weightless "tilt" (precession) based on time
+                                local tiltX = math.sin(tick() * 0.5) * 0.15
+                                local tiltZ = math.cos(tick() * 0.5) * 0.15
+                                local tiltCFrame = CFrame.Angles(tiltX, 0, tiltZ)
+
+                                -- 3. LUMINANCE & EDGE DEFINITION: The Toroidal Aura
+                                -- To simulate "light bleeding," we vary the radius and height 
+                                -- of parts based on their ID to create a "donut" thickness.
+                                local auraVariation = math.sin(i * 1.5) * 0.6 -- The "Glow" width
+                                local auraVertical = math.cos(i * 1.5) * 0.4 -- The "Glow" thickness
+                                
+                                -- Base Radius + Auto-Sizer + User Scaling
+                                local baseRadius = (4 + (spacing * 0.3)) * totalScale
+                                local finalRadius = baseRadius + (auraVariation * totalScale)
+
+                                -- Euclidean Position Calculation
+                                local ringPos = Vector3.new(
+                                    math.cos(angle) * finalRadius,
+                                    5 + (auraVertical * totalScale), -- Hovering offset above head
+                                    math.sin(angle) * finalRadius
+                                )
+
+                                -- Final Assembly with Weightless Tilt and Master Offsets
+                                finalTarget = (tCF * masterOffset * tiltCFrame * CFrame.new(ringPos)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
                                 -- V9 "SKELETAL ARCHITECTURE" ANGEL WINGS (🪽)
