@@ -239,112 +239,113 @@ Tab:CreateToggle({
 })
 
 Tab:CreateSection("Detached Part Control")
--- [[ PART MODULE: ELITE-UTILITY-HUB ]]
+-- [[ PART MODULE: ELITE CONTROL SWARM ]]
+local Tab = _G.PartTab
+local LP = _G.LP
+local Camera = workspace.CurrentCamera
 local OrbitParts = {}
 local OrbitConn = nil
 
 local ManipSettings = {
     Enabled = false,
-    Radius = 12,
+    Radius = 10,
     Speed = 4,
-    Height = 1,
-    Bobbing = 2,
-    MaxVelocity = 100, -- Capped for stability
-    MaxParts = 100
+    Distance = 15, -- How far the "bubble" is from your camera
+    Height = 0,
+    Power = 100,
+    MaxParts = 80
 }
 
--- [ ENGINE: UNIVERSAL SCANNER ]
-local function RefreshManipParts()
+-- [ ENGINE: NETWORK OWNERSHIP SCANNER ]
+local function RefreshSwarm()
     local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local newPartList = {}
+    local newParts = {}
     local count = 0
     
+    -- Scans for unanchored props to "claim"
     for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
-        
         if v:IsA("BasePart") and not v.Anchored then
-            if v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
-                -- Strict Player Check
-                local isPlayer = v:FindFirstAncestorOfClass("Model") and v:FindFirstAncestorOfClass("Model"):FindFirstChildOfClass("Humanoid")
+            -- Ignore baseplates, terrain, and players
+            local isPlayer = v:FindFirstAncestorOfClass("Model") and v:FindFirstAncestorOfClass("Model"):FindFirstChildOfClass("Humanoid")
+            if not isPlayer and v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
+                -- Local Ghosting (FE Safe)
+                v.CanCollide = false
+                v.CanQuery = false
                 
-                if not isPlayer then
-                    v.CanCollide = false
-                    v.CanQuery = false 
-                    table.insert(newPartList, v)
-                    count = count + 1
-                end
+                table.insert(newParts, v)
+                count = count + 1
             end
         end
     end
-    OrbitParts = newPartList
+    OrbitParts = newParts
 end
 
-Tab:CreateSection("Prop Swarm Controller")
+Tab:CreateSection("Elite Swarm Controller")
 
 Tab:CreateToggle({
-   Name = "Elite Part Orbit",
+   Name = "Elite Swarm Orbit",
    CurrentValue = false,
    Callback = function(Value)
       ManipSettings.Enabled = Value
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Prop Swarm Activated", "success")
-          RefreshManipParts()
+          _G.EliteLog("Swarm Active: Camera Control Engaged", "success")
+          RefreshSwarm()
           
-          OrbitConn = RunService.Heartbeat:Connect(function()
+          -- PRE-SIMULATION: Runs before physics, ensuring the parts "stick" to the target
+          OrbitConn = game:GetService("RunService").PreSimulation:Connect(function()
               local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
               if not Root or not ManipSettings.Enabled then return end
+              
+              -- 1. CALCULATE THE CONTROL POINT (In front of Camera)
+              local ControlPoint = Camera.CFrame.Position + (Camera.CFrame.LookVector * ManipSettings.Distance)
               
               local Time = tick()
               for i, part in pairs(OrbitParts) do
                   if part and part.Parent and not part.Anchored then
-                      -- 1. CALCULATE TARGET POSITION
+                      -- 2. CALCULATE CIRCULAR TARGET
                       local angle = (Time * ManipSettings.Speed) + (i * (math.pi * 2 / #OrbitParts))
-                      local bob = math.sin(Time * 2 + i) * ManipSettings.Bobbing
-                      
-                      local targetPos = Root.Position + Vector3.new(
+                      local targetPos = ControlPoint + Vector3.new(
                           math.cos(angle) * ManipSettings.Radius,
-                          ManipSettings.Height + bob,
+                          ManipSettings.Height,
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. STICKY PHYSICS (Capped Velocity)
-                      local distanceVector = (targetPos - part.Position)
-                      local distance = distanceVector.Magnitude
-                      local direction = distanceVector.Unit
+                      -- 3. VELOCITY INJECTION (Network Ownership Claim)
+                      local vec = (targetPos - part.Position)
+                      local dist = vec.Magnitude
                       
-                      local speed = math.min(distance * 12, ManipSettings.MaxVelocity)
+                      -- Proportional velocity with a "Sticky" cap to prevent flinging
+                      local drive = math.min(dist * 15, 120) 
+                      part.AssemblyLinearVelocity = vec.Unit * drive
                       
-                      if distance > 0.1 then
-                          part.AssemblyLinearVelocity = direction * speed
-                      else
-                          part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                      end
-                      
+                      -- Keep parts ghosted so they don't hit the player
                       part.CanCollide = false
+                      part.CanQuery = false
                   else
                       table.remove(OrbitParts, i)
                   end
               end
           end)
           
-          -- Intelligent Watchdog
+          -- Background Watchdog
           task.spawn(function()
               while ManipSettings.Enabled do
-                  if #OrbitParts < 5 then RefreshManipParts() end
                   task.wait(2)
+                  if #OrbitParts < 5 then RefreshSwarm() end
               end
           end)
       else
-          _G.EliteLog("Swarm Disengaged", "info")
+          _G.EliteLog("Swarm Released", "info")
           for _, v in pairs(OrbitParts) do 
               if v and v.Parent then 
                   v.CanCollide = true 
                   v.CanQuery = true 
-                  v.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                  v.AssemblyLinearVelocity = Vector3.zero 
               end 
           end
           OrbitParts = {}
@@ -352,34 +353,53 @@ Tab:CreateToggle({
    end,
 })
 
+Tab:CreateButton({
+   Name = "Elite Launch Swarm (Forward)",
+   Callback = function()
+      if #OrbitParts == 0 then return end
+      _G.EliteLog("Launching Swarm!", "success")
+      
+      local launchDir = Camera.CFrame.LookVector
+      for _, part in pairs(OrbitParts) do
+          if part and part.Parent then
+              part.AssemblyLinearVelocity = launchDir * 250 -- Massive impulse
+          end
+      end
+      -- Clear the table so they don't snap back immediately
+      OrbitParts = {}
+   end,
+})
+
+Tab:CreateSection("Swarm Customization")
+
 Tab:CreateSlider({
-   Name = "Orbit Radius",
+   Name = "Control Distance",
    Range = {5, 100},
    Increment = 1,
-   CurrentValue = 12,
+   CurrentValue = 15,
+   Callback = function(V) ManipSettings.Distance = V end,
+})
+
+Tab:CreateSlider({
+   Name = "Swarm Radius",
+   Range = {2, 50},
+   Increment = 1,
+   CurrentValue = 10,
    Callback = function(V) ManipSettings.Radius = V end,
 })
 
 Tab:CreateSlider({
-   Name = "Orbit Speed",
-   Range = {1, 25},
+   Name = "Swarm Speed",
+   Range = {1, 30},
    Increment = 1,
    CurrentValue = 4,
    Callback = function(V) ManipSettings.Speed = V end,
 })
 
-Tab:CreateSlider({
-   Name = "Stability (Power)",
-   Range = {25, 250},
-   Increment = 5,
-   CurrentValue = 100,
-   Callback = function(V) ManipSettings.MaxVelocity = V end,
-})
-
 Tab:CreateButton({
-   Name = "Force Capture All Props",
+   Name = "Force Re-Scan Props",
    Callback = function() 
-       RefreshManipParts()
-       _G.EliteLog("Captured " .. #OrbitParts .. " props.", "info")
+       RefreshSwarm()
+       _G.EliteLog("Captured " .. #OrbitParts .. " parts.", "info")
    end,
 })
