@@ -351,18 +351,32 @@ Tab:CreateDropdown({
     end,
 })
 
--- 2. Master Toggle (Uses the same Beast Logic as Swarm/Orbit)
+-- Section: Elite Shapes (High-Detail Beast Edition)
+Tab:CreateSection("Elite Shapes")
+
+_G.EliteShapeEnabled = false
+_G.EliteCurrentShape = "Halo"
+
+Tab:CreateDropdown({
+    Name = "Select Elite Shape",
+    Options = {"Halo", "Wings", "Shield", "Cross"},
+    CurrentOption = {"Halo"},
+    MultipleOptions = false,
+    Callback = function(Option)
+        _G.EliteCurrentShape = Option[1]
+        _G.EliteLog("Shape Set To: " .. Option[1], "Info")
+    end,
+})
+
 Tab:CreateToggle({
-    Name = "Elite Shapes: ENABLED",
+    Name = "Elite Shapes Toggle",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteShapeEnabled = Value
-        
         if Value then
-            -- Disable other modes to prevent physics fighting
             _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
-            _G.EliteLog("Shapes: Beast Physics Active", "Info")
+            _G.EliteLog("Shapes: Detailed Physics Active", "Info")
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
@@ -374,46 +388,70 @@ Tab:CreateToggle({
                         local count = #parts
                         
                         for i, part in ipairs(parts) do
-                            local finalTarget = tCF.Position -- Fallback
+                            local finalTarget = tCF.Position
                             
-                            -- BEAST MATH: Every position is relative to the target's CFrame
                             if _G.EliteCurrentShape == "Halo" then
-                                local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
-                                -- Creates a ring 5 studs above the head
-                                finalTarget = (tCF * CFrame.new(math.cos(angle) * 4, 5, math.sin(angle) * 4)).Position
+                                -- DOUBLE-RING HALO logic
+                                -- Half parts on inner ring, half on outer
+                                local ringIndex = (i % 2 == 0) and 1 or 1.3
+                                local speed = tick() * 3
+                                local angle = (i * (math.pi * 2 / count)) + speed
+                                finalTarget = (tCF * CFrame.new(math.cos(angle) * (3 * ringIndex), 5 + (ringIndex * 0.5), math.sin(angle) * (3 * ringIndex))).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
+                                -- LAYERED FEATHER logic
                                 local side = (i % 2 == 0) and 1 or -1
-                                local flap = math.sin(tick() * 4) * 1.5
-                                -- Positions parts behind the back in an angled wing shape
-                                finalTarget = (tCF * CFrame.new(side * (2 + (i * 0.1)), (i * 0.2), 1.5 + (side * flap))).Position
+                                local flap = math.sin(tick() * 4) * 2 -- Animation
+                                
+                                -- Distribute parts along a wing curve
+                                local featherIndex = math.floor(i / 2)
+                                local wingSpread = featherIndex * 0.4
+                                local wingDrop = math.sin(featherIndex * 0.5) * 2
+                                
+                                finalTarget = (tCF * CFrame.new(
+                                    side * (1.5 + wingSpread), -- Spread outwards
+                                    2 + wingDrop,              -- Curved shape
+                                    1.5 + (side * flap)        -- Flapping motion
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- Vertical wall in front: 5x5 grid style
-                                local x = (i % 5) - 2
-                                local y = math.floor(i / 5) - 1
-                                finalTarget = (tCF * CFrame.new(x * 1.5, y * 1.5, -4)).Position
+                                -- CURVED HEX-SHIELD logic
+                                -- Maps parts onto a spherical dome in front of the target
+                                local spacing = 0.5
+                                local rows = math.ceil(math.sqrt(count))
+                                local row = i % rows
+                                local col = math.floor(i / rows)
+                                
+                                -- The math that makes it look like a "Beast" dome
+                                local x = (row - (rows/2)) * spacing
+                                local y = (col - (rows/2)) * spacing
+                                local z = -5 - (math.sin(row/2) + math.cos(col/2)) -- Curved depth
+                                
+                                finalTarget = (tCF * CFrame.new(x * 2, y * 2, z)).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- Geometric Cross on the back
-                                if i % 2 == 0 then
-                                    finalTarget = (tCF * CFrame.new(0, (i * 0.5) - 2, 2)).Position
+                                -- 3D CELTIC CROSS logic
+                                -- Divides parts into Vertical and Horizontal "Thick" beams
+                                if i % 3 == 0 then
+                                    -- Vertical Main Beam
+                                    finalTarget = (tCF * CFrame.new(0, (i * 0.3) - 3, 2.5)).Position
+                                elseif i % 3 == 1 then
+                                    -- Horizontal Cross Beam
+                                    finalTarget = (tCF * CFrame.new((i * 0.3) - 6, 3, 2.5)).Position
                                 else
-                                    finalTarget = (tCF * CFrame.new((i * 0.5) - 5, 2, 2)).Position
+                                    -- Thickening parts for 3D effect
+                                    finalTarget = (tCF * CFrame.new(0.5, (i * 0.3) - 3, 2.7)).Position
                                 end
                             end
                             
-                            -- CALLING THE BEAST ENGINE (Same as Swarm/Orbit)
                             ForceMovePart(part, finalTarget)
                         end
                     end
                     RunService.Heartbeat:Wait()
                 end
-                -- CLEANUP ON DISABLE
                 CleanupParts()
             end)
         else
-            _G.EliteLog("Shapes Disabled", "Info")
             CleanupParts()
         end
     end,
