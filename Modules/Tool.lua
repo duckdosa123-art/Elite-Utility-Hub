@@ -432,7 +432,7 @@ Tab:CreateToggle({
    end,
 })
 
--- [[ ELITE PART MANIPULATOR V3: STICKY ORBIT ]]
+-- [[ ELITE PART MANIPULATOR V4: UNIVERSAL ORBIT ]]
 local OrbitParts = {}
 local OrbitConn = nil
 
@@ -441,40 +441,46 @@ local ManipSettings = {
     Radius = 12,
     Speed = 4,
     Height = 1,
-    Bobbing = 0, -- Vertical wave
-    Trans = 0.5,
-    MaxParts = 50
+    Bobbing = 0,
+    MaxParts = 75 -- Increased for "All Parts" mode
 }
 
--- [ HELPER: GHOST MODE & REFRESH ]
+-- [ HELPER: PHYSICS SETUP ]
 local function SetupManipPart(part)
     if part:IsA("BasePart") then
         part.CanCollide = false
         part.CanTouch = false
-        part.CanQuery = false -- Camera safe
-        part.LocalTransparencyModifier = ManipSettings.Trans
+        part.CanQuery = false -- Camera safety (prevents zoom-glitching)
+        -- Ghost transparency removed as requested
     end
 end
 
+-- [ ENGINE: UNIVERSAL SCANNER ]
 local function RefreshManipParts()
-    OrbitParts = {}
+    local newPartList = {}
     local count = 0
-    -- Priority: Search near the player first for better Network Ownership
-    local char = LP.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
+    
+    -- Optimized scan: ignores players and focuses on unanchored props
     for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
-        if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(game.Players) then
-            local dist = (v.Position - root.Position).Magnitude
-            if dist < 100 and v.Size.Magnitude < 30 and v.Name ~= "Baseplate" then
+        
+        -- Requirement: Must be a BasePart, NOT anchored, and NOT part of any player character
+        if v:IsA("BasePart") and not v.Anchored then
+            local isPlayer = false
+            -- Strict Player Check: ignores characters by checking if the part belongs to a model with a Humanoid
+            if v:FindFirstAncestorOfClass("Model") and v:FindFirstAncestorOfClass("Model"):FindFirstChildOfClass("Humanoid") then
+                isPlayer = true
+            end
+            
+            -- Ignore Baseplate/Terrain for stability
+            if not isPlayer and v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
                 SetupManipPart(v)
-                table.insert(OrbitParts, v)
+                table.insert(newPartList, v)
                 count = count + 1
             end
         end
     end
+    OrbitParts = newPartList
 end
 
 Tab:CreateSection("Elite Part Manipulator")
@@ -487,7 +493,7 @@ Tab:CreateToggle({
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Orbit Active: Sticky Physics Engaged", "success")
+          _G.EliteLog("Orbit Active: Capturing All Props", "success")
           RefreshManipParts()
           
           OrbitConn = game:GetService("RunService").Heartbeat:Connect(function()
@@ -507,29 +513,25 @@ Tab:CreateToggle({
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. STICKY PHYSICS (Calculates exactly what velocity is needed)
-                      -- We use a lower multiplier (8) to prevent "flinging"
+                      -- 2. STICKY PHYSICS
                       local velocity = (targetPos - part.Position) * 8
                       part.AssemblyLinearVelocity = velocity
                       
-                      -- Spin the parts for aesthetic
-                      part.AssemblyAngularVelocity = Vector3.new(0, 10, 0)
-                      
-                      -- Constant Ghost Guard
+                      -- Ensure parts stay ghosted to the local player to prevent flinging yourself
                       part.CanCollide = false
                       part.CanQuery = false
-                      part.LocalTransparencyModifier = ManipSettings.Trans
                   else
+                      -- Remove if anchored or destroyed mid-orbit
                       table.remove(OrbitParts, i)
                   end
               end
           end)
           
-          -- Watchdog: Scans for new parts occasionally
+          -- AUTO-RESCAN WATCHDOG (Fires when parts are unanchored/added)
           task.spawn(function()
               while ManipSettings.Enabled do
-                  task.wait(3)
-                  if #OrbitParts < ManipSettings.MaxParts then RefreshManipParts() end
+                  RefreshManipParts()
+                  task.wait(1.5) -- High frequency check for new unanchored parts
               end
           end)
       else
@@ -538,7 +540,6 @@ Tab:CreateToggle({
               if v and v.Parent then 
                   v.CanCollide = true 
                   v.CanQuery = true 
-                  v.LocalTransparencyModifier = 0
                   v.AssemblyLinearVelocity = Vector3.zero
               end 
           end
@@ -556,7 +557,7 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
    Name = "Orbit Speed",
-   Range = {1, 20},
+   Range = {1, 25},
    Increment = 1,
    CurrentValue = 4,
    Callback = function(V) ManipSettings.Speed = V end,
@@ -578,15 +579,10 @@ Tab:CreateSlider({
    Callback = function(V) ManipSettings.Bobbing = V end,
 })
 
-Tab:CreateSlider({
-   Name = "Ghost Transparency",
-   Range = {0, 1},
-   Increment = 0.1,
-   CurrentValue = 0.5,
-   Callback = function(V) ManipSettings.Trans = V end,
-})
-
 Tab:CreateButton({
-   Name = "Force Re-Scan Props",
-   Callback = function() RefreshManipParts() end,
+   Name = "Manual Force Rescan",
+   Callback = function() 
+       RefreshManipParts()
+       _G.EliteLog("Prop Scan Complete: " .. #OrbitParts .. " captured.", "info")
+   end,
 })
