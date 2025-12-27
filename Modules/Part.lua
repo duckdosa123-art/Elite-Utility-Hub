@@ -62,7 +62,7 @@ Tab:CreateToggle({
    end,
 })
 Tab:CreateSection("Part Control")
--- [[ ELITE PART MANIPULATOR V5: STICKY UNIVERSAL ORBIT ]]
+-- [[ PART MODULE: ELITE-UTILITY-HUB ]]
 local OrbitParts = {}
 local OrbitConn = nil
 
@@ -72,12 +72,11 @@ local ManipSettings = {
     Speed = 4,
     Height = 1,
     Bobbing = 2,
-    MaxVelocity = 100, -- Prevents parts from "launching" away
+    MaxVelocity = 100, -- Capped for stability
     MaxParts = 100
 }
 
 -- [ ENGINE: UNIVERSAL SCANNER ]
--- Optimized to find everything nearby that isn't a player
 local function RefreshManipParts()
     local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
@@ -85,21 +84,17 @@ local function RefreshManipParts()
     local newPartList = {}
     local count = 0
     
-    -- We scan the workspace but filter aggressively for props
     for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
         
         if v:IsA("BasePart") and not v.Anchored then
-            -- Skip baseplate and terrain
             if v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
-                -- Player Check: Ensure it's not a character part
+                -- Strict Player Check
                 local isPlayer = v:FindFirstAncestorOfClass("Model") and v:FindFirstAncestorOfClass("Model"):FindFirstChildOfClass("Humanoid")
                 
                 if not isPlayer then
-                    -- Setup Physics Properties
                     v.CanCollide = false
-                    v.CanQuery = false -- Camera safe
-                    
+                    v.CanQuery = false 
                     table.insert(newPartList, v)
                     count = count + 1
                 end
@@ -109,7 +104,7 @@ local function RefreshManipParts()
     OrbitParts = newPartList
 end
 
-Tab:CreateSection("Elite Part Manipulator")
+Tab:CreateSection("Prop Swarm Controller")
 
 Tab:CreateToggle({
    Name = "Elite Part Orbit",
@@ -119,10 +114,10 @@ Tab:CreateToggle({
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Orbit: Sticky Physics Engaged", "success")
+          _G.EliteLog("Prop Swarm Activated", "success")
           RefreshManipParts()
           
-          OrbitConn = game:GetService("RunService").Heartbeat:Connect(function()
+          OrbitConn = RunService.Heartbeat:Connect(function()
               local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
               if not Root or not ManipSettings.Enabled then return end
               
@@ -139,12 +134,11 @@ Tab:CreateToggle({
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. CAPPED VELOCITY LOGIC (Prevents Launching/Flinging)
+                      -- 2. STICKY PHYSICS (Capped Velocity)
                       local distanceVector = (targetPos - part.Position)
                       local distance = distanceVector.Magnitude
                       local direction = distanceVector.Unit
                       
-                      -- Proportional speed: Fast when far, slow when close, but capped at MaxVelocity
                       local speed = math.min(distance * 12, ManipSettings.MaxVelocity)
                       
                       if distance > 0.1 then
@@ -153,7 +147,6 @@ Tab:CreateToggle({
                           part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                       end
                       
-                      -- Force collision off to prevent flinging YOUR character
                       part.CanCollide = false
                   else
                       table.remove(OrbitParts, i)
@@ -161,17 +154,15 @@ Tab:CreateToggle({
               end
           end)
           
-          -- WATCHDOG: Intelligent Rescan (Doesn't wipe table every time)
+          -- Intelligent Watchdog
           task.spawn(function()
               while ManipSettings.Enabled do
-                  if #OrbitParts < 10 then -- Only deep-scan if we lost our swarm
-                      RefreshManipParts()
-                  end
+                  if #OrbitParts < 5 then RefreshManipParts() end
                   task.wait(2)
               end
           end)
       else
-          _G.EliteLog("Orbit Disengaged", "info")
+          _G.EliteLog("Swarm Disengaged", "info")
           for _, v in pairs(OrbitParts) do 
               if v and v.Parent then 
                   v.CanCollide = true 
@@ -201,15 +192,7 @@ Tab:CreateSlider({
 })
 
 Tab:CreateSlider({
-   Name = "Vertical Height",
-   Range = {-10, 20},
-   Increment = 1,
-   CurrentValue = 1,
-   Callback = function(V) ManipSettings.Height = V end,
-})
-
-Tab:CreateSlider({
-   Name = "Stability (Max Speed)",
+   Name = "Stability (Power)",
    Range = {25, 250},
    Increment = 5,
    CurrentValue = 100,
@@ -217,9 +200,9 @@ Tab:CreateSlider({
 })
 
 Tab:CreateButton({
-   Name = "Force Catch All Props",
+   Name = "Force Capture All Props",
    Callback = function() 
        RefreshManipParts()
-       _G.EliteLog("Swarm Size: " .. #OrbitParts, "info")
+       _G.EliteLog("Captured " .. #OrbitParts .. " props.", "info")
    end,
 })
