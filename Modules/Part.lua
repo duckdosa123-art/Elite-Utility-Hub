@@ -350,17 +350,27 @@ Tab:CreateDropdown({
     end,
 })
 
+-- Ensure this variable exists before the toggle is created so the script doesn't error
+_G.EliteCurrentShape = _G.EliteCurrentShape or "Halo" 
+
 Tab:CreateToggle({
     Name = "Elite Shapes Toggle",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteShapeEnabled = Value
         if Value then
+            -- Conflict Prevention
             _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
+                    -- Safety Check: Ensure the core functions exist
+                    if typeof(GetParts) ~= "function" or typeof(ForceMovePart) ~= "function" then 
+                        warn("Elite Hub: Core functions missing!") 
+                        break 
+                    end
+
                     local parts, myHrp = GetParts()
                     local targetHRP = _G.GetEliteTarget() or myHrp
                     
@@ -368,95 +378,69 @@ Tab:CreateToggle({
                         local tCF = targetHRP.CFrame
                         local count = #parts
                         
-                        -- Sort parts by size to put bigger parts in the back/base
-                        table.sort(parts, function(a, b) 
-                            return a.Size.Magnitude > b.Size.Magnitude 
+                        -- Robust Sorting (Wrapped in pcall to prevent Tab-Crash)
+                        pcall(function()
+                            table.sort(parts, function(a, b) 
+                                return a.Size.Magnitude > b.Size.Magnitude 
+                            end)
                         end)
 
                         for i, part in ipairs(parts) do
+                            -- Default target to HRP to prevent nil errors
                             local finalTarget = tCF.Position
                             
-                            -- AUTO-SIZER LOGIC: Prevents big parts from clumping
-                            -- We calculate a "Comfort Zone" based on the part's size
                             local pSize = part.Size.Magnitude
                             local spacing = math.clamp(pSize * 0.4, 1.5, 10)
 
                             if _G.EliteCurrentShape == "Halo" then
-                                -- DOUBLE-RING NEON HALO
                                 local ring = (i % 2 == 0) and 1 or 1.5
                                 local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
                                 local radius = (4 + (spacing * 0.5)) * ring
-                                finalTarget = (tCF * CFrame.new(math.cos(angle) * radius, 5 + (ring), math.sin(angle) * radius)).Position
+                                finalTarget = (tCF * CFrame.new(math.cos(angle) * radius, 5 + ring, math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- THE MOST DETAILED WINGS (Triple-Layered Angelic)
                                 local side = (i % 2 == 0) and 1 or -1
                                 local halfIndex = math.floor(i / 2)
-                                local layer = i % 3 -- 0: Primary, 1: Secondary, 2: Covert
-                                
-                                -- Spread math using Golden Ratio principles
+                                local layer = i % 3
                                 local spread = (halfIndex * spacing * 0.6)
                                 local curve = math.sin(halfIndex * 0.3) * 3
                                 local height = math.cos(halfIndex * 0.2) * 5
-                                
-                                -- Flap physics (Speed increases at wing tips)
-                                local flapSpeed = 4
-                                local flapPower = (halfIndex * 0.5) + 1
-                                local flap = math.sin(tick() * flapSpeed) * flapPower
-                                
-                                -- Layered Offset (Makes wings look "Thick" and 3D)
+                                local flap = math.sin(tick() * 4) * (halfIndex * 0.5 + 1)
                                 local depth = 1.5 + (layer * 0.8) + (side * flap)
                                 
-                                finalTarget = (tCF * CFrame.new(
-                                    side * (2 + spread), -- How wide
-                                    height + (layer * 1.5), -- How tall
-                                    depth -- Flap depth
-                                )).Position
+                                finalTarget = (tCF * CFrame.new(side * (2 + spread), height + (layer * 1.5), depth)).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- HEX-DOME SHIELD (Auto-Adjusts for Wall pieces)
                                 local rows = math.ceil(math.sqrt(count))
                                 local r = i % rows
                                 local c = math.floor(i / rows)
-                                
-                                finalTarget = (tCF * CFrame.new(
-                                    (r - rows/2) * (spacing * 1.2),
-                                    (c - rows/2) * (spacing * 1.2),
-                                    -5 - (spacing * 0.5) -- Pushes shield further out if parts are huge
-                                )).Position
+                                finalTarget = (tCF * CFrame.new((r - rows/2) * (spacing * 1.2), (c - rows/2) * (spacing * 1.2), -5 - (spacing * 0.5))).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- ELITE JESUS CROSS V2 (3D Thickened Latin Cross)
                                 local vLimit = math.floor(count * 0.7)
-                                local barHeightPercent = 0.75 
-                                
-                                -- 3D Thickness Offsets
+                                -- Thickness offsets
                                 local xDepth = (i % 2 == 0 and 1 or -1) * (pSize * 0.15)
                                 local yDepth = (i % 3 == 0 and 1 or -1) * (pSize * 0.15)
 
                                 if i <= vLimit then
-                                    -- VERTICAL BEAM (The Main Post)
                                     local progress = i / vLimit
                                     local totalHeight = vLimit * spacing * 0.5
                                     local currentY = (progress * totalHeight) - (totalHeight * 0.3)
-                                    
                                     finalTarget = (tCF * CFrame.new(xDepth, currentY, 3 + (yDepth * 0.5))).Position
                                 else
-                                    -- HORIZONTAL CROSSBAR
                                     local barIndex = i - vLimit
                                     local barTotal = count - vLimit
-                                    local progress = (barIndex / barTotal) - 0.5 
-                                    
+                                    -- Safety check for barTotal to prevent Divide by Zero
+                                    local progress = (barTotal > 0) and (barIndex / barTotal - 0.5) or 0
                                     local totalWidth = barTotal * spacing * 0.6
-                                    local currentX = progress * totalWidth
-                                    
                                     local verticalHeight = (vLimit * spacing * 0.5)
-                                    local barY = (verticalHeight * barHeightPercent) - (verticalHeight * 0.3)
+                                    local barY = (verticalHeight * 0.75) - (verticalHeight * 0.3)
                                     
-                                    finalTarget = (tCF * CFrame.new(currentX, barY + yDepth, 3 + (xDepth * 0.5))).Position
-                                end -- [END #1]: This ends the "if i <= vLimit" math
-                            end -- [END #2]: This ends the "elseif _G.EliteCurrentShape == 'Cross'" block
+                                    finalTarget = (tCF * CFrame.new(progress * totalWidth, barY + yDepth, 3 + (xDepth * 0.5))).Position
+                                end
+                            end
                             
+                            -- Call physics engine
                             ForceMovePart(part, finalTarget)
                         end
                     end
