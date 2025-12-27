@@ -337,38 +337,42 @@ Tab:CreateSlider({
 Tab:CreateSection("Elite Assassination")
 
 _G.EliteTargetEnabled = false
-_G.EliteTargetName = ""
-
--- Logic to find the target's RootPart
-_G.GetEliteTarget = function()
-    if not _G.EliteTargetEnabled or _G.EliteTargetName == "" then return nil end
-    local targetPlayer = game:GetService("Players"):FindFirstChild(_G.EliteTargetName)
-    if targetPlayer and targetPlayer.Character then
-        return targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-    end
-    return nil
-end
+_G.EliteTargetName = "" -- This will store the actual Username for physics logic
 
 local PlayerDropdown = Tab:CreateDropdown({
     Name = "Select Victim",
-    Options = {"Refreshing..."},
+    Options = {"Click Refresh..."},
     CurrentOption = {""},
     MultipleOptions = false,
     Flag = "VictimDropdown",
     Callback = function(Option)
-        _G.EliteTargetName = Option[1]
+        -- Option[1] will look like "DisplayName (@Username)"
+        -- We extract the part inside the @ parentheses
+        local chosen = Option[1]
+        local username = chosen:match("@(%w+)")
+        if username then
+            _G.EliteTargetName = username
+            _G.EliteLog("Victim Set To: " .. username, "Info")
+        end
     end,
 })
 
--- Function to refresh player list
+-- Optimized Refresh Function
 local function RefreshPlayers()
     local pList = {}
-    for _, v in ipairs(game:GetService("Players"):GetPlayers()) do
+    local Players = game:GetService("Players"):GetPlayers()
+    
+    for _, v in ipairs(Players) do
         if v ~= LP then
-            table.insert(pList, v.Name) -- Using Name for technical reliability
+            -- Format: "Display Name (@Username)"
+            local entry = v.DisplayName .. " (@" .. v.Name .. ")"
+            table.insert(pList, entry)
         end
     end
-    PlayerDropdown:Set(pList)
+    
+    -- Rayfield Refresh Logic
+    PlayerDropdown:Refresh(pList, true) 
+    _G.EliteLog("Player List Refreshed", "Info")
 end
 
 Tab:CreateButton({
@@ -385,15 +389,32 @@ Tab:CreateToggle({
         _G.EliteTargetEnabled = Value
         if Value then
             if _G.EliteTargetName == "" then
-                _G.EliteLog("Select a victim first!", "Error")
+                _G.EliteLog("Please select a victim from the list!", "Error")
             else
-                _G.EliteLog("Targeting: " .. _G.EliteTargetName, "Info")
+                _G.EliteLog("Locking on: " .. _G.EliteTargetName, "Info")
             end
         else
-            _G.EliteLog("Targeting Disabled: Returning to Self", "Info")
+            _G.EliteLog("Targeting Disabled", "Info")
         end
     end,
 })
 
--- Initial Refresh
-RefreshPlayers()
+-- Logic to find the target's RootPart (Used by Swarm/Orbit)
+_G.GetEliteTarget = function()
+    if not _G.EliteTargetEnabled or _G.EliteTargetName == "" then return nil end
+    local targetPlayer = game:GetService("Players"):FindFirstChild(_G.EliteTargetName)
+    if targetPlayer and targetPlayer.Character then
+        local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local hum = targetPlayer.Character:FindFirstChild("Humanoid")
+        -- Only target if they are alive
+        if hrp and hum and hum.Health > 0 then
+            return hrp
+        end
+    end
+    return nil
+end
+
+-- Force an initial refresh after a tiny delay to ensure UI is ready
+task.delay(1, function()
+    RefreshPlayers()
+end)
