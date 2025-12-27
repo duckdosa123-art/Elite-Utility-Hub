@@ -426,19 +426,41 @@ Tab:CreateToggle({
                                 )).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- JESUS CROSS (3D Thickened Latin Cross)
-                                local verticalLimit = math.floor(count * 0.7)
-                                if i <= verticalLimit then
-                                    -- Vertical Post
-                                    local p = (i * spacing * 0.8) - (verticalLimit * 0.3)
-                                    finalTarget = (tCF * CFrame.new(0, p, 3)).Position
+                                -- ELITE JESUS CROSS V2 (3D Thickened Latin Cross)
+                                -- Proportions: 70% Vertical Pole, 30% Horizontal Bar
+                                local vLimit = math.floor(count * 0.7)
+                                local barHeightPercent = 0.75 -- Crossbar sits 75% up the pole
+                                
+                                -- The thickness factor: makes it look like a beam, not a line
+                                -- Uses the part's own size to push it slightly out of the center
+                                local xDepth = (i % 2 == 0 and 1 or -1) * (pSize * 0.15)
+                                local yDepth = (i % 3 == 0 and 1 or -1) * (pSize * 0.15)
+
+                                if i <= vLimit then
+                                    -- VERTICAL BEAM (The Main Post)
+                                    local progress = i / vLimit
+                                    -- Calculate height based on spacing and total parts
+                                    local totalHeight = vLimit * spacing * 0.5
+                                    local currentY = (progress * totalHeight) - (totalHeight * 0.3)
+                                    
+                                    -- We use xDepth and a slight z-offset to make it 3D
+                                    finalTarget = (tCF * CFrame.new(xDepth, currentY, 3 + (yDepth * 0.5))).Position
                                 else
-                                    -- Horizontal Crossbar (Positioned 75% up)
-                                    local barIndex = i - verticalLimit
-                                    local p = (barIndex * spacing * 0.8) - ((count - verticalLimit) * 0.4)
-                                    finalTarget = (tCF * CFrame.new(p, verticalLimit * 0.4, 3)).Position
+                                    -- HORIZONTAL CROSSBAR
+                                    local barIndex = i - vLimit
+                                    local barTotal = count - vLimit
+                                    local progress = (barIndex / barTotal) - 0.5 -- Range: -0.5 to 0.5
+                                    
+                                    local totalWidth = barTotal * spacing * 0.6
+                                    local currentX = progress * totalWidth
+                                    
+                                    -- Calculate where the bar should be on the vertical axis
+                                    local verticalHeight = (vLimit * spacing * 0.5)
+                                    local barY = (verticalHeight * barHeightPercent) - (verticalHeight * 0.3)
+                                    
+                                    -- We use yDepth to add vertical thickness to the horizontal bar
+                                    finalTarget = (tCF * CFrame.new(currentX, barY + yDepth, 3 + (xDepth * 0.5))).Position
                                 end
-                            end
                             
                             ForceMovePart(part, finalTarget)
                         end
