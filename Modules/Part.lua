@@ -337,7 +337,7 @@ Tab:CreateSlider({
 Tab:CreateSection("Elite Shapes")
 
 _G.EliteShapeEnabled = false
-_G.EliteCurrentShape = "Halo" -- Default selection
+_G.EliteCurrentShape = "Halo"
 
 -- 1. Shape Selection Dropdown
 Tab:CreateDropdown({
@@ -351,7 +351,7 @@ Tab:CreateDropdown({
     end,
 })
 
--- 2. Master Toggle for Shapes
+-- 2. Master Toggle (Uses the same Beast Logic as Swarm/Orbit)
 Tab:CreateToggle({
     Name = "Elite Shapes: ENABLED",
     CurrentValue = false,
@@ -359,64 +359,61 @@ Tab:CreateToggle({
         _G.EliteShapeEnabled = Value
         
         if Value then
-            _G.EliteSwarmEnabled = false -- Conflict Prevention
+            -- Disable other modes to prevent physics fighting
+            _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
-            _G.EliteLog("Elite Shapes Activated", "Info")
+            _G.EliteLog("Shapes: Beast Physics Active", "Info")
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
                     local parts, myHrp = GetParts()
-                    
-                    -- TARGETING LOGIC: Uses victim if target toggle is ON, else uses you
                     local targetHRP = _G.GetEliteTarget() or myHrp
                     
                     if targetHRP and targetHRP.Parent and #parts > 0 then
+                        local tCF = targetHRP.CFrame
                         local count = #parts
-                        local targetCF = targetHRP.CFrame
-                        local targetPos = targetHRP.Position
                         
                         for i, part in ipairs(parts) do
-                            local finalTarget = targetPos
+                            local finalTarget = tCF.Position -- Fallback
                             
+                            -- BEAST MATH: Every position is relative to the target's CFrame
                             if _G.EliteCurrentShape == "Halo" then
-                                -- Rotating Halo: Above head
-                                local speed = tick() * 3
-                                local angle = (i * (math.pi * 2 / count)) + speed
-                                finalTarget = targetPos + Vector3.new(math.cos(angle) * 4, 5, math.sin(angle) * 4)
+                                local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
+                                -- Creates a ring 5 studs above the head
+                                finalTarget = (tCF * CFrame.new(math.cos(angle) * 4, 5, math.sin(angle) * 4)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- Animated Wings: Flapping behind back
                                 local side = (i % 2 == 0) and 1 or -1
-                                local flap = math.sin(tick() * 5) * 2.5
-                                finalTarget = (targetCF * Vector3.new(side * (2 + (i * 0.15)), 2 + (i * 0.1), 1.5 + (side * flap))).Position
+                                local flap = math.sin(tick() * 4) * 1.5
+                                -- Positions parts behind the back in an angled wing shape
+                                finalTarget = (tCF * CFrame.new(side * (2 + (i * 0.1)), (i * 0.2), 1.5 + (side * flap))).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- Defensive Shield: Wall in front of target
-                                local row = i % 5
-                                local col = math.floor(i / 5)
-                                finalTarget = (targetCF * Vector3.new(row - 2, col - 1, -5)).Position
+                                -- Vertical wall in front: 5x5 grid style
+                                local x = (i % 5) - 2
+                                local y = math.floor(i / 5) - 1
+                                finalTarget = (tCF * CFrame.new(x * 1.5, y * 1.5, -4)).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- Holy Cross: Geometric shape on back
+                                -- Geometric Cross on the back
                                 if i % 2 == 0 then
-                                    finalTarget = (targetCF * Vector3.new(0, (i * 0.4) - 2, 2.5)).Position
+                                    finalTarget = (tCF * CFrame.new(0, (i * 0.5) - 2, 2)).Position
                                 else
-                                    finalTarget = (targetCF * Vector3.new((i * 0.4) - 2, 2.5, 2.5)).Position
+                                    finalTarget = (tCF * CFrame.new((i * 0.5) - 5, 2, 2)).Position
                                 end
                             end
                             
-                            -- Use the high-torque "Beast" physics engine
+                            -- CALLING THE BEAST ENGINE (Same as Swarm/Orbit)
                             ForceMovePart(part, finalTarget)
                         end
                     end
                     RunService.Heartbeat:Wait()
                 end
-                
-                -- Cleanup: Drop parts when toggle is turned off
+                -- CLEANUP ON DISABLE
                 CleanupParts()
             end)
         else
-            _G.EliteLog("Elite Shapes Deactivated", "Info")
+            _G.EliteLog("Shapes Disabled", "Info")
             CleanupParts()
         end
     end,
