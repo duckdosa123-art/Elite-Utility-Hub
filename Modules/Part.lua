@@ -467,7 +467,8 @@ Tab:CreateToggle({
 -- Section: Customize Shapes
 Tab:CreateSection("Customize Shapes")
 
-Tab:CreateSlider({
+-- 1. Shape Scale
+local ScaleSlider = Tab:CreateSlider({
     Name = "Shape Scale (Size)",
     Range = {0.1, 5},
     Increment = 0.1,
@@ -478,7 +479,16 @@ Tab:CreateSlider({
     end,
 })
 
-Tab:CreateSlider({
+Tab:CreateButton({
+    Name = "Reset Scale to Default",
+    Callback = function()
+        ScaleSlider:Set(1)
+        _G.EliteLog("Scale Reset", "Info")
+    end,
+})
+
+-- 2. Offset X
+local XSlider = Tab:CreateSlider({
     Name = "Shape Offset X (Left/Right)",
     Range = {-50, 50},
     Increment = 1,
@@ -489,7 +499,15 @@ Tab:CreateSlider({
     end,
 })
 
-Tab:CreateSlider({
+Tab:CreateButton({
+    Name = "Reset X Offset",
+    Callback = function()
+        XSlider:Set(0)
+    end,
+})
+
+-- 3. Offset Y
+local YSlider = Tab:CreateSlider({
     Name = "Shape Offset Y (Up/Down)",
     Range = {-50, 50},
     Increment = 1,
@@ -500,7 +518,15 @@ Tab:CreateSlider({
     end,
 })
 
-Tab:CreateSlider({
+Tab:CreateButton({
+    Name = "Reset Y Offset",
+    Callback = function()
+        YSlider:Set(0)
+    end,
+})
+
+-- 4. Offset Z
+local ZSlider = Tab:CreateSlider({
     Name = "Shape Offset Z (Forward/Back)",
     Range = {-50, 50},
     Increment = 1,
@@ -511,6 +537,24 @@ Tab:CreateSlider({
     end,
 })
 
+Tab:CreateButton({
+    Name = "Reset Z Offset",
+    Callback = function()
+        ZSlider:Set(0)
+    end,
+})
+
+-- Master Reset Button
+Tab:CreateButton({
+    Name = "RESET ALL CUSTOMIZATIONS",
+    Callback = function()
+        ScaleSlider:Set(1)
+        XSlider:Set(0)
+        YSlider:Set(0)
+        ZSlider:Set(0)
+        _G.EliteLog("All Shape Settings Defaulted", "Info")
+    end,
+})
 -- Section: Elite Assassination
 Tab:CreateSection("Elite Assassination")
 
