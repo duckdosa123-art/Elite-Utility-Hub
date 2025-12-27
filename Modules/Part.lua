@@ -105,7 +105,7 @@ Tab:CreateToggle({
    end,
 })
 
--- Part.lua: Part Control Module (Swarm & Orbit)
+-- Part.lua: Optimized Part Control (Swarm & Orbit)
 local RunService = game:GetService("RunService")
 local LP = _G.LP
 
@@ -116,23 +116,38 @@ _G.EliteSwarmEnabled = false
 
 -- Orbit Specific Variables
 _G.EliteOrbitEnabled = false
-_G.EliteOrbitRadius = 10
-_G.EliteOrbitHeight = 2
-_G.EliteOrbitSpeed = 3
+_G.EliteOrbitRadius = 15
+_G.EliteOrbitHeight = 3
+_G.EliteOrbitSpeed = 2
 
--- UI Section: Configuration Sliders (Separated as requested)
+-- Optimized Lag-Free Scanning (Uses Spatial Query instead of GetDescendants)
+local function GetControlledParts(hrp)
+    local overlapParams = OverlapParams.new()
+    overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+    overlapParams.FilterDescendantsInstances = {LP.Character}
+    
+    local parts = workspace:GetPartBoundsInRadius(hrp.Position, _G.ElitePartRange, overlapParams)
+    local filtered = {}
+    
+    for _, part in ipairs(parts) do
+        if not part.Anchored and part:IsA("BasePart") then
+            -- Verify it's not a player limb
+            if not part:FindFirstAncestorOfClass("Model") or not part:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid") then
+                table.insert(filtered, part)
+            end
+        end
+    end
+    return filtered
+end
 
-Tab:CreateSection("Part Main")
-
+-- UI Section: Configuration Sliders
 Tab:CreateSlider({
     Name = "Part Speed",
     Range = {10, 250},
     Increment = 5,
     Suffix = "Studs/s",
     CurrentValue = 50,
-    Callback = function(Value)
-        _G.ElitePartSpeed = Value
-    end,
+    Callback = function(Value) _G.ElitePartSpeed = Value end,
 })
 
 Tab:CreateSlider({
@@ -141,38 +156,37 @@ Tab:CreateSlider({
     Increment = 10,
     Suffix = "Studs",
     CurrentValue = 75,
-    Callback = function(Value)
-        _G.ElitePartRange = Value
-    end,
+    Callback = function(Value) _G.ElitePartRange = Value end,
 })
 
--- Feature 1: Universal Prop Swarm (Original Logic)
-local SwarmToggle = Tab:CreateToggle({
+-- Feature 1: Elite Prop Swarm
+Tab:CreateToggle({
     Name = "Elite Prop Swarm",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteSwarmEnabled = Value
         if Value then
-            _G.EliteOrbitEnabled = false -- Prevent conflict
-            _G.EliteLog("Prop Swarm Activated", "Info")
+            _G.EliteOrbitEnabled = false
+            _G.EliteLog("Swarm Activated (Ghost Mode)", "Info")
             
             task.spawn(function()
                 while _G.EliteSwarmEnabled do
                     local Character = LP.Character
                     local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
                     if HRP then
-                        local targetPos = HRP.Position + Vector3.new(0, 5, 0)
-                        for _, part in ipairs(workspace:GetDescendants()) do
-                            if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(Character) then
-                                local diff = targetPos - part.Position
-                                local dist = diff.Magnitude
-                                if dist <= _G.ElitePartRange then
-                                    part.CanCollide = false -- Ghost Logic
-                                    part.CanQuery = false
-                                    part.AssemblyLinearVelocity = diff.Unit * math.min(dist * 15, _G.ElitePartSpeed)
-                                    part.AssemblyAngularVelocity = Vector3.zero
-                                end
-                            end
+                        local parts = GetControlledParts(HRP)
+                        local targetPos = HRP.Position + Vector3.new(0, 8, 0)
+                        
+                        for _, part in ipairs(parts) do
+                            -- 1. Camera & Damage Immunity (Ghost Logic)
+                            part.CanCollide = false
+                            part.CanQuery = false -- Fixes Camera Occlusion
+                            part.CanTouch = false -- Fixes Damage (Natural Disasters)
+                            
+                            local diff = targetPos - part.Position
+                            local dist = diff.Magnitude
+                            part.AssemblyLinearVelocity = diff.Unit * math.min(dist * 15, _G.ElitePartSpeed)
+                            part.AssemblyAngularVelocity = Vector3.new(0, 15, 0)
                         end
                     end
                     RunService.Heartbeat:Wait()
@@ -182,46 +196,44 @@ local SwarmToggle = Tab:CreateToggle({
     end,
 })
 
--- Feature 2: Orbit Parts (New Feature)
+-- Feature 2: Elite Part Orbit (Fixed spread-out logic)
 Tab:CreateToggle({
     Name = "Elite Part Orbit",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteOrbitEnabled = Value
         if Value then
-            _G.EliteSwarmEnabled = false -- Prevent conflict
-            _G.EliteLog("Part Orbit Activated", "Info")
+            _G.EliteSwarmEnabled = false
+            _G.EliteLog("Orbit Activated (Ghost Mode)", "Info")
             
             task.spawn(function()
-                local angle = 0
+                local angleIncrement = 0
                 while _G.EliteOrbitEnabled do
                     local Character = LP.Character
                     local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
                     
                     if HRP then
-                        -- Increment angle based on speed
-                        angle = angle + (0.05 * _G.EliteOrbitSpeed)
-                        
-                        -- Calculate the target orbit point in the world
-                        local offsetX = math.cos(angle) * _G.EliteOrbitRadius
-                        local offsetZ = math.sin(angle) * _G.EliteOrbitRadius
-                        local targetPos = HRP.Position + Vector3.new(offsetX, _G.EliteOrbitHeight, offsetZ)
+                        angleIncrement = angleIncrement + (0.02 * _G.EliteOrbitSpeed)
+                        local parts = GetControlledParts(HRP)
+                        local partCount = #parts
 
-                        for _, part in ipairs(workspace:GetDescendants()) do
-                            if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(Character) then
-                                local dist = (HRP.Position - part.Position).Magnitude
-                                if dist <= _G.ElitePartRange then
-                                    part.CanCollide = false -- Ghost Logic
-                                    part.CanQuery = false
-                                    
-                                    local diff = targetPos - part.Position
-                                    local moveDist = diff.Magnitude
-                                    
-                                    -- Physics-based orbit movement
-                                    part.AssemblyLinearVelocity = diff.Unit * math.min(moveDist * 20, _G.ElitePartSpeed)
-                                    part.AssemblyAngularVelocity = Vector3.new(0, 10, 0) -- Slight spin for "Elite" visual
-                                end
-                            end
+                        for i, part in ipairs(parts) do
+                            -- Distribute parts evenly around the circle
+                            local individualAngle = angleIncrement + (i * (math.pi * 2 / partCount))
+                            
+                            -- Calculate target based on index
+                            local offsetX = math.cos(individualAngle) * _G.EliteOrbitRadius
+                            local offsetZ = math.sin(individualAngle) * _G.EliteOrbitRadius
+                            local targetPos = HRP.Position + Vector3.new(offsetX, _G.EliteOrbitHeight, offsetZ)
+
+                            -- Ghost Logic
+                            part.CanCollide = false
+                            part.CanQuery = false 
+                            part.CanTouch = false 
+
+                            local diff = targetPos - part.Position
+                            local dist = diff.Magnitude
+                            part.AssemblyLinearVelocity = diff.Unit * math.min(dist * 20, _G.ElitePartSpeed)
                         end
                     end
                     RunService.Heartbeat:Wait()
@@ -234,33 +246,27 @@ Tab:CreateToggle({
 -- Orbit Customization Sliders
 Tab:CreateSlider({
     Name = "Orbit Radius",
-    Range = {5, 50},
+    Range = {5, 100},
     Increment = 1,
     Suffix = "Studs",
-    CurrentValue = 10,
-    Callback = function(Value)
-        _G.EliteOrbitRadius = Value
-    end,
+    CurrentValue = 15,
+    Callback = function(Value) _G.EliteOrbitRadius = Value end,
 })
 
 Tab:CreateSlider({
     Name = "Orbit Height",
-    Range = {-10, 20},
+    Range = {-10, 30},
     Increment = 1,
     Suffix = "Studs",
-    CurrentValue = 2,
-    Callback = function(Value)
-        _G.EliteOrbitHeight = Value
-    end,
+    CurrentValue = 3,
+    Callback = function(Value) _G.EliteOrbitHeight = Value end,
 })
 
 Tab:CreateSlider({
-    Name = "Orbit Speed",
-    Range = {1, 20},
+    Name = "Orbit Rotation Speed",
+    Range = {1, 25},
     Increment = 1,
     Suffix = "Speed",
-    CurrentValue = 3,
-    Callback = function(Value)
-        _G.EliteOrbitSpeed = Value
-    end,
+    CurrentValue = 2,
+    Callback = function(Value) _G.EliteOrbitSpeed = Value end,
 })
