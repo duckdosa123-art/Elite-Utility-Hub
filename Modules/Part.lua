@@ -333,7 +333,7 @@ Tab:CreateSlider({
     end,
 })
 
--- Section: Elite Shapes (High-Detail Beast Edition)
+-- Section: Elite Shapes (Ultra-Detail & Auto-Sizer Edition)
 Tab:CreateSection("Elite Shapes")
 
 _G.EliteShapeEnabled = false
@@ -346,19 +346,18 @@ Tab:CreateDropdown({
     MultipleOptions = false,
     Callback = function(Option)
         _G.EliteCurrentShape = Option[1]
-        _G.EliteLog("Shape Set To: " .. Option[1], "Info")
+        _G.EliteLog("Shape Set: " .. Option[1], "Info")
     end,
 })
 
 Tab:CreateToggle({
-    Name = "Elite Shapes Toggle",
+    Name = "Elite Shapes: ENABLED",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteShapeEnabled = Value
         if Value then
             _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
-            _G.EliteLog("Shapes: Detailed Physics Active", "Info")
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
@@ -369,63 +368,75 @@ Tab:CreateToggle({
                         local tCF = targetHRP.CFrame
                         local count = #parts
                         
+                        -- Sort parts by size to put bigger parts in the back/base
+                        table.sort(parts, function(a, b) 
+                            return a.Size.Magnitude > b.Size.Magnitude 
+                        end)
+
                         for i, part in ipairs(parts) do
                             local finalTarget = tCF.Position
                             
+                            -- AUTO-SIZER LOGIC: Prevents big parts from clumping
+                            -- We calculate a "Comfort Zone" based on the part's size
+                            local pSize = part.Size.Magnitude
+                            local spacing = math.clamp(pSize * 0.4, 1.5, 10)
+
                             if _G.EliteCurrentShape == "Halo" then
-                                -- DOUBLE-RING HALO logic
-                                -- Half parts on inner ring, half on outer
-                                local ringIndex = (i % 2 == 0) and 1 or 1.3
-                                local speed = tick() * 3
-                                local angle = (i * (math.pi * 2 / count)) + speed
-                                finalTarget = (tCF * CFrame.new(math.cos(angle) * (3 * ringIndex), 5 + (ringIndex * 0.5), math.sin(angle) * (3 * ringIndex))).Position
+                                -- DOUBLE-RING NEON HALO
+                                local ring = (i % 2 == 0) and 1 or 1.5
+                                local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
+                                local radius = (4 + (spacing * 0.5)) * ring
+                                finalTarget = (tCF * CFrame.new(math.cos(angle) * radius, 5 + (ring), math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- ELITE ANGEL WINGS: Parametric Tapered Curve
+                                -- THE MOST DETAILED WINGS (Triple-Layered Angelic)
                                 local side = (i % 2 == 0) and 1 or -1
-                                local halfCount = count / 2
-                                local index = math.floor(i / 2)
-                                local progress = index / (halfCount > 0 and halfCount or 1) -- 0 to 1
+                                local halfIndex = math.floor(i / 2)
+                                local layer = i % 3 -- 0: Primary, 1: Secondary, 2: Covert
                                 
-                                -- The "Angel" Curve: Wider at the top, tapering at the bottom
-                                -- Side-spread increases then decreases
-                                local x = side * (1.5 + math.sin(progress * math.pi) * 5)
-                                -- Height follows a parabolic arc
-                                local y = math.cos(progress * math.pi) * 4
-                                -- Flapping motion based on tick
-                                local flap = math.sin(tick() * 3) * (progress * 3)
+                                -- Spread math using Golden Ratio principles
+                                local spread = (halfIndex * spacing * 0.6)
+                                local curve = math.sin(halfIndex * 0.3) * 3
+                                local height = math.cos(halfIndex * 0.2) * 5
                                 
-                                finalTarget = (tCF * CFrame.new(x, y + 2, 2 + flap)).Position
+                                -- Flap physics (Speed increases at wing tips)
+                                local flapSpeed = 4
+                                local flapPower = (halfIndex * 0.5) + 1
+                                local flap = math.sin(tick() * flapSpeed) * flapPower
+                                
+                                -- Layered Offset (Makes wings look "Thick" and 3D)
+                                local depth = 1.5 + (layer * 0.8) + (side * flap)
+                                
+                                finalTarget = (tCF * CFrame.new(
+                                    side * (2 + spread), -- How wide
+                                    height + (layer * 1.5), -- How tall
+                                    depth -- Flap depth
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- CURVED HEX-SHIELD logic
-                                -- Maps parts onto a spherical dome in front of the target
-                                local spacing = 0.5
+                                -- HEX-DOME SHIELD (Auto-Adjusts for Wall pieces)
                                 local rows = math.ceil(math.sqrt(count))
-                                local row = i % rows
-                                local col = math.floor(i / rows)
+                                local r = i % rows
+                                local c = math.floor(i / rows)
                                 
-                                -- The math that makes it look like a "Beast" dome
-                                local x = (row - (rows/2)) * spacing
-                                local y = (col - (rows/2)) * spacing
-                                local z = -5 - (math.sin(row/2) + math.cos(col/2)) -- Curved depth
-                                
-                                finalTarget = (tCF * CFrame.new(x * 2, y * 2, z)).Position
+                                finalTarget = (tCF * CFrame.new(
+                                    (r - rows/2) * (spacing * 1.2),
+                                    (c - rows/2) * (spacing * 1.2),
+                                    -5 - (spacing * 0.5) -- Pushes shield further out if parts are huge
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- ELITE JESUS CROSS: 60/40 Ratio Latin Cross
-                                local ratio = i / count
-                                
-                                if ratio < 0.65 then
-                                    -- Vertical Beam (65% of parts for length)
-                                    -- Ranges from -3 studs to +6 studs height
-                                    local p = ((ratio / 0.65) * 9) - 3
+                                -- JESUS CROSS (3D Thickened Latin Cross)
+                                local verticalLimit = math.floor(count * 0.7)
+                                if i <= verticalLimit then
+                                    -- Vertical Post
+                                    local p = (i * spacing * 0.8) - (verticalLimit * 0.3)
                                     finalTarget = (tCF * CFrame.new(0, p, 3)).Position
                                 else
-                                    -- Horizontal Crossbar (35% of parts)
-                                    -- Positioned about 2/3rds up the vertical beam
-                                    local p = (((ratio - 0.65) / 0.35) * 6) - 3
-                                    finalTarget = (tCF * CFrame.new(p, 4, 3)).Position
+                                    -- Horizontal Crossbar (Positioned 75% up)
+                                    local barIndex = i - verticalLimit
+                                    local p = (barIndex * spacing * 0.8) - ((count - verticalLimit) * 0.4)
+                                    finalTarget = (tCF * CFrame.new(p, verticalLimit * 0.4, 3)).Position
                                 end
                             end
                             
