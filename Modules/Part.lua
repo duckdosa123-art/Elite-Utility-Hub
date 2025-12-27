@@ -333,24 +333,6 @@ Tab:CreateSlider({
     end,
 })
 
--- Section: Elite Shapes
-Tab:CreateSection("Elite Shapes")
-
-_G.EliteShapeEnabled = false
-_G.EliteCurrentShape = "Halo"
-
--- 1. Shape Selection Dropdown
-Tab:CreateDropdown({
-    Name = "Select Elite Shape",
-    Options = {"Halo", "Wings", "Shield", "Cross"},
-    CurrentOption = {"Halo"},
-    MultipleOptions = false,
-    Callback = function(Option)
-        _G.EliteCurrentShape = Option[1]
-        _G.EliteLog("Shape Set To: " .. Option[1], "Info")
-    end,
-})
-
 -- Section: Elite Shapes (High-Detail Beast Edition)
 Tab:CreateSection("Elite Shapes")
 
@@ -399,20 +381,21 @@ Tab:CreateToggle({
                                 finalTarget = (tCF * CFrame.new(math.cos(angle) * (3 * ringIndex), 5 + (ringIndex * 0.5), math.sin(angle) * (3 * ringIndex))).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- LAYERED FEATHER logic
+                                -- ELITE ANGEL WINGS: Parametric Tapered Curve
                                 local side = (i % 2 == 0) and 1 or -1
-                                local flap = math.sin(tick() * 4) * 2 -- Animation
+                                local halfCount = count / 2
+                                local index = math.floor(i / 2)
+                                local progress = index / (halfCount > 0 and halfCount or 1) -- 0 to 1
                                 
-                                -- Distribute parts along a wing curve
-                                local featherIndex = math.floor(i / 2)
-                                local wingSpread = featherIndex * 0.4
-                                local wingDrop = math.sin(featherIndex * 0.5) * 2
+                                -- The "Angel" Curve: Wider at the top, tapering at the bottom
+                                -- Side-spread increases then decreases
+                                local x = side * (1.5 + math.sin(progress * math.pi) * 5)
+                                -- Height follows a parabolic arc
+                                local y = math.cos(progress * math.pi) * 4
+                                -- Flapping motion based on tick
+                                local flap = math.sin(tick() * 3) * (progress * 3)
                                 
-                                finalTarget = (tCF * CFrame.new(
-                                    side * (1.5 + wingSpread), -- Spread outwards
-                                    2 + wingDrop,              -- Curved shape
-                                    1.5 + (side * flap)        -- Flapping motion
-                                )).Position
+                                finalTarget = (tCF * CFrame.new(x, y + 2, 2 + flap)).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
                                 -- CURVED HEX-SHIELD logic
@@ -430,17 +413,19 @@ Tab:CreateToggle({
                                 finalTarget = (tCF * CFrame.new(x * 2, y * 2, z)).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- 3D CELTIC CROSS logic
-                                -- Divides parts into Vertical and Horizontal "Thick" beams
-                                if i % 3 == 0 then
-                                    -- Vertical Main Beam
-                                    finalTarget = (tCF * CFrame.new(0, (i * 0.3) - 3, 2.5)).Position
-                                elseif i % 3 == 1 then
-                                    -- Horizontal Cross Beam
-                                    finalTarget = (tCF * CFrame.new((i * 0.3) - 6, 3, 2.5)).Position
+                                -- ELITE JESUS CROSS: 60/40 Ratio Latin Cross
+                                local ratio = i / count
+                                
+                                if ratio < 0.65 then
+                                    -- Vertical Beam (65% of parts for length)
+                                    -- Ranges from -3 studs to +6 studs height
+                                    local p = ((ratio / 0.65) * 9) - 3
+                                    finalTarget = (tCF * CFrame.new(0, p, 3)).Position
                                 else
-                                    -- Thickening parts for 3D effect
-                                    finalTarget = (tCF * CFrame.new(0.5, (i * 0.3) - 3, 2.7)).Position
+                                    -- Horizontal Crossbar (35% of parts)
+                                    -- Positioned about 2/3rds up the vertical beam
+                                    local p = (((ratio - 0.65) / 0.35) * 6) - 3
+                                    finalTarget = (tCF * CFrame.new(p, 4, 3)).Position
                                 end
                             end
                             
