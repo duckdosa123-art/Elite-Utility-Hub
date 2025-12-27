@@ -107,96 +107,81 @@ Tab:CreateToggle({
 
 Tab:CreateSection("PartManipulate")
 
--- Part.lua: Elite "Netless" Part Control
+-- Part.lua: Elite Part Control (Anti-Void Edition)
 local RunService = game:GetService("RunService")
 local LP = _G.LP
 
--- State Configuration
+-- State
 _G.ElitePartSpeed = 100
-_G.ElitePartRange = 100
+_G.ElitePartRange = 150
 _G.EliteSwarmEnabled = false
 _G.EliteOrbitEnabled = false
 
--- Orbit Customization
-_G.EliteOrbitRadius = 15
+-- Customization
+_G.EliteOrbitRadius = 20
 _G.EliteOrbitHeight = 5
-_G.EliteOrbitSpeed = 3
+_G.EliteOrbitSpeed = 4
 
--- Core: Netless Claimer & Physics Stabilizer
--- This function mimics the logic found in top-tier part GUIs
-local function ClaimAndMove(part, targetPos)
+-- The "Elite" Physics Engine
+-- This function is the secret to stopping parts from falling into the void.
+local function ForceMovePart(part, targetPos)
     if not part or not part.Parent then return end
     
-    -- 1. Ghost Logic (Fixes Camera Zoom, Lag, and "Natural Disaster" Damage)
+    -- 1. GHOST LOGIC (Fixes Camera, Damage, and Player Physics)
     part.CanCollide = false
-    part.CanQuery = false -- Camera ignores these parts
-    part.CanTouch = false -- Server won't register damage hits on you
+    part.CanTouch = false -- Fixes Natural Disaster Damage
+    part.CanQuery = false -- Fixes Camera Zooming in/out
     
-    -- 2. Netless Ownership Hack
-    -- Setting a constant slight upward velocity tricks the server into 
-    -- giving your client physics authority (Network Ownership).
-    local netlessVelocity = Vector3.new(0, 25.1, 0)
-    
-    -- 3. Proportional Force (Sticky Movement)
-    -- We calculate the vector to the target and multiply it by a high-torque factor.
-    local direction = targetPos - part.Position
+    -- 2. CALCULATION
+    local currentPos = part.Position
+    local direction = (targetPos - currentPos)
     local distance = direction.Magnitude
     
-    -- If the part is too far, we use "Snap" velocity to bring it back instantly
-    -- If it's close, we use "Smooth" velocity to keep it sticky
-    if distance > 2 then
-        part.AssemblyLinearVelocity = (direction * 20) + netlessVelocity
-    else
-        -- High-frequency micro-adjustment to prevent "Falling into Void"
-        part.AssemblyLinearVelocity = (direction * 45) + Vector3.new(0, 5, 0)
-    end
+    -- 3. ANTI-GRAVITY VELOCITY
+    -- We multiply distance by a high factor (35) and ADD a constant Y boost (25)
+    -- This creates a "magnetic" pull that gravity cannot beat.
+    local velocity = direction * 35 
     
-    -- Prevent spinning/flinging
-    part.AssemblyAngularVelocity = Vector3.zero
+    -- Apply the velocity directly to the Assembly
+    part.AssemblyLinearVelocity = velocity + Vector3.new(0, 25, 0) 
+    
+    -- Stop it from spinning wildly (prevents flinging)
+    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end
 
--- Optimization: Fast Spatial Scanner (Better than GetDescendants)
-local function GetNearbyParts(hrp)
-    local Params = OverlapParams.new()
-    Params.FilterType = Enum.RaycastFilterType.Exclude
-    Params.FilterDescendantsInstances = {LP.Character}
+-- Efficient Part Scanner
+local function GetParts()
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {} end
     
-    -- Only scans physical objects in your immediate radius
-    local parts = workspace:GetPartBoundsInRadius(hrp.Position, _G.ElitePartRange, Params)
-    local filtered = {}
-    
-    for _, p in ipairs(parts) do
-        if p:IsA("BasePart") and not p.Anchored then
-            -- Verify it's not another player's limb
-            local model = p:FindFirstAncestorOfClass("Model")
-            if not (model and model:FindFirstChild("Humanoid")) then
-                table.insert(filtered, p)
+    local found = {}
+    -- We use a simple loop for reliability since "Lag Free" was a concern
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(char) then
+            local dist = (v.Position - hrp.Position).Magnitude
+            if dist <= _G.ElitePartRange then
+                -- Ignore other players
+                if not v:FindFirstAncestorOfClass("Model") or not v:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid") then
+                    table.insert(found, v)
+                end
             end
         end
     end
-    return filtered
+    return found, hrp
 end
 
--- UI Controls
+-- UI ELEMENTS
 Tab:CreateSlider({
-    Name = "Part Speed (Force)",
-    Range = {50, 500},
-    Increment = 10,
-    Suffix = "Pow",
-    CurrentValue = 100,
-    Callback = function(Value) _G.ElitePartSpeed = Value end,
-})
-
-Tab:CreateSlider({
-    Name = "Part Control Range",
-    Range = {25, 1000},
-    Increment = 25,
+    Name = "Control Part Range",
+    Range = {50, 1000},
+    Increment = 50,
     Suffix = "Studs",
-    CurrentValue = 100,
+    CurrentValue = 150,
     Callback = function(Value) _G.ElitePartRange = Value end,
 })
 
--- Feature 1: Elite Prop Swarm
+-- SWARM FEATURE
 Tab:CreateToggle({
     Name = "Elite Prop Swarm",
     CurrentValue = false,
@@ -204,22 +189,16 @@ Tab:CreateToggle({
         _G.EliteSwarmEnabled = Value
         if Value then
             _G.EliteOrbitEnabled = false
-            _G.EliteLog("Swarm: Netless Mode Engaged", "Info")
+            _G.EliteLog("Swarm: Aggressive Physics Active", "Info")
             
             task.spawn(function()
                 while _G.EliteSwarmEnabled do
-                    local char = LP.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local parts = GetNearbyParts(hrp)
-                        -- Target: Spread slightly around a point above the player
-                        local baseTarget = hrp.Position + Vector3.new(0, 10, 0)
-                        
-                        for i, part in ipairs(parts) do
-                            -- Add a tiny bit of noise so they don't overlap (causes lag)
-                            local noise = Vector3.new(math.sin(i), 0, math.cos(i)) * 2
-                            ClaimAndMove(part, baseTarget + noise)
-                        end
+                    local parts, hrp = GetParts()
+                    -- Target is a point right in the middle of your torso
+                    local target = hrp.Position + Vector3.new(0, 2, 0)
+                    
+                    for _, part in ipairs(parts) do
+                        ForceMovePart(part, target)
                     end
                     RunService.Heartbeat:Wait()
                 end
@@ -228,7 +207,7 @@ Tab:CreateToggle({
     end,
 })
 
--- Feature 2: Elite Part Orbit (The Fixed Version)
+-- ORBIT FEATURE
 Tab:CreateToggle({
     Name = "Elite Part Orbit",
     CurrentValue = false,
@@ -236,32 +215,27 @@ Tab:CreateToggle({
         _G.EliteOrbitEnabled = Value
         if Value then
             _G.EliteSwarmEnabled = false
-            _G.EliteLog("Orbit: Netless Mode Engaged", "Info")
+            _G.EliteLog("Orbit: Aggressive Physics Active", "Info")
             
             task.spawn(function()
-                local runtime = 0
+                local angle = 0
                 while _G.EliteOrbitEnabled do
-                    runtime = runtime + (0.02 * _G.EliteOrbitSpeed)
-                    local char = LP.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    angle = angle + (0.05 * _G.EliteOrbitSpeed)
+                    local parts, hrp = GetParts()
+                    local count = #parts
                     
-                    if hrp then
-                        local parts = GetNearbyParts(hrp)
-                        local count = #parts
+                    for i, part in ipairs(parts) do
+                        -- Evenly space out parts around the player
+                        local step = (math.pi * 2) / count
+                        local pAngle = angle + (i * step)
                         
-                        for i, part in ipairs(parts) do
-                            -- Math: Spread parts equally (360 degrees / part count)
-                            local spacing = (math.pi * 2) / count
-                            local angle = runtime + (i * spacing)
-                            
-                            local offset = Vector3.new(
-                                math.cos(angle) * _G.EliteOrbitRadius,
-                                _G.EliteOrbitHeight,
-                                math.sin(angle) * _G.EliteOrbitRadius
-                            )
-                            
-                            ClaimAndMove(part, hrp.Position + offset)
-                        end
+                        local target = hrp.Position + Vector3.new(
+                            math.cos(pAngle) * _G.EliteOrbitRadius,
+                            _G.EliteOrbitHeight,
+                            math.sin(pAngle) * _G.EliteOrbitRadius
+                        )
+                        
+                        ForceMovePart(part, target)
                     end
                     RunService.Heartbeat:Wait()
                 end
@@ -270,19 +244,19 @@ Tab:CreateToggle({
     end,
 })
 
--- Orbit Customization
+-- ORBIT CUSTOMIZATION
 Tab:CreateSlider({
     Name = "Orbit Radius",
     Range = {5, 100},
-    Increment = 2,
+    Increment = 5,
     Suffix = "Studs",
-    CurrentValue = 15,
+    CurrentValue = 20,
     Callback = function(Value) _G.EliteOrbitRadius = Value end,
 })
 
 Tab:CreateSlider({
     Name = "Orbit Height",
-    Range = {-20, 50},
+    Range = {-10, 50},
     Increment = 1,
     Suffix = "Studs",
     CurrentValue = 5,
@@ -291,9 +265,9 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
     Name = "Orbit Speed",
-    Range = {1, 20},
+    Range = {1, 30},
     Increment = 1,
     Suffix = "x",
-    CurrentValue = 3,
+    CurrentValue = 4,
     Callback = function(Value) _G.EliteOrbitSpeed = Value end,
 })
