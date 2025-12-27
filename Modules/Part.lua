@@ -333,6 +333,8 @@ Tab:CreateSlider({
     end,
 })
 
+
+
 -- Section: Elite Shapes (Ultra-Detail & Auto-Sizer Edition)
 Tab:CreateSection("Elite Shapes")
 
@@ -352,6 +354,10 @@ Tab:CreateDropdown({
 
 -- Ensure this variable exists before the toggle is created so the script doesn't error
 _G.EliteCurrentShape = _G.EliteCurrentShape or "Halo" 
+_G.EliteShapeScale = 1
+_G.EliteShapeX = 0
+_G.EliteShapeY = 0
+_G.EliteShapeZ = 0
 
 Tab:CreateToggle({
     Name = "Elite Shapes Toggle",
@@ -359,18 +365,11 @@ Tab:CreateToggle({
     Callback = function(Value)
         _G.EliteShapeEnabled = Value
         if Value then
-            -- Conflict Prevention
             _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
-                    -- Safety Check: Ensure the core functions exist
-                    if typeof(GetParts) ~= "function" or typeof(ForceMovePart) ~= "function" then 
-                        warn("Elite Hub: Core functions missing!") 
-                        break 
-                    end
-
                     local parts, myHrp = GetParts()
                     local targetHRP = _G.GetEliteTarget() or myHrp
                     
@@ -378,94 +377,81 @@ Tab:CreateToggle({
                         local tCF = targetHRP.CFrame
                         local count = #parts
                         
-                        -- Robust Sorting (Wrapped in pcall to prevent Tab-Crash)
+                        -- 1. AUTO-ADJUST FOR CHARACTER SIZE (Client Only)
+                        local autoScale = 1
+                        if not _G.EliteTargetEnabled then
+                            local hum = myHrp.Parent:FindFirstChild("Humanoid")
+                            if hum then autoScale = math.clamp(hum.HipHeight / 2, 0.5, 5) end
+                        end
+                        local totalScale = autoScale * _G.EliteShapeScale
+                        local masterOffset = CFrame.new(_G.EliteShapeX, _G.EliteShapeY, _G.EliteShapeZ)
+
+                        -- Sort biggest parts to the center/base for stability
                         pcall(function()
-                            table.sort(parts, function(a, b) 
-                                return a.Size.Magnitude > b.Size.Magnitude 
-                            end)
+                            table.sort(parts, function(a, b) return a.Size.Magnitude > b.Size.Magnitude end)
                         end)
 
                         for i, part in ipairs(parts) do
-                            -- Default target to HRP to prevent nil errors
                             local finalTarget = tCF.Position
-                            
                             local pSize = part.Size.Magnitude
                             local spacing = math.clamp(pSize * 0.4, 1.5, 10)
 
                             if _G.EliteCurrentShape == "Halo" then
                                 local ring = (i % 2 == 0) and 1 or 1.5
                                 local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
-                                local radius = (4 + (spacing * 0.5)) * ring
-                                finalTarget = (tCF * CFrame.new(math.cos(angle) * radius, 5 + ring, math.sin(angle) * radius)).Position
+                                local radius = (4 + (spacing * 0.5)) * ring * totalScale
+                                finalTarget = (tCF * masterOffset * CFrame.new(math.cos(angle) * radius, 5 * totalScale, math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- ULTRA-DETAIL ANGEL WINGS (Parametric Feathering)
+                                -- V8 ULTRA-DETAIL ANGEL WINGS
                                 local side = (i % 2 == 0) and 1 or -1
-                                local halfCount = count / 2
                                 local index = math.floor(i / 2)
-                                local progress = index / (halfCount > 0 and halfCount or 1) -- 0 to 1 along the wing
+                                local progress = index / (count/2)
                                 
-                                -- 1. The "Angelic" Arch: Uses a parabolic curve for the top of the wing
-                                -- x: spreads out, y: goes up then curves down, z: stays behind back
-                                local x = side * (2 + (progress * 8)) -- Wingspan length
-                                local y = (math.sin(progress * math.pi) * 4) + (progress * 2) -- The "Arch"
+                                -- The Angel Arch
+                                local x = side * (2 + (progress * 8)) * totalScale
+                                local y = ((math.sin(progress * math.pi) * 4) + (progress * 2)) * totalScale
                                 
-                                -- 2. Flap Animation: Tips flap much harder than the base
-                                local flapPower = progress * 4 -- Tip moves 4x more than the base
-                                local flap = math.sin(tick() * 5) * flapPower
+                                -- Tip-Heavy Flap Animation
+                                local flap = math.sin(tick() * 5) * (progress * 4) * totalScale
+                                local layerOffset = (i % 3) * 0.7 * totalScale
                                 
-                                -- 3. Triple-Layer Depth: Makes them look thick and 3D
-                                local layerOffset = (i % 3) * 0.7 -- Adds 3 rows of "feathers"
-                                
-                                finalTarget = (tCF * CFrame.new(
-                                    x, 
-                                    y + layerOffset, 
-                                    1.5 + (side * flap) + (layerOffset * 0.5)
-                                )).Position
+                                finalTarget = (tCF * masterOffset * CFrame.new(x, y + layerOffset, 1.5 + (side * flap))).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- ULTRA-DETAIL SPHERICAL DOME (Energy Forcefield)
-                                -- Uses Fibonacci Sphere mapping to place parts perfectly in a dome
-                                local goldenRatio = (1 + math.sqrt(5)) / 2
-                                local theta = 2 * math.pi * i / goldenRatio
-                                local phi = math.acos(1 - 2 * (i / count))
+                                -- VIKING ROUND SHIELD (🛡️)
+                                -- Uses Golden Angle distribution for a perfect circular disc
+                                local goldenAngle = math.pi * (3 - math.sqrt(5))
+                                local r = math.sqrt(i) * (spacing * 0.6) * totalScale
+                                local theta = i * goldenAngle
                                 
-                                -- Auto-Sizer Radius: Dome gets bigger if parts are bigger
-                                local radius = 6 + (spacing * 0.8)
+                                local x = math.cos(theta) * r
+                                local y = math.sin(theta) * r
                                 
-                                -- Calculate Sphere coordinates
-                                local x = math.cos(theta) * math.sin(phi) * radius
-                                local y = math.sin(theta) * math.sin(phi) * radius
-                                local z = math.abs(math.cos(phi) * radius) -- Only in front of player
+                                -- The "Boss" (Center Bulge): Parts closer to center push out further
+                                local bossRadius = (spacing * 2) * totalScale
+                                local zPush = 0
+                                if r < bossRadius then
+                                    zPush = math.cos((r / bossRadius) * (math.pi / 2)) * 2 * totalScale
+                                end
                                 
-                                -- Push it in front of the target
-                                finalTarget = (tCF * CFrame.new(x, y, -z - 2)).Position
+                                -- Positioned in front of the arm/torso
+                                finalTarget = (tCF * masterOffset * CFrame.new(x, y, -4 - zPush)).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
+                                -- JESUS CROSS (Thickened 3D)
                                 local vLimit = math.floor(count * 0.7)
-                                -- Thickness offsets
-                                local xDepth = (i % 2 == 0 and 1 or -1) * (pSize * 0.15)
-                                local yDepth = (i % 3 == 0 and 1 or -1) * (pSize * 0.15)
-
+                                local xD = (i % 2 == 0 and 1 or -1) * (pSize * 0.15)
+                                local yD = (i % 3 == 0 and 1 or -1) * (pSize * 0.15)
                                 if i <= vLimit then
-                                    local progress = i / vLimit
-                                    local totalHeight = vLimit * spacing * 0.5
-                                    local currentY = (progress * totalHeight) - (totalHeight * 0.3)
-                                    finalTarget = (tCF * CFrame.new(xDepth, currentY, 3 + (yDepth * 0.5))).Position
+                                    local p = (((i/vLimit) * 10) - 3) * totalScale
+                                    finalTarget = (tCF * masterOffset * CFrame.new(xD, p, 3 * totalScale)).Position
                                 else
                                     local barIndex = i - vLimit
-                                    local barTotal = count - vLimit
-                                    -- Safety check for barTotal to prevent Divide by Zero
-                                    local progress = (barTotal > 0) and (barIndex / barTotal - 0.5) or 0
-                                    local totalWidth = barTotal * spacing * 0.6
-                                    local verticalHeight = (vLimit * spacing * 0.5)
-                                    local barY = (verticalHeight * 0.75) - (verticalHeight * 0.3)
-                                    
-                                    finalTarget = (tCF * CFrame.new(progress * totalWidth, barY + yDepth, 3 + (xDepth * 0.5))).Position
+                                    local p = (((barIndex/(count-vLimit)) * 7) - 3.5) * totalScale
+                                    finalTarget = (tCF * masterOffset * CFrame.new(p, 4.5 * totalScale, 3 * totalScale)).Position
                                 end
                             end
-                            
-                            -- Call physics engine
                             ForceMovePart(part, finalTarget)
                         end
                     end
@@ -478,6 +464,53 @@ Tab:CreateToggle({
         end
     end,
 })
+-- Section: Customize Shapes
+Tab:CreateSection("Customize Shapes")
+
+Tab:CreateSlider({
+    Name = "Shape Scale (Size)",
+    Range = {0.1, 5},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(Value)
+        _G.EliteShapeScale = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Shape Offset X (Left/Right)",
+    Range = {-50, 50},
+    Increment = 1,
+    Suffix = "Studs",
+    CurrentValue = 0,
+    Callback = function(Value)
+        _G.EliteShapeX = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Shape Offset Y (Up/Down)",
+    Range = {-50, 50},
+    Increment = 1,
+    Suffix = "Studs",
+    CurrentValue = 0,
+    Callback = function(Value)
+        _G.EliteShapeY = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Shape Offset Z (Forward/Back)",
+    Range = {-50, 50},
+    Increment = 1,
+    Suffix = "Studs",
+    CurrentValue = 0,
+    Callback = function(Value)
+        _G.EliteShapeZ = Value
+    end,
+})
+
 -- Section: Elite Assassination
 Tab:CreateSection("Elite Assassination")
 
