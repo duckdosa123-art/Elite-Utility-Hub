@@ -333,6 +333,73 @@ Tab:CreateSlider({
     end,
 })
 
+-- Section: Elite Shapes
+Tab:CreateSection("Elite Shapes")
+
+_G.EliteShapeEnabled = false
+_G.EliteCurrentShape = "None"
+
+local ShapeDropdown = Tab:CreateDropdown({
+    Name = "Select Elite Shape",
+    Options = {"None", "Halo", "Wings", "Shield", "Cross"},
+    CurrentOption = {"None"},
+    MultipleOptions = false,
+    Callback = function(Option)
+        _G.EliteCurrentShape = Option[1]
+        if Option[1] ~= "None" then
+            _G.EliteSwarmEnabled = false
+            _G.EliteOrbitEnabled = false
+            _G.EliteLog("Shape Set To: " .. Option[1], "Info")
+        end
+    end,
+})
+-- Updated Shape Logic Engine (Supports Targeting)
+task.spawn(function()
+    while true do
+        if _G.EliteCurrentShape ~= "None" then
+            local parts, myHrp = GetParts()
+            
+            -- THE FIX: Check if we are targeting someone, otherwise use ourselves
+            local targetHRP = _G.GetEliteTarget() or myHrp
+            
+            local count = #parts
+            if targetHRP and targetHRP.Parent and count > 0 then
+                for i, part in ipairs(parts) do
+                    -- We use CFrame for Wings/Shield/Cross so they rotate with the target
+                    local targetPos = targetHRP.Position
+                    local targetCF = targetHRP.CFrame
+                    
+                    if _G.EliteCurrentShape == "Halo" then
+                        local speed = tick() * 2
+                        local angle = (i * (math.pi * 2 / count)) + speed
+                        targetPos = targetPos + Vector3.new(math.cos(angle) * 3, 4, math.sin(angle) * 3)
+                        
+                    elseif _G.EliteCurrentShape == "Wings" then
+                        local side = (i % 2 == 0) and 1 or -1
+                        local flap = math.sin(tick() * 4) * 2
+                        targetPos = (targetCF * Vector3.new(side * (2 + (i*0.2)), 2 + (i*0.1), 1 + (side * flap))).Position
+                        
+                    elseif _G.EliteCurrentShape == "Shield" then
+                        local row = i % 5
+                        local col = math.floor(i / 5)
+                        targetPos = (targetCF * Vector3.new(row - 2, col - 1, -4)).Position
+                        
+                    elseif _G.EliteCurrentShape == "Cross" then
+                        if i % 2 == 0 then
+                            targetPos = (targetCF * Vector3.new(0, (i*0.5) - 2, 2)).Position
+                        else
+                            targetPos = (targetCF * Vector3.new((i*0.5) - 2, 2, 2)).Position
+                        end
+                    end
+                    
+                    ForceMovePart(part, targetPos)
+                end
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
+end)
+
 -- Section: Elite Assassination
 Tab:CreateSection("Elite Assassination")
 
