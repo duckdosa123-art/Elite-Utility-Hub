@@ -105,7 +105,7 @@ Tab:CreateToggle({
    end,
 })
 
-Tab:CreateSection("PartManipulate")
+Tab:CreateSection("Part Manipulate")
 
 -- Part.lua: Elite Part Control (Anti-Void Edition)
 local RunService = game:GetService("RunService")
@@ -140,7 +140,7 @@ local function ForceMovePart(part, targetPos)
     -- 3. ANTI-GRAVITY VELOCITY
     -- We multiply distance by a high factor (35) and ADD a constant Y boost (25)
     -- This creates a "magnetic" pull that gravity cannot beat.
-    local velocity = direction * 35 
+    local velocity = direction * (_G.ElitePartSpeed or 35) 
     
     -- Apply the velocity directly to the Assembly
     part.AssemblyLinearVelocity = velocity + Vector3.new(0, 25, 0) 
@@ -258,5 +258,64 @@ Tab:CreateToggle({
             -- Ensure cleanup runs immediately on toggle off
             CleanupParts()
         end
+    end,
+})
+
+-- Section: Customize Parts
+Tab:CreateSection("Customize Control")
+
+Tab:CreateSlider({
+    Name = "Part Control Range",
+    Range = {50, 2000},
+    Increment = 50,
+    Suffix = "Studs",
+    CurrentValue = 150,
+    Callback = function(Value)
+        _G.ElitePartRange = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Part Move Force (Speed)",
+    Range = {10, 200},
+    Increment = 5,
+    Suffix = "Power",
+    CurrentValue = 35,
+    Callback = function(Value)
+        -- This directly controls the '35' multiplier in your ForceMovePart logic
+        _G.ElitePartSpeed = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Orbit Radius",
+    Range = {5, 150},
+    Increment = 5,
+    Suffix = "Studs",
+    CurrentValue = 20,
+    Callback = function(Value)
+        _G.EliteOrbitRadius = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Orbit Height",
+    Range = {-20, 100},
+    Increment = 1,
+    Suffix = "Studs",
+    CurrentValue = 5,
+    Callback = function(Value)
+        _G.EliteOrbitHeight = Value
+    end,
+})
+
+Tab:CreateSlider({
+    Name = "Orbit Speed",
+    Range = {1, 50},
+    Increment = 1,
+    Suffix = "x",
+    CurrentValue = 4,
+    Callback = function(Value)
+        _G.EliteOrbitSpeed = Value
     end,
 })
