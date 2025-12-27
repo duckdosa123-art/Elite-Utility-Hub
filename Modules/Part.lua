@@ -340,6 +340,9 @@ Tab:CreateSection("Elite Shapes")
 
 _G.EliteShapeEnabled = false
 _G.EliteCurrentShape = "Halo"
+local PartRegistry = {} -- Maps [Part Instance] to [Static Index]
+local NextAvailableSlot = 1
+
 
 Tab:CreateDropdown({
     Name = "Select Elite Shape",
@@ -367,17 +370,19 @@ Tab:CreateToggle({
         if Value then
             _G.EliteSwarmEnabled = false
             _G.EliteOrbitEnabled = false
+            _G.EliteLog("Beast Shapes: Registry Active", "Info")
             
             task.spawn(function()
                 while _G.EliteShapeEnabled do
                     local parts, myHrp = GetParts()
                     local targetHRP = _G.GetEliteTarget() or myHrp
                     
-                    if targetHRP and targetHRP.Parent and #parts > 0 then
+                    if targetHRP and targetHRP.Parent then
                         local tCF = targetHRP.CFrame
-                        local count = #parts
+                        -- Use a fixed count so the shape size never "jitters"
+                        local virtualCount = 100 
                         
-                        -- 1. AUTO-ADJUST FOR CHARACTER SIZE (Client Only)
+                        -- 1. Auto-Scale for Character
                         local autoScale = 1
                         if not _G.EliteTargetEnabled then
                             local hum = myHrp.Parent:FindFirstChild("Humanoid")
@@ -386,70 +391,61 @@ Tab:CreateToggle({
                         local totalScale = autoScale * _G.EliteShapeScale
                         local masterOffset = CFrame.new(_G.EliteShapeX, _G.EliteShapeY, _G.EliteShapeZ)
 
-                        -- Sort biggest parts to the center/base for stability
-                        pcall(function()
-                            table.sort(parts, function(a, b) return a.Size.Magnitude > b.Size.Magnitude end)
-                        end)
+                        -- 2. Cleanup Registry (Remove lost/anchored parts)
+                        for part, _ in pairs(PartRegistry) do
+                            if not part.Parent or part.Anchored then
+                                PartRegistry[part] = nil
+                            end
+                        end
 
-                        for i, part in ipairs(parts) do
+                        for _, part in ipairs(parts) do
+                            -- 3. ASSIGN PERMANENT SLOT (Prevents Shuffling)
+                            if not PartRegistry[part] then
+                                PartRegistry[part] = NextAvailableSlot
+                                NextAvailableSlot = (NextAvailableSlot % virtualCount) + 1
+                            end
+                            
+                            local i = PartRegistry[part] -- The Static Index
                             local finalTarget = tCF.Position
                             local pSize = part.Size.Magnitude
                             local spacing = math.clamp(pSize * 0.4, 1.5, 10)
 
+                            -- 4. BEAST MATH (Uses 'i' and 'virtualCount' for stability)
                             if _G.EliteCurrentShape == "Halo" then
                                 local ring = (i % 2 == 0) and 1 or 1.5
-                                local angle = (i * (math.pi * 2 / count)) + (tick() * 3)
+                                local angle = (i * (math.pi * 2 / virtualCount)) + (tick() * 3)
                                 local radius = (4 + (spacing * 0.5)) * ring * totalScale
                                 finalTarget = (tCF * masterOffset * CFrame.new(math.cos(angle) * radius, 5 * totalScale, math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
-                                -- V8 ULTRA-DETAIL ANGEL WINGS
                                 local side = (i % 2 == 0) and 1 or -1
-                                local index = math.floor(i / 2)
-                                local progress = index / (count/2)
-                                
-                                -- The Angel Arch
-                                local x = side * (2 + (progress * 8)) * totalScale
-                                local y = ((math.sin(progress * math.pi) * 4) + (progress * 2)) * totalScale
-                                
-                                -- Tip-Heavy Flap Animation
-                                local flap = math.sin(tick() * 5) * (progress * 4) * totalScale
-                                local layerOffset = (i % 3) * 0.7 * totalScale
-                                
-                                finalTarget = (tCF * masterOffset * CFrame.new(x, y + layerOffset, 1.5 + (side * flap))).Position
+                                local progress = i / virtualCount
+                                local x = side * (2 + (progress * 12)) * totalScale
+                                local y = ((math.sin(progress * math.pi) * 6) + (progress * 2)) * totalScale
+                                local flap = math.sin(tick() * 5) * (progress * 5) * totalScale
+                                local layer = (i % 3) * 0.8 * totalScale
+                                finalTarget = (tCF * masterOffset * CFrame.new(x, y + layer, 1.5 + (side * flap))).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- VIKING ROUND SHIELD (🛡️)
-                                -- Uses Golden Angle distribution for a perfect circular disc
+                                -- Viking Disc Math
                                 local goldenAngle = math.pi * (3 - math.sqrt(5))
-                                local r = math.sqrt(i) * (spacing * 0.6) * totalScale
+                                local r = math.sqrt(i) * (spacing * 0.8) * totalScale
                                 local theta = i * goldenAngle
-                                
                                 local x = math.cos(theta) * r
                                 local y = math.sin(theta) * r
-                                
-                                -- The "Boss" (Center Bulge): Parts closer to center push out further
-                                local bossRadius = (spacing * 2) * totalScale
-                                local zPush = 0
-                                if r < bossRadius then
-                                    zPush = math.cos((r / bossRadius) * (math.pi / 2)) * 2 * totalScale
-                                end
-                                
-                                -- Positioned in front of the arm/torso
-                                finalTarget = (tCF * masterOffset * CFrame.new(x, y, -4 - zPush)).Position
+                                local zPush = (r < (spacing * 2)) and (math.cos(r/(spacing*2) * (math.pi/2)) * 2) or 0
+                                finalTarget = (tCF * masterOffset * CFrame.new(x, y, -4 - (zPush * totalScale))).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
-                                -- JESUS CROSS (Thickened 3D)
-                                local vLimit = math.floor(count * 0.7)
+                                local vLimit = math.floor(virtualCount * 0.7)
                                 local xD = (i % 2 == 0 and 1 or -1) * (pSize * 0.15)
-                                local yD = (i % 3 == 0 and 1 or -1) * (pSize * 0.15)
                                 if i <= vLimit then
-                                    local p = (((i/vLimit) * 10) - 3) * totalScale
+                                    local p = (((i/vLimit) * 12) - 4) * totalScale
                                     finalTarget = (tCF * masterOffset * CFrame.new(xD, p, 3 * totalScale)).Position
                                 else
                                     local barIndex = i - vLimit
-                                    local p = (((barIndex/(count-vLimit)) * 7) - 3.5) * totalScale
-                                    finalTarget = (tCF * masterOffset * CFrame.new(p, 4.5 * totalScale, 3 * totalScale)).Position
+                                    local p = (((barIndex/(virtualCount-vLimit)) * 8) - 4) * totalScale
+                                    finalTarget = (tCF * masterOffset * CFrame.new(p, 5 * totalScale, 3 * totalScale)).Position
                                 end
                             end
                             ForceMovePart(part, finalTarget)
@@ -458,9 +454,13 @@ Tab:CreateToggle({
                     RunService.Heartbeat:Wait()
                 end
                 CleanupParts()
+                PartRegistry = {} -- Reset on toggle off
+                NextAvailableSlot = 1
             end)
         else
             CleanupParts()
+            PartRegistry = {}
+            NextAvailableSlot = 1
         end
     end,
 })
