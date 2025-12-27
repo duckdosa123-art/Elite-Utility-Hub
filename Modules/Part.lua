@@ -337,69 +337,90 @@ Tab:CreateSlider({
 Tab:CreateSection("Elite Shapes")
 
 _G.EliteShapeEnabled = false
-_G.EliteCurrentShape = "None"
+_G.EliteCurrentShape = "Halo" -- Default selection
 
-local ShapeDropdown = Tab:CreateDropdown({
+-- 1. Shape Selection Dropdown
+Tab:CreateDropdown({
     Name = "Select Elite Shape",
-    Options = {"None", "Halo", "Wings", "Shield", "Cross"},
-    CurrentOption = {"None"},
+    Options = {"Halo", "Wings", "Shield", "Cross"},
+    CurrentOption = {"Halo"},
     MultipleOptions = false,
     Callback = function(Option)
         _G.EliteCurrentShape = Option[1]
-        if Option[1] ~= "None" then
-            _G.EliteSwarmEnabled = false
+        _G.EliteLog("Shape Set To: " .. Option[1], "Info")
+    end,
+})
+
+-- 2. Master Toggle for Shapes
+Tab:CreateToggle({
+    Name = "Elite Shapes: ENABLED",
+    CurrentValue = false,
+    Callback = function(Value)
+        _G.EliteShapeEnabled = Value
+        
+        if Value then
+            _G.EliteSwarmEnabled = false -- Conflict Prevention
             _G.EliteOrbitEnabled = false
-            _G.EliteLog("Shape Set To: " .. Option[1], "Info")
+            _G.EliteLog("Elite Shapes Activated", "Info")
+            
+            task.spawn(function()
+                while _G.EliteShapeEnabled do
+                    local parts, myHrp = GetParts()
+                    
+                    -- TARGETING LOGIC: Uses victim if target toggle is ON, else uses you
+                    local targetHRP = _G.GetEliteTarget() or myHrp
+                    
+                    if targetHRP and targetHRP.Parent and #parts > 0 then
+                        local count = #parts
+                        local targetCF = targetHRP.CFrame
+                        local targetPos = targetHRP.Position
+                        
+                        for i, part in ipairs(parts) do
+                            local finalTarget = targetPos
+                            
+                            if _G.EliteCurrentShape == "Halo" then
+                                -- Rotating Halo: Above head
+                                local speed = tick() * 3
+                                local angle = (i * (math.pi * 2 / count)) + speed
+                                finalTarget = targetPos + Vector3.new(math.cos(angle) * 4, 5, math.sin(angle) * 4)
+                                
+                            elseif _G.EliteCurrentShape == "Wings" then
+                                -- Animated Wings: Flapping behind back
+                                local side = (i % 2 == 0) and 1 or -1
+                                local flap = math.sin(tick() * 5) * 2.5
+                                finalTarget = (targetCF * Vector3.new(side * (2 + (i * 0.15)), 2 + (i * 0.1), 1.5 + (side * flap))).Position
+                                
+                            elseif _G.EliteCurrentShape == "Shield" then
+                                -- Defensive Shield: Wall in front of target
+                                local row = i % 5
+                                local col = math.floor(i / 5)
+                                finalTarget = (targetCF * Vector3.new(row - 2, col - 1, -5)).Position
+                                
+                            elseif _G.EliteCurrentShape == "Cross" then
+                                -- Holy Cross: Geometric shape on back
+                                if i % 2 == 0 then
+                                    finalTarget = (targetCF * Vector3.new(0, (i * 0.4) - 2, 2.5)).Position
+                                else
+                                    finalTarget = (targetCF * Vector3.new((i * 0.4) - 2, 2.5, 2.5)).Position
+                                end
+                            end
+                            
+                            -- Use the high-torque "Beast" physics engine
+                            ForceMovePart(part, finalTarget)
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+                
+                -- Cleanup: Drop parts when toggle is turned off
+                CleanupParts()
+            end)
+        else
+            _G.EliteLog("Elite Shapes Deactivated", "Info")
+            CleanupParts()
         end
     end,
 })
--- Updated Shape Logic Engine (Supports Targeting)
-task.spawn(function()
-    while true do
-        if _G.EliteCurrentShape ~= "None" then
-            local parts, myHrp = GetParts()
-            
-            -- THE FIX: Check if we are targeting someone, otherwise use ourselves
-            local targetHRP = _G.GetEliteTarget() or myHrp
-            
-            local count = #parts
-            if targetHRP and targetHRP.Parent and count > 0 then
-                for i, part in ipairs(parts) do
-                    -- We use CFrame for Wings/Shield/Cross so they rotate with the target
-                    local targetPos = targetHRP.Position
-                    local targetCF = targetHRP.CFrame
-                    
-                    if _G.EliteCurrentShape == "Halo" then
-                        local speed = tick() * 2
-                        local angle = (i * (math.pi * 2 / count)) + speed
-                        targetPos = targetPos + Vector3.new(math.cos(angle) * 3, 4, math.sin(angle) * 3)
-                        
-                    elseif _G.EliteCurrentShape == "Wings" then
-                        local side = (i % 2 == 0) and 1 or -1
-                        local flap = math.sin(tick() * 4) * 2
-                        targetPos = (targetCF * Vector3.new(side * (2 + (i*0.2)), 2 + (i*0.1), 1 + (side * flap))).Position
-                        
-                    elseif _G.EliteCurrentShape == "Shield" then
-                        local row = i % 5
-                        local col = math.floor(i / 5)
-                        targetPos = (targetCF * Vector3.new(row - 2, col - 1, -4)).Position
-                        
-                    elseif _G.EliteCurrentShape == "Cross" then
-                        if i % 2 == 0 then
-                            targetPos = (targetCF * Vector3.new(0, (i*0.5) - 2, 2)).Position
-                        else
-                            targetPos = (targetCF * Vector3.new((i*0.5) - 2, 2, 2)).Position
-                        end
-                    end
-                    
-                    ForceMovePart(part, targetPos)
-                end
-            end
-        end
-        RunService.Heartbeat:Wait()
-    end
-end)
-
 -- Section: Elite Assassination
 Tab:CreateSection("Elite Assassination")
 
