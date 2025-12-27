@@ -418,23 +418,107 @@ Tab:CreateToggle({
                                 finalTarget = (tCF * masterOffset * CFrame.new(math.cos(angle) * radius, 5 * totalScale, math.sin(angle) * radius)).Position
                                 
                             elseif _G.EliteCurrentShape == "Wings" then
+                                -- V9 "SKELETAL ARCHITECTURE" ANGEL WINGS (🪽)
                                 local side = (i % 2 == 0) and 1 or -1
-                                local progress = i / virtualCount
-                                local x = side * (2 + (progress * 12)) * totalScale
-                                local y = ((math.sin(progress * math.pi) * 6) + (progress * 2)) * totalScale
-                                local flap = math.sin(tick() * 5) * (progress * 5) * totalScale
-                                local layer = (i % 3) * 0.8 * totalScale
-                                finalTarget = (tCF * masterOffset * CFrame.new(x, y + layer, 1.5 + (side * flap))).Position
+                                local wingIndex = math.floor(i / 2)
+                                local halfCount = virtualCount / 2
+                                local progress = wingIndex / halfCount -- 0 (Spine) to 1 (Tip)
+
+                                -- 1. THE SKELETON (Lazy-Z / S-Curve Frame)
+                                -- Wrist Peak: The highest point of the wing
+                                local wristX = 4 * totalScale
+                                local wristY = 6 * totalScale
+                                local tipX = 12 * totalScale
+                                
+                                local baseX, baseY
+                                if progress < 0.4 then
+                                    -- Spine to Wrist (The sharp muscular "up-slope")
+                                    local p = progress / 0.4
+                                    baseX = side * (1.5 + (wristX * p))
+                                    baseY = math.sin(p * (math.pi/2)) * wristY
+                                else
+                                    -- Wrist to Outer Tip (The sweeping "down-slope")
+                                    local p = (progress - 0.4) / 0.6
+                                    baseX = side * (1.5 + wristX + ((tipX - wristX) * p))
+                                    baseY = wristY - (math.sin(p * (math.pi/2)) * (wristY * 1.5))
+                                end
+
+                                -- 2. TIERED PERIMETER (Feather Zones)
+                                -- We split parts into 3 layers based on their ID
+                                local tier = i % 3 
+                                local flap = math.sin(tick() * 4) * (progress * 5) * totalScale
+                                
+                                local xOffset, yOffset, zOffset = 0, 0, 0
+
+                                if tier == 0 then 
+                                    -- THE COVERTS (Short, Rounded, Dense top layer)
+                                    xOffset = 0
+                                    yOffset = 1 * totalScale
+                                    zOffset = 0.5 * totalScale
+                                elseif tier == 1 then 
+                                    -- THE SECONDARIES (Broad middle fan)
+                                    xOffset = side * -1 * totalScale
+                                    yOffset = -1.5 * totalScale
+                                    zOffset = 1 * totalScale
+                                else 
+                                    -- THE PRIMARIES (Long, Fringed, Tapered bottom/edges)
+                                    -- These create the "fingered" silhouette
+                                    xOffset = side * -0.5 * totalScale
+                                    yOffset = -4 * totalScale -- Longer downward reach
+                                    zOffset = 1.5 * totalScale
+                                end
+
+                                -- Final Assembly with Flap Animation
+                                finalTarget = (tCF * masterOffset * CFrame.new(
+                                    baseX + xOffset,
+                                    baseY + yOffset + 2, -- Raised to shoulder height
+                                    1.5 + (side * flap) + zOffset
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Shield" then
-                                -- Viking Disc Math
-                                local goldenAngle = math.pi * (3 - math.sqrt(5))
-                                local r = math.sqrt(i) * (spacing * 0.8) * totalScale
-                                local theta = i * goldenAngle
-                                local x = math.cos(theta) * r
-                                local y = math.sin(theta) * r
-                                local zPush = (r < (spacing * 2)) and (math.cos(r/(spacing*2) * (math.pi/2)) * 2) or 0
-                                finalTarget = (tCF * masterOffset * CFrame.new(x, y, -4 - (zPush * totalScale))).Position
+                                -- ELITE HEATER SHIELD (🛡️)
+                                -- Logic: 10x10 Grid mapped to a Tapered Silhouette
+                                local sideCount = math.sqrt(virtualCount) -- 10
+                                local r = i % sideCount
+                                local c = math.floor(i / sideCount)
+
+                                -- Normalize coordinates to -0.5 to 0.5
+                                local nx = (r / (sideCount - 1)) - 0.5
+                                local ny = (c / (sideCount - 1)) - 0.5 
+
+                                -- Dimensions based on Auto-Sizer and Sliders
+                                local width = 7 * spacing * totalScale
+                                local height = 9 * spacing * totalScale
+
+                                local x = nx * width
+                                local y = ny * height
+
+                                -- 1. THE FLANKS (Convex Tapering Logic)
+                                -- ny ranges from -0.5 (bottom point) to 0.5 (top edge)
+                                if ny < 0.1 then -- Start the taper from just above the middle
+                                    -- Calculate how far we are from the bottom (0 to 1)
+                                    local taperProgress = math.clamp((ny + 0.5) / 0.6, 0, 1)
+                                    -- Power of 0.6 creates the "Sweeping Convex" curve instead of a straight V
+                                    x = x * math.pow(taperProgress, 0.6)
+                                end
+
+                                -- 2. THE CHIEF (Arched Top Edge)
+                                -- Adds a slight bow to the top parts
+                                if ny > 0.4 then
+                                    local bow = math.cos(nx * math.pi) * (1 * totalScale)
+                                    y = y + bow
+                                end
+
+                                -- 3. BEAST 3D CURVE
+                                -- Makes the shield wrap around the player/victim slightly
+                                local zCurve = math.cos(nx * math.pi) * (1.5 * totalScale)
+
+                                -- Final coordinate assembly
+                                finalTarget = (tCF * masterOffset * CFrame.new(
+                                    x, 
+                                    y + 1, -- Center it slightly higher on the torso
+                                    -5 - zCurve -- Push it forward and apply the 3D wrap
+                                )).Position
                                 
                             elseif _G.EliteCurrentShape == "Cross" then
                                 local vLimit = math.floor(virtualCount * 0.7)
