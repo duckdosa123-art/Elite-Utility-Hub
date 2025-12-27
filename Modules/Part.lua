@@ -351,7 +351,7 @@ Tab:CreateDropdown({
 })
 
 Tab:CreateToggle({
-    Name = "Elite Shapes: ENABLED",
+    Name = "Elite Shapes Toggle",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteShapeEnabled = Value
