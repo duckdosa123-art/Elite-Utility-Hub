@@ -105,65 +105,74 @@ Tab:CreateToggle({
    end,
 })
 
--- Part.lua: Optimized Part Control (Network Ownership Focus)
+Tab:CreateSection("PartManipulate")
+
+-- Part.lua: Elite Part Control (Sticky Physics Edition)
 local RunService = game:GetService("RunService")
 local LP = _G.LP
 
--- Shared Variables
-_G.ElitePartSpeed = 50
-_G.ElitePartRange = 75
+-- Shared Configuration
+_G.ElitePartSpeed = 100 -- Higher default for "Elite" feel
+_G.ElitePartRange = 100
 _G.EliteSwarmEnabled = false
 _G.EliteOrbitEnabled = false
 
--- Orbit Variables
+-- Orbit Specifics
 _G.EliteOrbitRadius = 15
-_G.EliteOrbitHeight = 3
-_G.EliteOrbitSpeed = 2
+_G.EliteOrbitHeight = 4
+_G.EliteOrbitSpeed = 3
 
--- Optimized Function to find and "Claim" parts
-local function GetClaimedParts()
-    local Character = LP.Character
-    local HRP = Character and Character:FindFirstChild("HumanoidRootPart")
-    if not HRP then return {} end
+-- Optimized "Sticky" Physics Core
+local function ApplyElitePhysics(part, targetPos)
+    local diff = targetPos - part.Position
+    local dist = diff.Magnitude
+    
+    -- Ghost Logic: Anti-Lag, Anti-Camera, Anti-Damage
+    part.CanCollide = false
+    part.CanQuery = false 
+    part.CanTouch = false
+    
+    -- Sticky Logic: The closer it is, the more it stabilizes. 
+    -- The further it is, the faster it lunges.
+    -- Multiplier of 25 ensures it fights gravity and stays in the air.
+    local velMult = 25 
+    part.AssemblyLinearVelocity = diff * velMult
+    
+    -- Anti-Void: If part is moving too slow vertically, boost it
+    if part.AssemblyLinearVelocity.Y < 5 then
+        part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0, 10, 0)
+    end
 
+    -- Stability
+    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end
+
+-- Lag-Free Scanner
+local function GetNearbyParts(hrp)
     local Params = OverlapParams.new()
     Params.FilterType = Enum.RaycastFilterType.Exclude
-    Params.FilterDescendantsInstances = {Character}
-
-    -- GetPartBoundsInRadius is 100x faster than workspace:GetDescendants()
-    local NearbyParts = workspace:GetPartBoundsInRadius(HRP.Position, _G.ElitePartRange, Params)
-    local ValidParts = {}
-
-    for _, part in ipairs(NearbyParts) do
-        if part:IsA("BasePart") and not part.Anchored then
-            -- Avoid player limbs (High performance check)
-            if not part:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid") then
-                table.insert(ValidParts, part)
-                
-                -- NETWORK OWNERSHIP CLAIM: 
-                -- Setting these locally on unanchored parts forces the server 
-                -- to hand physics control to YOU if no one else is closer.
-                part.CanCollide = false
-                part.CanQuery = false -- Camera won't hit them
-                part.CanTouch = false -- Immune to "Natural Disaster" damage
-                
-                -- Stabilization
-                if part.AssemblyAngularVelocity.Magnitude > 0 then
-                    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                end
+    Params.FilterDescendantsInstances = {LP.Character}
+    
+    local rawParts = workspace:GetPartBoundsInRadius(hrp.Position, _G.ElitePartRange, Params)
+    local filtered = {}
+    for _, p in ipairs(rawParts) do
+        if p:IsA("BasePart") and not p.Anchored then
+            local model = p:FindFirstAncestorOfClass("Model")
+            if not (model and model:FindFirstChild("Humanoid")) then
+                table.insert(filtered, p)
             end
         end
     end
-    return ValidParts, HRP
+    return filtered
 end
 
--- UI Setup
+-- UI
 Tab:CreateSlider({
     Name = "Part Speed",
-    Range = {10, 300},
-    Increment = 5,
-    Suffix = "Vel",
-    CurrentValue = 50,
+    Range = {50, 500},
+    Increment = 10,
+    Suffix = "Force",
+    CurrentValue = 100,
     Callback = function(Value) _G.ElitePartSpeed = Value end,
 })
 
@@ -172,28 +181,29 @@ Tab:CreateSlider({
     Range = {20, 500},
     Increment = 10,
     Suffix = "Studs",
-    CurrentValue = 75,
+    CurrentValue = 100,
     Callback = function(Value) _G.ElitePartRange = Value end,
 })
 
--- FEATURE 1: SWARM
+-- FEATURE: SWARM
 Tab:CreateToggle({
     Name = "Elite Prop Swarm",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteSwarmEnabled = Value
-        if Value then 
-            _G.EliteOrbitEnabled = false 
-            _G.EliteLog("Swarm Mode: Active", "Info")
-            
+        if Value then
+            _G.EliteOrbitEnabled = false
+            _G.EliteLog("Swarm: Sticky Mode Active", "Info")
             task.spawn(function()
                 while _G.EliteSwarmEnabled do
-                    local parts, hrp = GetClaimedParts()
-                    local targetPos = hrp.Position + Vector3.new(0, 7, 0)
-
-                    for _, part in ipairs(parts) do
-                        local diff = targetPos - part.Position
-                        part.AssemblyLinearVelocity = diff.Unit * math.min(diff.Magnitude * 15, _G.ElitePartSpeed)
+                    local char = LP.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local parts = GetNearbyParts(hrp)
+                        local target = hrp.Position + Vector3.new(0, 8, 0) -- Hover above head
+                        for _, part in ipairs(parts) do
+                            ApplyElitePhysics(part, target)
+                        end
                     end
                     RunService.Heartbeat:Wait()
                 end
@@ -202,34 +212,33 @@ Tab:CreateToggle({
     end,
 })
 
--- FEATURE 2: ORBIT (Spread Out Logic)
+-- FEATURE: ORBIT (Same "Sticky" logic as Swarm)
 Tab:CreateToggle({
     Name = "Elite Part Orbit",
     CurrentValue = false,
     Callback = function(Value)
         _G.EliteOrbitEnabled = Value
-        if Value then 
-            _G.EliteSwarmEnabled = false 
-            _G.EliteLog("Orbit Mode: Active", "Info")
-            
+        if Value then
+            _G.EliteSwarmEnabled = false
+            _G.EliteLog("Orbit: Sticky Mode Active", "Info")
             task.spawn(function()
-                local rot = 0
+                local angle = 0
                 while _G.EliteOrbitEnabled do
-                    rot = rot + (0.02 * _G.EliteOrbitSpeed)
-                    local parts, hrp = GetClaimedParts()
-                    local total = #parts
-
-                    for i, part in ipairs(parts) do
-                        -- Mathematics for spreading parts evenly in a circle
-                        local angle = rot + (i * (math.pi * 2 / total))
-                        local targetPos = hrp.Position + Vector3.new(
-                            math.cos(angle) * _G.EliteOrbitRadius,
-                            _G.EliteOrbitHeight,
-                            math.sin(angle) * _G.EliteOrbitRadius
-                        )
-
-                        local diff = targetPos - part.Position
-                        part.AssemblyLinearVelocity = diff.Unit * math.min(diff.Magnitude * 20, _G.ElitePartSpeed)
+                    angle = angle + (0.02 * _G.EliteOrbitSpeed)
+                    local char = LP.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local parts = GetNearbyParts(hrp)
+                        for i, part in ipairs(parts) do
+                            -- Index-based distribution for clean circle
+                            local pAngle = angle + (i * (math.pi * 2 / #parts))
+                            local target = hrp.Position + Vector3.new(
+                                math.cos(pAngle) * _G.EliteOrbitRadius,
+                                _G.EliteOrbitHeight,
+                                math.sin(pAngle) * _G.EliteOrbitRadius
+                            )
+                            ApplyElitePhysics(part, target)
+                        end
                     end
                     RunService.Heartbeat:Wait()
                 end
@@ -238,11 +247,11 @@ Tab:CreateToggle({
     end,
 })
 
--- Orbit Customization
+-- ORBIT CUSTOMIZATION
 Tab:CreateSlider({
     Name = "Orbit Radius",
-    Range = {5, 50},
-    Increment = 1,
+    Range = {5, 60},
+    Increment = 2,
     Suffix = "Studs",
     CurrentValue = 15,
     Callback = function(Value) _G.EliteOrbitRadius = Value end,
@@ -250,10 +259,10 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
     Name = "Orbit Height",
-    Range = {-10, 20},
+    Range = {-10, 30},
     Increment = 1,
     Suffix = "Studs",
-    CurrentValue = 3,
+    CurrentValue = 4,
     Callback = function(Value) _G.EliteOrbitHeight = Value end,
 })
 
@@ -261,7 +270,7 @@ Tab:CreateSlider({
     Name = "Orbit Speed",
     Range = {1, 20},
     Increment = 1,
-    Suffix = "Mult",
-    CurrentValue = 2,
+    Suffix = "Speed",
+    CurrentValue = 3,
     Callback = function(Value) _G.EliteOrbitSpeed = Value end,
 })
