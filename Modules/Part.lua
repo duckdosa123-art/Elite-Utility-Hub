@@ -171,17 +171,30 @@ local function GetParts()
     return found, hrp
 end
 
--- UI ELEMENTS
-Tab:CreateSlider({
-    Name = "Control Part Range",
-    Range = {50, 1000},
-    Increment = 50,
-    Suffix = "Studs",
-    CurrentValue = 150,
-    Callback = function(Value) _G.ElitePartRange = Value end,
-})
+local function CleanupParts()
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    -- Scan one last time to reset everything in range
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v.Anchored then
+            local dist = (v.Position - hrp.Position).Magnitude
+            if dist <= (_G.ElitePartRange + 50) then -- Slightly larger range for safety
+                -- Reset Physics
+                v.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                v.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                
+                -- Restore Collisions/Interaction
+                v.CanCollide = true
+                v.CanTouch = true
+                v.CanQuery = true
+            end
+        end
+    end
+end
 
--- SWARM FEATURE
+-- SWARM FEATURE (Fixed Disable)
 Tab:CreateToggle({
     Name = "Elite Prop Swarm",
     CurrentValue = false,
@@ -194,20 +207,23 @@ Tab:CreateToggle({
             task.spawn(function()
                 while _G.EliteSwarmEnabled do
                     local parts, hrp = GetParts()
-                    -- Target is a point right in the middle of your torso
                     local target = hrp.Position + Vector3.new(0, 2, 0)
-                    
                     for _, part in ipairs(parts) do
                         ForceMovePart(part, target)
                     end
                     RunService.Heartbeat:Wait()
                 end
+                -- Cleanup when the 'while' loop breaks
+                CleanupParts()
             end)
+        else
+            -- Ensure cleanup runs immediately on toggle off
+            CleanupParts()
         end
     end,
 })
 
--- ORBIT FEATURE
+-- ORBIT FEATURE (Fixed Disable)
 Tab:CreateToggle({
     Name = "Elite Part Orbit",
     CurrentValue = false,
@@ -223,51 +239,23 @@ Tab:CreateToggle({
                     angle = angle + (0.05 * _G.EliteOrbitSpeed)
                     local parts, hrp = GetParts()
                     local count = #parts
-                    
                     for i, part in ipairs(parts) do
-                        -- Evenly space out parts around the player
                         local step = (math.pi * 2) / count
                         local pAngle = angle + (i * step)
-                        
                         local target = hrp.Position + Vector3.new(
                             math.cos(pAngle) * _G.EliteOrbitRadius,
                             _G.EliteOrbitHeight,
                             math.sin(pAngle) * _G.EliteOrbitRadius
                         )
-                        
                         ForceMovePart(part, target)
                     end
                     RunService.Heartbeat:Wait()
                 end
+                -- Cleanup when the 'while' loop breaks
+                CleanupParts()
             end)
+        else
+            -- Ensure cleanup runs immediately on toggle off
+            CleanupParts()
         end
     end,
-})
-
--- ORBIT CUSTOMIZATION
-Tab:CreateSlider({
-    Name = "Orbit Radius",
-    Range = {5, 100},
-    Increment = 5,
-    Suffix = "Studs",
-    CurrentValue = 20,
-    Callback = function(Value) _G.EliteOrbitRadius = Value end,
-})
-
-Tab:CreateSlider({
-    Name = "Orbit Height",
-    Range = {-10, 50},
-    Increment = 1,
-    Suffix = "Studs",
-    CurrentValue = 5,
-    Callback = function(Value) _G.EliteOrbitHeight = Value end,
-})
-
-Tab:CreateSlider({
-    Name = "Orbit Speed",
-    Range = {1, 30},
-    Increment = 1,
-    Suffix = "x",
-    CurrentValue = 4,
-    Callback = function(Value) _G.EliteOrbitSpeed = Value end,
-})
