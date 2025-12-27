@@ -104,7 +104,11 @@ Tab:CreateToggle({
       end
    end,
 })
-Tab:CreateSection("Part Control")
+
+Tab:CreateSection("Player Physics")
+
+
+Tab:CreateSection("Detached Part Control")
 -- [[ PART MODULE: ELITE-UTILITY-HUB ]]
 local OrbitParts = {}
 local OrbitConn = nil
