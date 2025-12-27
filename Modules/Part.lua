@@ -1,55 +1,108 @@
 -- PART CONTROL
-Tab:CreateSection("Part Control")
+Tab:CreateSection("Part Main")
 
+
+-- ELITE KILL-BRICK IMMUNITY (Persistent & Flexible)
+local KillBrickConnection = nil
+
+-- Helper function to set the state
+local function SetKillBrickImmunity(state)
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    if char then
+        for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.CanTouch = not state
+            end
+        end
+    end
+end
 
 Tab:CreateToggle({
-   Name = "Immune to Kill Bricks",
+   Name = "Elite Kill-Brick Immunity",
    CurrentValue = false,
    Callback = function(Value)
-      local char = LP.Character
-      if char then
-          for _, p in pairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanTouch = not Value end end
+      _G.KillBrickImmune = Value
+      
+      -- 1. Immediate Apply
+      task.spawn(function()
+          SetKillBrickImmunity(Value)
+      end)
+      
+      -- 2. Persistence Logic (Re-applies on respawn)
+      if KillBrickConnection then KillBrickConnection:Disconnect() end
+      if Value then
+          KillBrickConnection = LP.CharacterAdded:Connect(function()
+              task.wait(1) -- Wait for character parts to load
+              if _G.KillBrickImmune then
+                  SetKillBrickImmunity(true)
+              end
+          end)
       end
-      _G.EliteLog("Kill Brick Immunity: "..tostring(Value), "info")
+
+      -- 3. Double-Layer Notifications
+      local statusText = Value and "Enabled" or "Disabled"
+      
+      -- Rayfield Notify
+      Rayfield:Notify({
+         Title = "Elite Utility",
+         Content = "Kill Brick Immunity: " .. statusText,
+         Duration = 3,
+         Image = 4483362458,
+      })
+      
+      -- Roblox System Notification
+      game:GetService("StarterGui"):SetCore("SendNotification", {
+          Title = "Elite Hub",
+          Text = "Kill Brick Immunity is now " .. statusText,
+          Duration = 3,
+          Icon = "rbxassetid://4483362458"
+      })
+
+      _G.EliteLog("Kill Brick Immunity: " .. statusText, Value and "success" or "info")
    end,
 })
--- [[ ELITE PART MANIPULATOR V5: STICKY SWARM ]]
+Tab:CreateSection("Part Control")
+-- [[ ELITE PART MANIPULATOR V5: STICKY UNIVERSAL ORBIT ]]
 local OrbitParts = {}
 local OrbitConn = nil
 
 local ManipSettings = {
     Enabled = false,
-    Radius = 15,
-    Speed = 3,
-    Height = 2,
-    Bobbing = 0,
-    MaxParts = 300 -- Massive increase to capture everything
+    Radius = 12,
+    Speed = 4,
+    Height = 1,
+    Bobbing = 2,
+    MaxVelocity = 100, -- Prevents parts from "launching" away
+    MaxParts = 100
 }
 
--- [ ENGINE: HIGH-SPEED UNIVERSAL SCANNER ]
+-- [ ENGINE: UNIVERSAL SCANNER ]
+-- Optimized to find everything nearby that isn't a player
 local function RefreshManipParts()
-    local newPartList = {}
-    local count = 0
     local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- We scan workspace directly for better performance
-    for _, v in pairs(workspace:GetPartBoundsInRadius(root.Position, 300)) do -- 300 Stud range for network ownership
+    local newPartList = {}
+    local count = 0
+    
+    -- We scan the workspace but filter aggressively for props
+    for _, v in pairs(workspace:GetDescendants()) do
         if count >= ManipSettings.MaxParts then break end
         
         if v:IsA("BasePart") and not v.Anchored then
-            -- FASTER PLAYER CHECK: Just check if the model has a humanoid
-            local model = v.Parent
-            local isPlayer = (model and model:FindFirstChildOfClass("Humanoid")) or (model and model.Parent and model.Parent:FindFirstChildOfClass("Humanoid"))
-            
-            if not isPlayer and v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
-                -- Setup Physics Properties
-                v.CanCollide = false
-                v.CanTouch = false
-                v.CanQuery = false
+            -- Skip baseplate and terrain
+            if v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
+                -- Player Check: Ensure it's not a character part
+                local isPlayer = v:FindFirstAncestorOfClass("Model") and v:FindFirstAncestorOfClass("Model"):FindFirstChildOfClass("Humanoid")
                 
-                table.insert(newPartList, v)
-                count = count + 1
+                if not isPlayer then
+                    -- Setup Physics Properties
+                    v.CanCollide = false
+                    v.CanQuery = false -- Camera safe
+                    
+                    table.insert(newPartList, v)
+                    count = count + 1
+                end
             end
         end
     end
@@ -66,7 +119,7 @@ Tab:CreateToggle({
       if OrbitConn then OrbitConn:Disconnect() end
       
       if Value then
-          _G.EliteLog("Orbit Active: Swarm Mode Engaged", "success")
+          _G.EliteLog("Orbit: Sticky Physics Engaged", "success")
           RefreshManipParts()
           
           OrbitConn = game:GetService("RunService").Heartbeat:Connect(function()
@@ -86,20 +139,21 @@ Tab:CreateToggle({
                           math.sin(angle) * ManipSettings.Radius
                       )
                       
-                      -- 2. STICKY PHYSICS (Damping Logic)
-                      -- This calculates the distance and applies velocity relative to how far it is.
-                      -- This stops the "flinging" because it slows down as it reaches the target.
-                      local distVector = (targetPos - part.Position)
-                      local magnitude = distVector.Magnitude
+                      -- 2. CAPPED VELOCITY LOGIC (Prevents Launching/Flinging)
+                      local distanceVector = (targetPos - part.Position)
+                      local distance = distanceVector.Magnitude
+                      local direction = distanceVector.Unit
                       
-                      -- Tug strength based on distance
-                      local tugStrength = magnitude * 12
-                      part.AssemblyLinearVelocity = distVector.Unit * tugStrength
+                      -- Proportional speed: Fast when far, slow when close, but capped at MaxVelocity
+                      local speed = math.min(distance * 12, ManipSettings.MaxVelocity)
                       
-                      -- Zero out rotation to stop parts from spinning out of control
-                      part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                      if distance > 0.1 then
+                          part.AssemblyLinearVelocity = direction * speed
+                      else
+                          part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                      end
                       
-                      -- Safety Guard (Ensures they stay ghosted to you)
+                      -- Force collision off to prevent flinging YOUR character
                       part.CanCollide = false
                   else
                       table.remove(OrbitParts, i)
@@ -107,11 +161,13 @@ Tab:CreateToggle({
               end
           end)
           
-          -- AGGRESSIVE WATCHDOG: Scans every 1 second
+          -- WATCHDOG: Intelligent Rescan (Doesn't wipe table every time)
           task.spawn(function()
               while ManipSettings.Enabled do
-                  RefreshManipParts()
-                  task.wait(1)
+                  if #OrbitParts < 10 then -- Only deep-scan if we lost our swarm
+                      RefreshManipParts()
+                  end
+                  task.wait(2)
               end
           end)
       else
@@ -123,6 +179,7 @@ Tab:CreateToggle({
                   v.AssemblyLinearVelocity = Vector3.new(0,0,0)
               end 
           end
+          OrbitParts = {}
       end
    end,
 })
@@ -131,36 +188,36 @@ Tab:CreateSlider({
    Name = "Orbit Radius",
    Range = {5, 100},
    Increment = 1,
-   CurrentValue = 15,
+   CurrentValue = 12,
    Callback = function(V) ManipSettings.Radius = V end,
 })
 
 Tab:CreateSlider({
    Name = "Orbit Speed",
-   Range = {1, 30},
+   Range = {1, 25},
    Increment = 1,
-   CurrentValue = 3,
+   CurrentValue = 4,
    Callback = function(V) ManipSettings.Speed = V end,
 })
 
 Tab:CreateSlider({
-   Name = "Vertical Offset",
-   Range = {-10, 30},
+   Name = "Vertical Height",
+   Range = {-10, 20},
    Increment = 1,
-   CurrentValue = 2,
+   CurrentValue = 1,
    Callback = function(V) ManipSettings.Height = V end,
 })
 
 Tab:CreateSlider({
-   Name = "Vertical Bobbing",
-   Range = {0, 20},
-   Increment = 1,
-   CurrentValue = 0,
-   Callback = function(V) ManipSettings.Bobbing = V end,
+   Name = "Stability (Max Speed)",
+   Range = {25, 250},
+   Increment = 5,
+   CurrentValue = 100,
+   Callback = function(V) ManipSettings.MaxVelocity = V end,
 })
 
 Tab:CreateButton({
-   Name = "Force Re-Scan World",
+   Name = "Force Catch All Props",
    Callback = function() 
        RefreshManipParts()
        _G.EliteLog("Swarm Size: " .. #OrbitParts, "info")
