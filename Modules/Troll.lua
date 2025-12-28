@@ -6,6 +6,8 @@
 local WalkFlingEngine = {}
 WalkFlingEngine.Active = false
 WalkFlingEngine.Connections = {}
+WalkFlingEngine.OriginalHealth = nil
+WalkFlingEngine.OriginalMaxHealth = nil
 
 function WalkFlingEngine:Start()
     if self.Active then return end
@@ -27,6 +29,10 @@ function WalkFlingEngine:Start()
     
     _G.EliteLog("WalkFling engine started", "success")
     
+    -- Store original health values
+    self.OriginalHealth = Hum.Health
+    self.OriginalMaxHealth = Hum.MaxHealth
+    
     -- Disable death
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Hum.BreakJointsOnDeath = false
@@ -40,7 +46,9 @@ function WalkFlingEngine:Start()
     
     -- Main fling loop
     HRP.CanCollide = false
-    Hum:ChangeState(11) -- Physics state
+    
+    -- Enable jumping by setting FreeFalling state instead of Physics
+    Hum:ChangeState(Enum.HumanoidStateType.Freefall)
     
     task.spawn(function()
         while self.Active and HRP and HRP.Parent do
@@ -86,11 +94,28 @@ function WalkFlingEngine:Stop()
         end
         
         if Hum then
+            -- Restore original health BEFORE re-enabling death
+            if self.OriginalMaxHealth and self.OriginalHealth then
+                Hum.MaxHealth = self.OriginalMaxHealth
+                Hum.Health = self.OriginalHealth
+            else
+                -- Fallback to 100 if we don't have stored values
+                Hum.MaxHealth = 100
+                Hum.Health = 100
+            end
+            
+            -- Wait a frame before re-enabling death
+            task.wait()
+            
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
             Hum.BreakJointsOnDeath = true
             Hum:ChangeState(Enum.HumanoidStateType.Running)
         end
     end
+    
+    -- Reset stored values
+    self.OriginalHealth = nil
+    self.OriginalMaxHealth = nil
 end
 
 function WalkFlingEngine:IsActive()
