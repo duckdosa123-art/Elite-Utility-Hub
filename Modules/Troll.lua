@@ -98,7 +98,7 @@ Tab:CreateToggle({
         if Value then
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Elite WalkFling",
-                Text = "Enabled! Authentic IY Physics Loaded.",
+                Text = "Enabled! Physics Loaded.",
                 Duration = 4,
             })
             _G.EliteLog("Elite WalkFling enabled", "info")
