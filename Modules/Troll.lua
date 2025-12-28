@@ -274,7 +274,7 @@ Tab:CreateButton({
         PlayerDropdown:Refresh(GetPlayerList())
     end,
 })
-
+Tab:CreateSection("")
 Tab:CreateButton({
     Name = "Elite Fling Target",
     Callback = function()
