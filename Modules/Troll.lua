@@ -105,15 +105,16 @@ function WalkFlingEngine:Stop()
     _G.EliteLog("WalkFling engine stopped", "info")
 end
 
--- Elite Targeting & Physics Engine
+-- Elite Targeting Physics Engine
 local TargetEngine = {
-    SelectedPlayer = nil,
+    Active = false,
     LoopActive = false,
-    IsFlinging = false,
-    OriginalPos = nil
+    SelectedPlayer = nil,
+    OriginalPos = nil,
+    Connections = {},
 }
 
--- Utility: Smart Name Search (Shortening)
+-- 1. UTILITY: Player Search & List Management
 local function GetPlayerByShortName(name)
     name = name:lower()
     for _, v in pairs(game.Players:GetPlayers()) do
@@ -124,49 +125,85 @@ local function GetPlayerByShortName(name)
     return nil
 end
 
--- The Verification Scanner: TP -> Hit -> Scan -> Return
+local function GetPlayerList()
+    local list = {}
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP then table.insert(list, v.DisplayName) end
+    end
+    return list
+end
+
+-- 2. CORE: The Fling Execution (Fixed TP Logic)
 function TargetEngine:Execute(Target)
     if not Target or not Target.Character then return end
     local TChar = Target.Character
     local THRP = TChar:FindFirstChild("HumanoidRootPart")
-    local THum = TChar:FindFirstChild("Humanoid")
     local MyChar = LP.Character
     local MyHRP = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
-    
-    if not THRP or not MyHRP or THum.Health <= 0 then return end
+    local MyHum = MyChar and MyChar:FindFirstChild("Humanoid")
 
-    self.IsFlinging = true
+    if not THRP or not MyHRP or not MyHum then return end
+
+    -- Save Position & Prep Physics
     self.OriginalPos = MyHRP.CFrame
+    local oldVel = MyHRP.AssemblyLinearVelocity
     
-    -- Set Massless to prevent physics drag during TP
+    -- "Ghost Mode" Prep
     for _, v in pairs(MyChar:GetDescendants()) do
         if v:IsA("BasePart") then v.Massless = true end
     end
 
-    -- 1. TP & Hit
-    MyHRP.CFrame = THRP.CFrame * CFrame.new(0, 0, 1.5)
-    MyHRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
-    
-    -- 2. THE SCAN: Wait until target's velocity spikes or they are far away
-    local timeout = 0
+    -- TELEPORT & STRIKE
+    -- We TP slightly behind and set massive velocity TOWARDS them
+    local strikeCount = 0
     repeat
         task.wait()
-        timeout = timeout + 1
-        -- If target velocity is high or they are moved, the fling worked
-    until (THRP.AssemblyLinearVelocity.Magnitude > 100) or timeout > 20 or not self.Active
-
-    -- 3. RETURN
+        strikeCount = strikeCount + 1
+        
+        -- Lock to target position
+        MyHRP.CFrame = THRP.CFrame * CFrame.new(0, 0, 1) 
+        -- Spike velocity
+        MyHRP.AssemblyLinearVelocity = Vector3.new(99999999, 99999999, 99999999)
+        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 99999999, 0)
+        
+    until strikeCount > 10 or (THRP.AssemblyLinearVelocity.Magnitude > 200) or not Target.Parent
+    
+    -- RETURN SAFETY
     MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    MyHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     MyHRP.CFrame = self.OriginalPos
     
-    -- Reset Physics
+    -- Cleanup Masses
     for _, v in pairs(MyChar:GetDescendants()) do
         if v:IsA("BasePart") then v.Massless = false end
     end
-    
-    self.IsFlinging = false
 end
 
+-- 3. PERMANENT GODMODE & NOCLIP (For Targeting)
+local function EnableTargetPhysics()
+    local Char = LP.Character
+    local Hum = Char:FindFirstChildOfClass("Humanoid")
+    if not Hum then return end
+
+    -- Health Lock (For Natural Disaster/Killbricks)
+    table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
+        if Hum then 
+            Hum.Health = Hum.MaxHealth 
+            if Hum:GetState() == Enum.HumanoidStateType.Dead then
+                Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+    end))
+
+    -- Collision Lock (For Fling Accuracy)
+    table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
+        if Char then
+            for _, v in pairs(Char:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end))
+end
 -- Rayfield Toggle Integration
 Tab:CreateSection("Fling - Disable Fling Guard First!")
 Tab:CreateToggle({
@@ -181,18 +218,10 @@ Tab:CreateToggle({
         end
     end,
 })
-local PlayerList = {}
-local function RefreshList()
-    PlayerList = {}
-    for _, v in pairs(game.Players:GetPlayers()) do
-        if v ~= LP then table.insert(PlayerList, v.DisplayName) end
-    end
-end
-RefreshList()
-
-local TargetDropdown = Tab:CreateDropdown({
-    Name = "Selected: None",
-    Options = PlayerList,
+Tab:CreateSection("Advance Fling - Disable Fling Guard First!")
+local PlayerDropdown = Tab:CreateDropdown({
+    Name = "Select Target",
+    Options = GetPlayerList(),
     CurrentOption = {""},
     Callback = function(Option)
         TargetEngine.SelectedPlayer = GetPlayerByShortName(Option[1])
@@ -200,16 +229,23 @@ local TargetDropdown = Tab:CreateDropdown({
 })
 
 Tab:CreateInput({
-    Name = "Search & Auto-Select",
-    PlaceholderText = "Type part of name...",
+    Name = "Quick Search Player",
+    PlaceholderText = "Type half name...",
     Callback = function(Text)
         if Text == "" then return end
         local found = GetPlayerByShortName(Text)
         if found then
             TargetEngine.SelectedPlayer = found
-            TargetDropdown:Set({found.DisplayName}) -- Auto-updates dropdown
-            _G.EliteLog("Auto-Selected: " .. found.DisplayName, "info")
+            PlayerDropdown:Set({found.DisplayName}) -- Auto-select in UI
+            _G.EliteLog("Auto-targeted: " .. found.DisplayName, "success")
         end
+    end,
+})
+
+Tab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        PlayerDropdown:Refresh(GetPlayerList())
     end,
 })
 
@@ -217,46 +253,42 @@ Tab:CreateButton({
     Name = "Fling Target",
     Callback = function()
         if TargetEngine.SelectedPlayer then
+            EnableTargetPhysics() -- Ensure Godmode is active during TP
             TargetEngine:Execute(TargetEngine.SelectedPlayer)
-        else
-            Rayfield:Notify({Title = "Error", Content = "No target selected!", Duration = 2})
+            -- Clean up physics after one-time fling
+            for _, v in pairs(TargetEngine.Connections) do v:Disconnect() end
         end
     end,
 })
 
 Tab:CreateToggle({
-    Name = "Loop Fling",
+    Name = "Loop Fling Target",
     CurrentValue = false,
     Callback = function(Value)
         TargetEngine.LoopActive = Value
+        if Value then EnableTargetPhysics() end
         task.spawn(function()
             while TargetEngine.LoopActive do
-                if TargetEngine.SelectedPlayer and not TargetEngine.IsFlinging then
-                    -- Only fling if they are alive
-                    local char = TargetEngine.SelectedPlayer.Character
-                    if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-                        TargetEngine:Execute(TargetEngine.SelectedPlayer)
-                    end
+                if TargetEngine.SelectedPlayer then
+                    TargetEngine:Execute(TargetEngine.SelectedPlayer)
                 end
-                task.wait(1.5)
+                task.wait(1)
             end
         end)
     end,
 })
 
 Tab:CreateButton({
-    Name = "Fling All",
+    Name = "Fling All (Server Purge)",
     Callback = function()
-        _G.EliteLog("Starting Server Purge", "warn")
-        for _, v in pairs(game.Players:GetPlayers()) do
-            if v ~= LP and v.Character then
-                TargetEngine:Execute(v)
+        EnableTargetPhysics()
+        _G.EliteLog("Purging server...", "warn")
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= LP and p.Character then
+                TargetEngine:Execute(p)
                 task.wait(0.1)
             end
         end
+        _G.EliteLog("Purge Complete", "success")
     end,
 })
-
--- Keep list updated
-game.Players.PlayerAdded:Connect(function() RefreshList(); TargetDropdown:Refresh(PlayerList) end)
-game.Players.PlayerRemoving:Connect(function() RefreshList(); TargetDropdown:Refresh(PlayerList) end)
