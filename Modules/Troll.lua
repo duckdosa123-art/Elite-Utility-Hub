@@ -33,54 +33,66 @@ function WalkFlingEngine:Start()
     self.OriginalHealth = Hum.Health
     self.OriginalMaxHealth = Hum.MaxHealth
     
-    -- Disable death
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Hum.BreakJointsOnDeath = false
-    
-    -- Keep health maxed (godmode)
-    table.insert(self.Connections, RunService.Stepped:Connect(function()
-        if not self.Active then return end
-        Hum.Health = math.huge
-        Hum.MaxHealth = math.huge
-    end))
-    
-    -- Main fling loop
+    -- Main fling loop - ONLY when touching other players
     HRP.CanCollide = false
     
-    -- Enable jumping by setting FreeFalling state instead of Physics
-    Hum:ChangeState(Enum.HumanoidStateType.Freefall)
+    -- Set up touch detection on all body parts
+    local function setupTouch(part)
+        if not part:IsA("BasePart") then return end
+        
+        local touchConn = part.Touched:Connect(function(hit)
+            if not self.Active then return end
+            
+            -- Check if we touched another player's character
+            local otherChar = hit.Parent
+            if otherChar and otherChar:FindFirstChild("Humanoid") and otherChar ~= Char then
+                local otherHum = otherChar:FindFirstChild("Humanoid")
+                local otherHRP = otherChar:FindFirstChild("HumanoidRootPart")
+                
+                if otherHum and otherHum.Health > 0 and otherHRP then
+                    -- Store current velocity
+                    local currentVel = HRP.Velocity
+                    
+                    -- Apply MASSIVE velocity spike
+                    HRP.Velocity = Vector3.new(0, 99999999, 0)
+                    
+                    -- Wait ONE frame
+                    RunService.RenderStepped:Wait()
+                    
+                    -- Reset velocity back to normal
+                    HRP.Velocity = currentVel
+                end
+            end
+        end)
+        
+        table.insert(self.Connections, touchConn)
+    end
     
-    task.spawn(function()
-        while self.Active and HRP and HRP.Parent do
-            RunService.Heartbeat:Wait()
-            
-            -- Store current velocity
-            local currentVel = HRP.Velocity
-            
-            -- Apply MASSIVE velocity spike
-            HRP.Velocity = currentVel * 99999999 + Vector3.new(0, 99999999, 0)
-            
-            -- Wait ONE frame
-            RunService.RenderStepped:Wait()
-            
-            -- Reset velocity back to normal
-            HRP.Velocity = currentVel
-            
-            -- Small netless adjustment
-            RunService.Stepped:Wait()
-            HRP.Velocity = currentVel + Vector3.new(0, 0.1, 0)
+    -- Setup touch on all character parts
+    for _, part in pairs(Char:GetDescendants()) do
+        setupTouch(part)
+    end
+    
+    -- Handle new parts being added
+    local childConn = Char.DescendantAdded:Connect(function(part)
+        if self.Active then
+            setupTouch(part)
         end
     end)
+    table.insert(self.Connections, childConn)
 end
 
 function WalkFlingEngine:Stop()
     self.Active = false
     
-    -- Disconnect all connections
+    -- Disconnect all connections FIRST
     for _, conn in pairs(self.Connections) do
         if conn then conn:Disconnect() end
     end
     self.Connections = {}
+    
+    -- Wait to ensure all connections are cleaned up
+    task.wait(0.1)
     
     -- Restore character state
     local Char = LP.Character
@@ -88,32 +100,25 @@ function WalkFlingEngine:Stop()
         local HRP = Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char:FindFirstChild("Humanoid")
         
-        if Hum then
-            -- Restore original health FIRST
-            if self.OriginalMaxHealth and self.OriginalHealth then
-                Hum.MaxHealth = self.OriginalMaxHealth
-                task.wait(0.1)
-                Hum.Health = self.OriginalHealth
-            else
-                -- Fallback to 100 if we don't have stored values
-                Hum.MaxHealth = 100
-                task.wait(0.1)
-                Hum.Health = 100
-            end
-            
-            -- Wait before changing states
-            task.wait(0.2)
-            
-            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-            Hum.BreakJointsOnDeath = true
-            
-            -- Return to normal state
-            Hum:ChangeState(Enum.HumanoidStateType.Running)
-        end
-        
         if HRP then
             HRP.CanCollide = true
             HRP.Velocity = Vector3.new(0, 0, 0)
+            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        end
+        
+        if Hum and Hum.Health > 0 then
+            -- Restore original health values safely
+            pcall(function()
+                if self.OriginalMaxHealth and self.OriginalMaxHealth > 0 then
+                    Hum.MaxHealth = self.OriginalMaxHealth
+                end
+                
+                task.wait(0.05)
+                
+                if self.OriginalHealth and self.OriginalHealth > 0 then
+                    Hum.Health = self.OriginalHealth
+                end
+            end)
         end
     end
     
