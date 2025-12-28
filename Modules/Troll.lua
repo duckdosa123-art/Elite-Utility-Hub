@@ -256,6 +256,17 @@ Tab:CreateInput({
         end
     end,
 })
+local PlayerDropdown = Tab:CreateDropdown({
+    Name = "Player List",
+    Options = GetPlayerList(), -- Uses your function to get names
+    CurrentOption = {""},
+    MultipleOptions = false,
+    Flag = "ElitePlayerList", 
+    Callback = function(Option)
+        -- Sets the target when you click a name in the list
+        TargetEngine.SelectedPlayer = GetPlayerByShortName(Option[1])
+    end,
+})
 
 Tab:CreateButton({
     Name = "Refresh Player List",
@@ -311,3 +322,5 @@ Tab:CreateButton({
         end)
     end,
 })
+game.Players.PlayerAdded:Connect(RefreshEverything)
+game.Players.PlayerRemoving:Connect(RefreshEverything)
