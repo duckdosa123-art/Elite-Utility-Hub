@@ -115,6 +115,7 @@ function WalkFling:Stop()
 end
 
 -- // UI SECTION //
+Tab:CreateSection("Main Fling - Disable Fling Guard First")
 Tab:CreateToggle({
     Name = "Elite WalkFling",
     CurrentValue = false,
