@@ -492,30 +492,97 @@ Tab:CreateSlider({
 })
 
 -- 2. ELITE MIMIC (Void Safe)
+-- Elite Mimic State
+TrollEngine.MimicTracks = {}
+
 Tab:CreateToggle({
     Name = "Elite Mimic",
     CurrentValue = false,
     Callback = function(Value)
         TrollEngine.MimicActive = Value
         ManageTrollPlatform(Value)
-        task.spawn(function()
-            while TrollEngine.MimicActive do
-                if TrollEngine.Target and TrollEngine.Target.Character then
-                    local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
-                    local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
-                    if HRP and THRP then
-                        -- Mirror CFrame with Offset
-                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 0, TrollEngine.MimicDistance)
+        
+        local Char = LP.Character
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+        local MyAnimator = Hum and Hum:FindFirstChildOfClass("Animator")
+        
+        if Value then
+            task.spawn(function()
+                while TrollEngine.MimicActive do
+                    local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
+                    local THum = TargetChar and TargetChar:FindFirstChildOfClass("Humanoid")
+                    local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
+                    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+                    
+                    if HRP and THRP and Hum and THum then
+                        -- 1. POSITIONING & FACING (LookAt Logic)
+                        -- Calculate position based on distance offset
+                        local offsetPos = (THRP.CFrame * CFrame.new(0, 0, TrollEngine.MimicDistance)).Position
+                        -- Set CFrame to that position and force it to look at the target's face
+                        HRP.CFrame = CFrame.lookAt(offsetPos, THRP.Position)
                         
-                        -- Safety Part: Syncs to Target Y but stays under the PLAYER
+                        -- 2. SAFETY PLATFORM SYNC (Under YOU)
                         if TrollEngine.VoidPart then
                             TrollEngine.VoidPart.CFrame = CFrame.new(HRP.Position.X, THRP.Position.Y - 3.5, HRP.Position.Z)
                         end
+
+                        -- 3. ANIMATION MIRRORING (FE Compatible)
+                        local TAnimator = THum:FindFirstChildOfClass("Animator")
+                        if TAnimator and MyAnimator then
+                            local PlayingTracks = TAnimator:GetPlayingAnimationTracks()
+                            
+                            for _, TTrack in pairs(PlayingTracks) do
+                                local AnimID = TTrack.Animation.AnimationId
+                                
+                                -- If we aren't already playing this animation, load and play it
+                                if not TrollEngine.MimicTracks[AnimID] then
+                                    local NewAnim = Instance.new("Animation")
+                                    NewAnim.AnimationId = AnimID
+                                    local MyTrack = MyAnimator:LoadAnimation(NewAnim)
+                                    MyTrack:Play()
+                                    TrollEngine.MimicTracks[AnimID] = MyTrack
+                                end
+                                
+                                -- Sync the time and speed to match the target perfectly
+                                local MyTrack = TrollEngine.MimicTracks[AnimID]
+                                MyTrack.TimePosition = TTrack.TimePosition
+                                MyTrack:AdjustSpeed(TTrack.Speed)
+                                MyTrack:AdjustWeight(TTrack.WeightCurrent)
+                            end
+                            
+                            -- Cleanup animations that the target stopped playing
+                            for ID, MyTrack in pairs(TrollEngine.MimicTracks) do
+                                local isStillPlaying = false
+                                for _, TTrack in pairs(PlayingTracks) do
+                                    if TTrack.Animation.AnimationId == ID then
+                                        isStillPlaying = true
+                                        break
+                                    end
+                                end
+                                if not isStillPlaying then
+                                    MyTrack:Stop()
+                                    TrollEngine.MimicTracks[ID] = nil
+                                end
+                            end
+                        end
+                        
+                        -- 4. FALL DAMAGE PROTECTION
+                        Hum.Health = Hum.MaxHealth
+                        if Hum:GetState() == Enum.HumanoidStateType.Freefall then
+                            Hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+                        end
                     end
+                    RunService.Heartbeat:Wait()
                 end
-                RunService.Heartbeat:Wait()
+            end)
+        else
+            -- CLEANUP: Stop all mirrored animations
+            for _, Track in pairs(TrollEngine.MimicTracks) do
+                Track:Stop()
             end
-        end)
+            TrollEngine.MimicTracks = {}
+            _G.EliteLog("Mimic Disabled: Animations Restored", "info")
+        end
     end,
 })
 Tab:CreateSlider({
