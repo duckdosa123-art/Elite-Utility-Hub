@@ -8,14 +8,21 @@ local WalkFlingEngine = {
     JumpStart = 0
 }
 
+function WalkFlingEngine:Notify(title, text)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Icon = "rbxassetid://6023426926", -- Friend Request Icon
+        Duration = 3
+    })
+end
+
 function WalkFlingEngine:Start()
     if self.Active then return end
     
     local Char = LP.Character
-    if not Char then return end
-    local HRP = Char:FindFirstChild("HumanoidRootPart")
-    local Hum = Char:FindFirstChild("Humanoid")
-    
+    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+    local Hum = Char and Char:FindFirstChild("Humanoid")
     if not HRP or not Hum then return end
     
     self.Active = true
@@ -23,117 +30,96 @@ function WalkFlingEngine:Start()
     self.JumpOffset = 0
     self.IsJumping = false
     
-    -- Native Notification
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "Elite Utility",
-        Text = "Elite WalkFling Enabled",
-        Icon = "rbxassetid://6023426926", -- Friend Request Icon
-        Duration = 3
-    })
+    self:Notify("Elite Utility", "WalkFling Enabled")
 
-    -- 1. Godmode & State Management
+    -- 1. State/Godmode Management
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-    
     local godmodeConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not Hum then return end
         Hum.Health = Hum.MaxHealth
-        if Hum:GetState() == Enum.HumanoidStateType.Dead then
-            Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end
+        if Hum:GetState() == Enum.HumanoidStateType.Dead then Hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
     end)
     table.insert(self.Connections, godmodeConn)
 
-    -- 2. Surgical Spike & Touch Listeners
+    -- 2. Surgical Spike (Fling Logic)
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
-            if not self.Active then return end
-            local targetChar = hit.Parent
-            if targetChar and targetChar:FindFirstChild("Humanoid") and targetChar ~= Char then
-                local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-                if targetHRP then
-                    -- The Surgical Spike: High velocity for one frame, then reset
-                    local oldVel = HRP.AssemblyLinearVelocity
-                    HRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7) 
-                    RunService.RenderStepped:Wait()
-                    if HRP then HRP.AssemblyLinearVelocity = oldVel end
-                end
+            if not self.Active or hit:IsDescendantOf(Char) then return end
+            if hit.Parent:FindFirstChild("Humanoid") then
+                local oldVel = HRP.AssemblyLinearVelocity
+                -- Spike velocity to extreme levels for 1 frame
+                HRP.AssemblyLinearVelocity = Vector3.new(99999999, 99999999, 99999999)
+                RunService.RenderStepped:Wait()
+                if HRP then HRP.AssemblyLinearVelocity = oldVel end
             end
         end)
         table.insert(self.Connections, touchConn)
     end
-
     for _, part in pairs(Char:GetDescendants()) do setupTouch(part) end
     table.insert(self.Connections, Char.DescendantAdded:Connect(setupTouch))
 
-    -- 3. Noclip (Stepped)
+    -- 3. Noclip (Prevents friction and getting stuck in parts)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end)
     table.insert(self.Connections, noclipConn)
 
-    -- 4. Hard-Lock Y & Simulated Jump (Heartbeat)
-    local physicsConn = RunService.Heartbeat:Connect(function(dt)
+    -- 4. Dynamic Y-Lock & Simulated Physics
+    local physicsConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not HRP or not Hum then return end
         
-        -- Jump Logic (Gravity Curve)
-        local gravity = workspace.Gravity
-        local jumpPower = Hum.JumpPower > 0 and Hum.JumpPower or 50
+        -- Floor Detection (Raycast)
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {Char}
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
         
+        local floorRay = workspace:Raycast(HRP.Position, Vector3.new(0, -20, 0), rayParams)
+        local floorY = floorRay and floorRay.Position.Y + (Hum.HipHeight + (HRP.Size.Y/2)) or self.BaseY
+
+        -- Simulated Jump Physics
         if Hum.Jump and not self.IsJumping and Hum.FloorMaterial ~= Enum.Material.Air then
             self.IsJumping = true
             self.JumpStart = tick()
         end
-        
+
         if self.IsJumping then
             local t = tick() - self.JumpStart
-            -- Physics Formula: y = v0*t - 0.5*g*t^2
-            self.JumpOffset = (jumpPower * t) - (0.5 * gravity * (t * t))
+            local jumpPower = Hum.JumpPower > 0 and Hum.JumpPower or 50
+            self.JumpOffset = (jumpPower * t) - (0.5 * workspace.Gravity * (t * t))
             
+            -- End jump when player falls back to floor height
             if self.JumpOffset <= 0 then
                 self.JumpOffset = 0
                 self.IsJumping = false
             end
         else
-            -- Keep BaseY updated to floor level when walking normally
-            if Hum.FloorMaterial ~= Enum.Material.Air then
-                self.BaseY = HRP.Position.Y
-            end
+            -- Smoothly transition BaseY to match the floor (Fixes getting stuck in air)
+            self.BaseY = floorY
         end
 
-        -- Hard-Lock position to prevent recoil from spiking the player up
+        -- Hard-Lock the Y-Axis to prevent recoil from lifting the player
         local currentPos = HRP.Position
         HRP.CFrame = CFrame.new(currentPos.X, self.BaseY + self.JumpOffset, currentPos.Z) * HRP.CFrame.Rotation
     end)
     table.insert(self.Connections, physicsConn)
-    
-    _G.EliteLog("Elite WalkFling Active", "success")
 end
 
 function WalkFlingEngine:Stop()
+    if not self.Active then return end
     self.Active = false
-    for _, conn in pairs(self.Connections) do 
-        pcall(function() conn:Disconnect() end) 
-    end
+    
+    for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
     
     local Hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-    if Hum then
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-    end
+    if Hum then Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true) end
     
-    _G.EliteLog("Elite WalkFling Disabled", "info")
+    self:Notify("Elite Utility", "WalkFling Disabled")
 end
-
 -- Rayfield Toggle Integration
 Tab:CreateToggle({
     Name = "Elite WalkFling",
