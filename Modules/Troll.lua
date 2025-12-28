@@ -1,9 +1,11 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE ]]
+-- [[ ELITE-UTILITY-HUB: TROLL MODULE - BRUTE FORCE EDITION ]]
 -- Variables Tab, LP, RunService, Rayfield are injected by Main.lua
 
 local WalkFlingEngine = {
     Active = false,
-    Connections = {}
+    Connections = {},
+    Power = 99999999,
+    Flinging = false -- Debounce for the pulse
 }
 
 -- // ROBLOX NATIVE NOTIFICATION SYSTEM //
@@ -16,7 +18,7 @@ local function SendNativeNotification(title, text)
     })
 end
 
--- // THE SURGICAL STRIKE ENGINE //
+-- // THE UNIVERSAL BRUTE FORCE ENGINE //
 function WalkFlingEngine:Start()
     if self.Active then return end
     
@@ -24,15 +26,12 @@ function WalkFlingEngine:Start()
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     
-    if not HRP or not Hum then 
-        _G.EliteLog("Character components missing", "error")
-        return 
-    end
+    if not HRP or not Hum then return end
     
     self.Active = true
-    _G.EliteLog("WalkFling engine started", "success")
+    _G.EliteLog("Universal WalkFling Engine: Online", "success")
     
-    -- 1. GODMODE TACTIC (PRESERVED)
+    -- 1. GODMODE TACTIC (PRESERVED & STRICT)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -48,7 +47,7 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, godmodeConn)
     
-    -- 2. NOCLIP LOOP (Crucial to prevent self-flinging)
+    -- 2. STEPPED NOCLIP (Prevents self-fling and floor friction)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, v in pairs(Char:GetDescendants()) do
@@ -59,63 +58,65 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
     
-    -- 3. ANY-TO-ANY TOUCH DETECTION LOGIC
-    local function setupTouch(part)
-        if not part:IsA("BasePart") then return end
+    -- 3. SPATIAL QUERY DETECTION (The Brute Force accuracy fix)
+    -- This ignores lag and "Fling Guards" by checking for overlaps every frame
+    local queryConn = RunService.Heartbeat:Connect(function()
+        if not self.Active or self.Flinging or not HRP then return end
         
-        local touchConn = part.Touched:Connect(function(hit)
-            if not self.Active then return end
+        local overlapParams = OverlapParams.new()
+        overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+        overlapParams.FilterDescendantsInstances = {Char} -- Ignore yourself
+        
+        -- Checks for any parts in a 5x5x5 box around you
+        local partsInBox = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(5, 6, 5), overlapParams)
+        
+        for _, part in pairs(partsInBox) do
+            local victimChar = part.Parent
+            local victimHum = victimChar and victimChar:FindFirstChildOfClass("Humanoid")
             
-            -- Check if we touched another player's character
-            local otherChar = hit.Parent
-            local otherHum = otherChar and otherChar:FindFirstChildOfClass("Humanoid")
-            local otherHRP = otherChar and otherChar:FindFirstChild("HumanoidRootPart")
-            
-            if otherHum and otherHRP and otherHum.Health > 0 and otherChar ~= Char then
-                -- Store current velocity
-                local currentVel = HRP.AssemblyLinearVelocity
+            if victimHum and victimHum.Health > 0 then
+                self.Flinging = true -- Start pulse
                 
-                -- Apply MASSIVE velocity spike (Your specific logic)
-                HRP.AssemblyLinearVelocity = Vector3.new(0, 99999999, 0)
-                
-                -- Wait ONE frame
-                RunService.RenderStepped:Wait()
-                
-                -- Reset velocity back to normal
-                if HRP and HRP.Parent then
-                    HRP.AssemblyLinearVelocity = currentVel
-                end
-                
-                -- Ensure we stay alive
-                if Hum then
-                    Hum.Health = Hum.MaxHealth
-                end
+                task.spawn(function()
+                    local oldVel = HRP.AssemblyLinearVelocity
+                    
+                    -- EXTENDED OMNI-PULSE (Brute Force launch)
+                    -- We apply random jitter to the massive force to bypass velocity caps
+                    local startTime = tick()
+                    while tick() - startTime < 0.15 do -- 0.15s duration pulse
+                        if not HRP or not self.Active then break end
+                        
+                        HRP.AssemblyLinearVelocity = Vector3.new(
+                            math.random(-self.Power, self.Power), 
+                            self.Power, 
+                            math.random(-self.Power, self.Power)
+                        )
+                        HRP.AssemblyAngularVelocity = Vector3.new(self.Power, self.Power, self.Power)
+                        RunService.RenderStepped:Wait()
+                    end
+                    
+                    -- Reset to normal
+                    if HRP then
+                        HRP.AssemblyLinearVelocity = oldVel
+                        HRP.AssemblyAngularVelocity = Vector3.zero
+                    end
+                    
+                    task.wait(0.1) -- Small cooldown before next detection
+                    self.Flinging = false
+                end)
+                break -- Exit loop once a target is found and pulse starts
             end
-        end)
-        table.insert(self.Connections, touchConn)
-    end
-    
-    -- Setup touch on all character parts (current and future)
-    for _, part in pairs(Char:GetDescendants()) do
-        setupTouch(part)
-    end
-    
-    local childConn = Char.DescendantAdded:Connect(function(part)
-        if self.Active then
-            setupTouch(part)
         end
     end)
-    table.insert(self.Connections, childConn)
+    table.insert(self.Connections, queryConn)
 end
 
 function WalkFlingEngine:Stop()
     self.Active = false
+    self.Flinging = false
     
-    -- Disconnect all connections FIRST
     for _, conn in pairs(self.Connections) do
-        if conn then 
-            pcall(function() conn:Disconnect() end)
-        end
+        if conn then pcall(function() conn:Disconnect() end) end
     end
     self.Connections = {}
     
@@ -123,18 +124,23 @@ function WalkFlingEngine:Stop()
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     
-    task.wait(0.05)
-    
-    if HRP and HRP.Parent then
-        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    if HRP then
+        HRP.AssemblyLinearVelocity = Vector3.zero
+        HRP.AssemblyAngularVelocity = Vector3.zero
     end
     
-    if Hum and Hum.Parent then
+    if Hum then
         pcall(function()
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
             Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
             Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
         end)
+    end
+    
+    if Char then
+        for _, v in pairs(Char:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide = true end
+        end
     end
     
     _G.EliteLog("WalkFling engine stopped", "info")
@@ -149,8 +155,8 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         if Value then
-            SendNativeNotification("Elite WalkFling", "Enabled! If it doesn't work then disable Fling Guard")
-            _G.EliteLog("Elite WalkFling enabled - Walk into players", "info")
+            SendNativeNotification("Elite WalkFling", "Enabled! Spatial Query & Omni-Pulse Active.")
+            _G.EliteLog("Elite WalkFling enabled - Surgical strike online", "info")
             WalkFlingEngine:Start()
         else
             SendNativeNotification("Elite WalkFling", "Disabled!")
@@ -160,7 +166,7 @@ Tab:CreateToggle({
     end,
 })
 
--- Cleanup on respawn
+-- Handle Respawn
 LP.CharacterAdded:Connect(function()
     if WalkFlingEngine.Active then
         WalkFlingEngine:Stop()
