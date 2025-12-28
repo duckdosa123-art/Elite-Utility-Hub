@@ -1,17 +1,11 @@
 -- ============================================
--- ELITE WALKFLING - PHYSICS ENGINE
+-- ELITE WALKFLING - PHYSICS ENGINE (SEPARATED)
+-- Based on Infinite Yield's walkfling method
 -- ============================================
 
 local WalkFlingEngine = {}
 WalkFlingEngine.Active = false
-WalkFlingEngine.Connection = nil
-
--- Physics Configuration
-local CONFIG = {
-    POWER = 20000,              -- Fling power (similar to IY)
-    ROTATION_SPEED = 9e9,       -- Angular velocity magnitude
-    PLAYER_NETLESS_HEIGHT = 25, -- Keep network ownership
-}
+WalkFlingEngine.Connections = {}
 
 function WalkFlingEngine:Start()
     if self.Active then return end
@@ -31,79 +25,72 @@ function WalkFlingEngine:Start()
         return
     end
     
-    -- Store original collision states
-    local originalStates = {}
-    for _, part in pairs(Char:GetDescendants()) do
-        if part:IsA("BasePart") and part ~= HRP then
-            originalStates[part] = part.CanCollide
-        end
-    end
-    
     _G.EliteLog("WalkFling engine started", "success")
     
-    -- Main physics loop
-    self.Connection = RunService.Heartbeat:Connect(function()
-        if not self.Active then
-            self.Connection:Disconnect()
+    -- Disable death
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    Hum.BreakJointsOnDeath = false
+    
+    -- Keep health maxed (godmode)
+    table.insert(self.Connections, RunService.Stepped:Connect(function()
+        if not self.Active then return end
+        Hum.Health = math.huge
+        Hum.MaxHealth = math.huge
+    end))
+    
+    -- Main fling loop
+    HRP.CanCollide = false
+    Hum:ChangeState(11) -- Physics state
+    
+    task.spawn(function()
+        while self.Active and HRP and HRP.Parent do
+            RunService.Heartbeat:Wait()
             
-            -- Restore states
-            for part, state in pairs(originalStates) do
-                if part and part.Parent then
-                    part.CanCollide = state
-                end
-            end
+            -- Store current velocity
+            local currentVel = HRP.Velocity
             
-            if HRP and HRP.Parent then
-                HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-            end
+            -- Apply MASSIVE velocity spike
+            HRP.Velocity = currentVel * 99999999 + Vector3.new(0, 99999999, 0)
             
-            _G.EliteLog("WalkFling engine stopped", "info")
-            return
+            -- Wait ONE frame
+            RunService.RenderStepped:Wait()
+            
+            -- Reset velocity back to normal
+            HRP.Velocity = currentVel
+            
+            -- Small netless adjustment
+            RunService.Stepped:Wait()
+            HRP.Velocity = currentVel + Vector3.new(0, 0.1, 0)
         end
-        
-        -- Character validation
-        if not Char or not Char.Parent or not HRP or not HRP.Parent or not Hum or Hum.Health <= 0 then
-            self:Stop()
-            return
-        end
-        
-        -- Ensure walking state (NOT PlatformStand)
-        if Hum.PlatformStand then
-            Hum.PlatformStand = false
-        end
-        
-        -- Apply ghosting (CanCollide false for all except HRP)
-        for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") and part ~= HRP then
-                part.CanCollide = false
-            end
-        end
-        
-        -- Calculate oscillating spin direction
-        local t = tick()
-        local spinX = math.sin(t * 11)
-        local spinY = math.cos(t * 13) 
-        local spinZ = math.sin(t * 17)
-        
-        -- Apply linear velocity (maintains height for netless)
-        HRP.AssemblyLinearVelocity = Vector3.new(
-            spinX * CONFIG.POWER,
-            CONFIG.PLAYER_NETLESS_HEIGHT,
-            spinZ * CONFIG.POWER
-        )
-        
-        -- Apply angular velocity (creates the fling effect)
-        HRP.AssemblyAngularVelocity = Vector3.new(
-            spinX * CONFIG.ROTATION_SPEED,
-            spinY * CONFIG.ROTATION_SPEED,
-            spinZ * CONFIG.ROTATION_SPEED
-        )
     end)
 end
 
 function WalkFlingEngine:Stop()
     self.Active = false
+    
+    -- Disconnect all connections
+    for _, conn in pairs(self.Connections) do
+        if conn then conn:Disconnect() end
+    end
+    self.Connections = {}
+    
+    -- Restore character state
+    local Char = LP.Character
+    if Char then
+        local HRP = Char:FindFirstChild("HumanoidRootPart")
+        local Hum = Char:FindFirstChild("Humanoid")
+        
+        if HRP then
+            HRP.CanCollide = true
+            HRP.Velocity = Vector3.new(0, 0, 0)
+        end
+        
+        if Hum then
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            Hum.BreakJointsOnDeath = true
+            Hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end
 end
 
 function WalkFlingEngine:IsActive()
@@ -112,7 +99,7 @@ end
 
 
 -- ============================================
--- UI INTEGRATION
+-- UI INTEGRATION (SEPARATED)
 -- ============================================
 
 local Toggle = Tab:CreateToggle({
@@ -128,6 +115,8 @@ local Toggle = Tab:CreateToggle({
                 Duration = 2,
             })
             
+            _G.EliteLog("Elite WalkFling enabled - Walk into players to fling them", "info")
+            
             -- Start engine
             WalkFlingEngine:Start()
         else
@@ -140,6 +129,8 @@ local Toggle = Tab:CreateToggle({
                 Text = "Disabled!",
                 Duration = 2,
             })
+            
+            _G.EliteLog("Elite WalkFling disabled", "info")
         end
     end,
 })
@@ -149,5 +140,6 @@ LP.CharacterAdded:Connect(function()
     if WalkFlingEngine:IsActive() then
         WalkFlingEngine:Stop()
         Toggle:Set(false)
+        _G.EliteLog("WalkFling disabled due to respawn", "warning")
     end
 end)
