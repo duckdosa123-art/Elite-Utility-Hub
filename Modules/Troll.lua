@@ -107,7 +107,7 @@ end
 -- Rayfield Toggle Integration
 Tab:CreateSection("Fling - Disable Fling Guard First!")
 Tab:CreateToggle({
-    Name = "Elite WalkFling",
+    Name = "Elite WalkFling - NoClip",
     CurrentValue = false,
     Flag = "WalkFling",
     Callback = function(Value)
