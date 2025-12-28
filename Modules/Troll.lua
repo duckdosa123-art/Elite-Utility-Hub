@@ -324,3 +324,207 @@ Tab:CreateButton({
 })
 game.Players.PlayerAdded:Connect(RefreshEverything)
 game.Players.PlayerRemoving:Connect(RefreshEverything)
+
+
+-- =========================================================-Elite Troll Section –=========================================================================
+
+-- Elite Troll Engine
+local TrollEngine = {
+    Target = nil,
+    Connections = {},
+    -- Feature States
+    OrbitActive = false,
+    MimicActive = false,
+    GlitchActive = false,
+    HeadSitActive = false,
+    LagFakeActive = false,
+    -- Settings
+    OrbitSpeed = 5,
+    OrbitDistance = 5,
+    VoidPart = nil
+}
+
+-- 1. UTILITY: Troll-Specific Player Search
+local function GetTrollPlayerList()
+    local list = {}
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP then table.insert(list, v.DisplayName) end
+    end
+    return list
+end
+
+local function GetTrollTarget(name)
+    if not name then return nil end
+    name = name:lower()
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP and (v.DisplayName:lower():find(name) or v.Name:lower():find(name)) then
+            return v
+        end
+    end
+    return nil
+end
+
+-- 2. THE UI SECTION (Dedicated List & Search)
+Tab:CreateSection("Elite Troll Target")
+
+local TrollDropdown = Tab:CreateDropdown({
+    Name = "Troll Target: None",
+    Options = GetTrollPlayerList(),
+    CurrentOption = {""},
+    Callback = function(Option)
+        TrollEngine.Target = GetTrollTarget(Option[1])
+    end,
+})
+
+Tab:CreateInput({
+    Name = "Search Troll Target",
+    PlaceholderText = "Type name...",
+    Callback = function(Text)
+        local found = GetTrollTarget(Text)
+        if found then
+            TrollEngine.Target = found
+            TrollDropdown:Set({found.DisplayName})
+        end
+    end,
+})
+
+Tab:CreateButton({
+    Name = "Refresh Troll List",
+    Callback = function()
+        TrollDropdown:Refresh(GetTrollPlayerList())
+    end,
+})
+
+-- 3. ELITE FEATURES
+Tab:CreateSection("Troll Features")
+
+-- A. Elite Orbit (The Moon)
+Tab:CreateToggle({
+    Name = "Elite Orbit",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.OrbitActive = Value
+        local angle = 0
+        task.spawn(function()
+            while TrollEngine.OrbitActive do
+                if TrollEngine.Target and TrollEngine.Target.Character then
+                    local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                    local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
+                    if HRP and THRP then
+                        angle = angle + TrollEngine.OrbitSpeed
+                        HRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, 0, TrollEngine.OrbitDistance)
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end,
+})
+
+-- B. Elite Mimic (The Shadow)
+Tab:CreateToggle({
+    Name = "Elite Mimic",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.MimicActive = Value
+        
+        -- Void Protection Part
+        if Value then
+            TrollEngine.VoidPart = Instance.new("Part", workspace)
+            TrollEngine.VoidPart.Size = Vector3.new(10, 1, 10)
+            TrollEngine.VoidPart.Transparency = 1
+            TrollEngine.VoidPart.Anchored = true
+        else
+            if TrollEngine.VoidPart then TrollEngine.VoidPart:Destroy() end
+        end
+
+        task.spawn(function()
+            while TrollEngine.MimicActive do
+                if TrollEngine.Target and TrollEngine.Target.Character then
+                    local Char = LP.Character
+                    local TChar = TrollEngine.Target.Character
+                    
+                    if Char:FindFirstChild("HumanoidRootPart") and TChar:FindFirstChild("HumanoidRootPart") then
+                        -- Mirror Position
+                        Char.HumanoidRootPart.CFrame = TChar.HumanoidRootPart.CFrame
+                        -- Mirror Jump
+                        Char.Humanoid.Jump = TChar.Humanoid.Jump
+                        -- Update Void Part Position
+                        TrollEngine.VoidPart.CFrame = TChar.HumanoidRootPart.CFrame * CFrame.new(0, -3.5, 0)
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end,
+})
+
+-- C. Elite Glitcher (Animation Chaos)
+Tab:CreateToggle({
+    Name = "Elite Glitcher",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.GlitchActive = Value
+        task.spawn(function()
+            while TrollEngine.GlitchActive do
+                local Char = LP.Character
+                if Char then
+                    for _, v in pairs(Char:GetDescendants()) do
+                        if v:IsA("Motor6D") then
+                            v.C0 = v.C0 * CFrame.Angles(math.rad(math.random(-30,30)), math.rad(math.random(-30,30)), math.rad(math.random(-30,30)))
+                        end
+                    end
+                end
+                task.wait(0.05)
+            end
+        end)
+    end,
+})
+
+-- D. Elite Head-Sitter
+Tab:CreateToggle({
+    Name = "Elite Head-Sitter",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.HeadSitActive = Value
+        task.spawn(function()
+            while TrollEngine.HeadSitActive do
+                if TrollEngine.Target and TrollEngine.Target.Character then
+                    local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                    local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
+                    if HRP and THRP then
+                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 2, 0)
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end,
+})
+
+-- E. Elite Lag-Fake (Egor Style)
+Tab:CreateToggle({
+    Name = "Elite Lag-Fake",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.LagFakeActive = Value
+        local lastPos = nil
+        task.spawn(function()
+            while TrollEngine.LagFakeActive do
+                local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                if HRP then
+                    -- Store pos, freeze, snap back (Egor style)
+                    lastPos = HRP.CFrame
+                    task.wait(0.2)
+                    if TrollEngine.LagFakeActive then
+                        HRP.Anchored = true
+                        task.wait(0.1)
+                        HRP.Anchored = false
+                        HRP.CFrame = lastPos -- Snaps back to look like lag
+                    end
+                end
+                task.wait(0.05)
+            end
+        end)
+    end,
+})
