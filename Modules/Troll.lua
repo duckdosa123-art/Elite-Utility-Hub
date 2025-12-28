@@ -7,7 +7,7 @@ local WalkFling = {
     Power = 9999999 -- The IY-exact launch force
 }
 
--- // NATIVE NOTIFICATION SYSTEM //
+-- // ROBLOX NATIVE NOTIFICATION SYSTEM //
 local function SendNativeNotification(title, text)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = title,
@@ -26,71 +26,87 @@ function WalkFling:Start()
     if not HRP or not Hum then return end
 
     self.Active = true
-    _G.EliteLog("WalkFling Engine: Standby (Waiting for contact)", "success")
+    _G.EliteLog("WalkFling Engine: Active", "success")
 
-    -- GODMODE: Prevent dying from the impact force
+    -- 1. GODMODE TACTIC (STRICT IMPLEMENTATION)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    local healthConn = RunService.Heartbeat:Connect(function()
-        if self.Active and Hum then Hum.Health = Hum.MaxHealth end
+    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    
+    local godmodeConn = RunService.Heartbeat:Connect(function()
+        if not self.Active then return end
+        if Hum and Hum.Parent then
+            Hum.Health = Hum.MaxHealth
+            -- Prevent any state changes
+            if Hum:GetState() == Enum.HumanoidStateType.Dead then
+                Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
     end)
-    table.insert(self.Connections, healthConn)
+    table.insert(self.Connections, godmodeConn)
 
-    -- // ANY-TO-ANY TOUCH LOGIC //
+    -- // ACCURATE TOUCH DETECTION //
     local function ConnectPart(part)
         if not part:IsA("BasePart") then return end
         
-        local connection = part.Touched:Connect(function(hit)
+        local touchConn = part.Touched:Connect(function(hit)
             if not self.Active then return end
             
-            -- Detect if "hit" is another player
             local victimChar = hit.Parent
             local victimHum = victimChar and victimChar:FindFirstChildOfClass("Humanoid")
             local victimHRP = victimChar and victimChar:FindFirstChild("HumanoidRootPart")
 
+            -- Accuracy Fix: If we touch ANY part of another player, launch instantly
             if victimHum and victimHRP and victimChar ~= Char then
-                -- SURGICAL STRIKE: Massively spike velocity for one frame
                 local oldVel = HRP.AssemblyLinearVelocity
+                local oldRotVel = HRP.AssemblyAngularVelocity
                 
-                -- The Fling Force (Bypassed via oscillation)
-                HRP.AssemblyLinearVelocity = Vector3.new(0, self.Power, 0)
-                HRP.AssemblyAngularVelocity = Vector3.new(0, self.Power, 0)
+                -- Instant Fling Pulse: Applied in all directions to catch running targets
+                HRP.AssemblyLinearVelocity = Vector3.new(self.Power, self.Power, self.Power)
+                HRP.AssemblyAngularVelocity = Vector3.new(self.Power, self.Power, self.Power)
                 
-                -- Wait for physics calculation
-                RunService.RenderStepped:Wait()
+                -- Accuracy Fix: We wait slightly longer (0.1s) to ensure server registers the hit
+                task.wait(0.1)
                 
-                -- Reset to maintain walking control
-                HRP.AssemblyLinearVelocity = oldVel
-                HRP.AssemblyAngularVelocity = Vector3.zero
+                -- Reset to normal walking state
+                if HRP and HRP.Parent then
+                    HRP.AssemblyLinearVelocity = oldVel
+                    HRP.AssemblyAngularVelocity = oldRotVel
+                end
             end
         end)
-        table.insert(self.Connections, connection)
+        table.insert(self.Connections, touchConn)
     end
 
-    -- Connect every single part of your body
+    -- Apply to all existing parts
     for _, part in pairs(Char:GetDescendants()) do
         ConnectPart(part)
     end
 
-    -- Handle limbs appearing after character load (e.g. tools/accessories)
-    local descConn = Char.DescendantAdded:Connect(function(obj)
+    -- Apply to any parts added later (tools/accessories)
+    local childConn = Char.DescendantAdded:Connect(function(obj)
         if self.Active then ConnectPart(obj) end
     end)
-    table.insert(self.Connections, descConn)
+    table.insert(self.Connections, childConn)
 end
 
 function WalkFling:Stop()
     self.Active = false
     
-    -- Cleanup all connections
+    -- Disconnect all connections
     for _, conn in pairs(self.Connections) do
         if conn then conn:Disconnect() end
     end
     self.Connections = {}
 
-    -- Restore Humanoid State
+    -- Restore Humanoid State Safely
     local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
     if Hum then 
-        pcall(function() Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true) end)
+        pcall(function() 
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true) 
+            Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end)
     end
     
     _G.EliteLog("WalkFling Engine: Terminated", "info")
@@ -102,10 +118,22 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         if Value then
-            SendNativeNotification("Elite-Utility-Hub", "Elite WalkFling Enabled!")
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Enabled! If it doesn't work then disable Fling Guard",
+                Duration = 4,
+            })
+            
+            _G.EliteLog("Elite WalkFling enabled - Walk into players to fling them", "info")
             WalkFling:Start()
         else
-            SendNativeNotification("Elite-Utility-Hub", "Elite WalkFling Disabled")
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Disabled!",
+                Duration = 2,
+            })
+            
+            _G.EliteLog("Elite WalkFling disabled", "info"
             WalkFling:Stop()
         end
     end,
