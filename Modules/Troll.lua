@@ -1,23 +1,13 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE - STABLE WALKFLING ]]
+-- [[ ELITE-UTILITY-HUB: TROLL MODULE - NORMAL WALKFLING ]]
 -- Variables Tab, LP, RunService, Rayfield are injected by Main.lua
 
 local WalkFlingEngine = {
     Active = false,
     Connections = {},
-    Power = 99999999 -- The IY God Power
+    Power = 9999999 -- Invisible Jitter Power
 }
 
--- // ROBLOX NATIVE NOTIFICATION SYSTEM //
-local function SendNativeNotification(title, text)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Icon = "rbxassetid://6034281358",
-        Duration = 4
-    })
-end
-
--- // THE STABLE BRUTE FORCE ENGINE //
+-- // THE INVISIBLE BRUTE FORCE ENGINE //
 function WalkFlingEngine:Start()
     if self.Active then return end
     
@@ -28,7 +18,7 @@ function WalkFlingEngine:Start()
     if not HRP or not Hum then return end
     
     self.Active = true
-    _G.EliteLog("WalkFling: Stable Physics Mode Active", "success")
+    _G.EliteLog("WalkFling: Invisible Power Active", "success")
     
     -- 1. GODMODE TACTIC (PRESERVED)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
@@ -46,21 +36,7 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, godmodeConn)
     
-    -- 2. STABILITY LOOP (The fix for self-flinging)
-    -- This forces your Linear Velocity to stay low so you don't fly away
-    local stabilityConn = RunService.Heartbeat:Connect(function()
-        if not self.Active or not HRP then return end
-        
-        -- High Rotational Velocity (The Weapon)
-        HRP.AssemblyAngularVelocity = Vector3.new(0, self.Power, 0)
-        
-        -- Locked Linear Velocity (The Shield)
-        -- We only allow the Y-jitter for Netless, stopping all "Recoil" movement
-        HRP.AssemblyLinearVelocity = Vector3.new(0, 28.5 + math.sin(tick() * 10), 0)
-    end)
-    table.insert(self.Connections, stabilityConn)
-    
-    -- 3. NOCLIP LOOP (Local Collision Disable)
+    -- 2. STABILIZED NOCLIP
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, v in pairs(Char:GetDescendants()) do
@@ -71,7 +47,23 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
     
-    -- 4. ANY-TO-ANY DETECTION (Spatial Fix)
+    -- 3. INVISIBLE JITTER PHYSICS (THE "NORMAL LOOK" FIX)
+    -- We oscillate X and Z so fast the eye can't see it, but the Y stays grounded.
+    local physicsConn = RunService.Heartbeat:Connect(function()
+        if not self.Active or not HRP then return end
+        
+        local Force = WalkFlingEngine.Power
+        -- High-frequency oscillation (tick * 100) makes the movement invisible
+        local Jitter = math.sin(tick() * 100) 
+        
+        -- Y is locked to 28.5 (Grounded)
+        -- Angular is 0 (No Spinning)
+        HRP.AssemblyLinearVelocity = Vector3.new(Jitter * Force, 28.5, Jitter * Force)
+        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
+    table.insert(self.Connections, physicsConn)
+    
+    -- 4. SPATIAL QUERY (ANY-TO-ANY DETECTION)
     local queryConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not HRP then return end
         
@@ -79,18 +71,17 @@ function WalkFlingEngine:Start()
         overlapParams.FilterType = Enum.RaycastFilterType.Exclude
         overlapParams.FilterDescendantsInstances = {Char}
         
-        -- Check for victims in proximity
-        local parts = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(4, 5, 4), overlapParams)
+        -- Detects victims in the "Kill Zone"
+        local parts = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(5, 5, 5), overlapParams)
         
         for _, part in pairs(parts) do
             local vChar = part.Parent
             local vHum = vChar and vChar:FindFirstChildOfClass("Humanoid")
             
             if vHum and vHum.Health > 0 then
-                -- When touching, we add a tiny Linear "Kick" to the victim
-                -- but because of our Stability Loop (Step 2), we stay grounded.
-                HRP.AssemblyLinearVelocity = Vector3.new(self.Power, 28.5, self.Power)
-                RunService.RenderStepped:Wait() -- Pulse only for 1 frame
+                -- The Jitter physics above is already running.
+                -- Overlapping hitboxes will trigger the launch.
+                break 
             end
         end
     end)
@@ -124,7 +115,7 @@ function WalkFlingEngine:Stop()
             if v:IsA("BasePart") then v.CanCollide = true end
         end
     end
-    _G.EliteLog("WalkFling Disabled", "info")
+    _G.EliteLog("WalkFling Engine Disabled", "info")
 end
 
 -- // UI SECTION //
@@ -136,18 +127,26 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         if Value then
-            SendNativeNotification("Elite WalkFling", "Enabled! You are now a stable kill-brick.")
-            _G.EliteLog("Elite WalkFling enabled", "info")
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Enabled! Normal Appearance & Grounded Physics.",
+                Duration = 4,
+            })
+            _G.EliteLog("Elite WalkFling enabled (Stealth Mode)", "info")
             WalkFlingEngine:Start()
         else
-            SendNativeNotification("Elite WalkFling", "Disabled!")
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Disabled!",
+                Duration = 2,
+            })
             _G.EliteLog("Elite WalkFling disabled", "info")
             WalkFlingEngine:Stop()
         end
     end,
 })
 
--- Respawn Fix
+-- Respawn Logic
 LP.CharacterAdded:Connect(function()
     if WalkFlingEngine.Active then WalkFlingEngine:Stop() end
 end)
