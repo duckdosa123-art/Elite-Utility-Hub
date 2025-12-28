@@ -1,18 +1,15 @@
--- WalkFling Logic for Elite-Utility-Hub
+-- WalkFling Logic for Elite-Utility-Hub (Advanced Physics Version)
 local WalkFlingEngine = {
     Active = false,
     Connections = {},
-    BaseY = 0,
-    JumpOffset = 0,
-    IsJumping = false,
-    JumpStart = 0
+    IsFlinging = false, -- Flag to detect the exact moment of impact
 }
 
 function WalkFlingEngine:Notify(title, text)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = title,
         Text = text,
-        Icon = "rbxassetid://6023426926", -- Friend Request Icon
+        Icon = "rbxassetid://6023426926",
         Duration = 3
     })
 end
@@ -26,32 +23,35 @@ function WalkFlingEngine:Start()
     if not HRP or not Hum then return end
     
     self.Active = true
-    self.BaseY = HRP.Position.Y
-    self.JumpOffset = 0
-    self.IsJumping = false
-    
     self:Notify("Elite Utility", "WalkFling Enabled")
 
-    -- 1. State/Godmode Management
+    -- 1. Godmode & State Fixes
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     local godmodeConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not Hum then return end
         Hum.Health = Hum.MaxHealth
-        if Hum:GetState() == Enum.HumanoidStateType.Dead then Hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+        -- Prevent tripping/falling over during flings
+        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     end)
     table.insert(self.Connections, godmodeConn)
 
-    -- 2. Surgical Spike (Fling Logic)
+    -- 2. Surgical Spike (Lethal Touch)
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
             if not self.Active or hit:IsDescendantOf(Char) then return end
             if hit.Parent:FindFirstChild("Humanoid") then
+                self.IsFlinging = true -- Trigger the Recoil Dampener
+                
+                -- Spike velocity for physics impact
                 local oldVel = HRP.AssemblyLinearVelocity
-                -- Spike velocity to extreme levels for 1 frame
-                HRP.AssemblyLinearVelocity = Vector3.new(99999999, 99999999, 99999999)
+                HRP.AssemblyLinearVelocity = Vector3.new(95000000, 95000000, 95000000)
+                
                 RunService.RenderStepped:Wait()
+                
                 if HRP then HRP.AssemblyLinearVelocity = oldVel end
+                task.delay(0.1, function() self.IsFlinging = false end)
             end
         end)
         table.insert(self.Connections, touchConn)
@@ -59,7 +59,7 @@ function WalkFlingEngine:Start()
     for _, part in pairs(Char:GetDescendants()) do setupTouch(part) end
     table.insert(self.Connections, Char.DescendantAdded:Connect(setupTouch))
 
-    -- 3. Noclip (Prevents friction and getting stuck in parts)
+    -- 3. Noclip (Via Stepped for Physics overlap)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, part in pairs(Char:GetDescendants()) do
@@ -68,44 +68,28 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
 
-    -- 4. Dynamic Y-Lock & Simulated Physics
-    local physicsConn = RunService.Heartbeat:Connect(function()
+    -- 4. Advanced Recoil Dampener (The "Safe" Y-Lock)
+    local dampenerConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not HRP or not Hum then return end
         
-        -- Floor Detection (Raycast)
-        local rayParams = RaycastParams.new()
-        rayParams.FilterDescendantsInstances = {Char}
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        local currentVel = HRP.AssemblyLinearVelocity
         
-        local floorRay = workspace:Raycast(HRP.Position, Vector3.new(0, -20, 0), rayParams)
-        local floorY = floorRay and floorRay.Position.Y + (Hum.HipHeight + (HRP.Size.Y/2)) or self.BaseY
-
-        -- Simulated Jump Physics
-        if Hum.Jump and not self.IsJumping and Hum.FloorMaterial ~= Enum.Material.Air then
-            self.IsJumping = true
-            self.JumpStart = tick()
-        end
-
-        if self.IsJumping then
-            local t = tick() - self.JumpStart
-            local jumpPower = Hum.JumpPower > 0 and Hum.JumpPower or 50
-            self.JumpOffset = (jumpPower * t) - (0.5 * workspace.Gravity * (t * t))
-            
-            -- End jump when player falls back to floor height
-            if self.JumpOffset <= 0 then
-                self.JumpOffset = 0
-                self.IsJumping = false
+        -- Logic: If we are NOT intentionally jumping, but we have massive upward velocity...
+        -- It's recoil. We kill the upward momentum but KEEP horizontal movement.
+        if self.IsFlinging or Hum.FloorMaterial ~= Enum.Material.Air then
+            if currentVel.Y > 50 then -- 50 is slightly higher than a standard jump
+                HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, 0, currentVel.Z)
             end
-        else
-            -- Smoothly transition BaseY to match the floor (Fixes getting stuck in air)
-            self.BaseY = floorY
         end
-
-        -- Hard-Lock the Y-Axis to prevent recoil from lifting the player
-        local currentPos = HRP.Position
-        HRP.CFrame = CFrame.new(currentPos.X, self.BaseY + self.JumpOffset, currentPos.Z) * HRP.CFrame.Rotation
+        
+        -- Fall Safety: If falling, don't let recoil "bounce" us back up
+        if Hum:GetState() == Enum.HumanoidStateType.Freefall then
+            if currentVel.Y > 0 then -- If falling but moving UP (recoil)
+                HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, -20, currentVel.Z)
+            end
+        end
     end)
-    table.insert(self.Connections, physicsConn)
+    table.insert(self.Connections, dampenerConn)
 end
 
 function WalkFlingEngine:Stop()
@@ -116,11 +100,16 @@ function WalkFlingEngine:Stop()
     self.Connections = {}
     
     local Hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-    if Hum then Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true) end
+    if Hum then
+        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+        Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    end
     
     self:Notify("Elite Utility", "WalkFling Disabled")
 end
 -- Rayfield Toggle Integration
+Tab:CreateSection("Fling - Disable Fling Guard First!")
 Tab:CreateToggle({
     Name = "Elite WalkFling",
     CurrentValue = false,
