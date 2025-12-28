@@ -6,8 +6,6 @@
 local WalkFlingEngine = {}
 WalkFlingEngine.Active = false
 WalkFlingEngine.Connections = {}
-WalkFlingEngine.OriginalHealth = nil
-WalkFlingEngine.OriginalMaxHealth = nil
 
 function WalkFlingEngine:Start()
     if self.Active then return end
@@ -29,9 +27,16 @@ function WalkFlingEngine:Start()
     
     _G.EliteLog("WalkFling engine started", "success")
     
-    -- Store original health values
-    self.OriginalHealth = Hum.Health
-    self.OriginalMaxHealth = Hum.MaxHealth
+    -- GODMODE - Prevent death completely while active
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    
+    local godmodeConn = RunService.Heartbeat:Connect(function()
+        if not self.Active then return end
+        if Hum and Hum.Parent then
+            Hum.Health = Hum.MaxHealth
+        end
+    end)
+    table.insert(self.Connections, godmodeConn)
     
     -- Main fling loop - ONLY when touching other players
     HRP.CanCollide = false
@@ -61,6 +66,11 @@ function WalkFlingEngine:Start()
                     
                     -- Reset velocity back to normal
                     HRP.Velocity = currentVel
+                    
+                    -- Ensure we stay alive
+                    if Hum then
+                        Hum.Health = Hum.MaxHealth
+                    end
                 end
             end
         end)
@@ -85,46 +95,42 @@ end
 function WalkFlingEngine:Stop()
     self.Active = false
     
+    local Char = LP.Character
+    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+    local Hum = Char and Char:FindFirstChild("Humanoid")
+    
     -- Disconnect all connections FIRST
     for _, conn in pairs(self.Connections) do
-        if conn then conn:Disconnect() end
+        if conn then 
+            pcall(function() conn:Disconnect() end)
+        end
     end
     self.Connections = {}
     
-    -- Wait to ensure all connections are cleaned up
-    task.wait(0.1)
+    -- Small wait for cleanup
+    task.wait(0.05)
     
-    -- Restore character state
-    local Char = LP.Character
-    if Char then
-        local HRP = Char:FindFirstChild("HumanoidRootPart")
-        local Hum = Char:FindFirstChild("Humanoid")
-        
-        if HRP then
-            HRP.CanCollide = true
-            HRP.Velocity = Vector3.new(0, 0, 0)
-            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        end
-        
-        if Hum and Hum.Health > 0 then
-            -- Restore original health values safely
-            pcall(function()
-                if self.OriginalMaxHealth and self.OriginalMaxHealth > 0 then
-                    Hum.MaxHealth = self.OriginalMaxHealth
-                end
-                
-                task.wait(0.05)
-                
-                if self.OriginalHealth and self.OriginalHealth > 0 then
-                    Hum.Health = self.OriginalHealth
-                end
-            end)
-        end
+    -- Restore character state safely
+    if HRP and HRP.Parent then
+        HRP.CanCollide = true
+        HRP.Velocity = Vector3.new(0, 0, 0)
+        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     end
     
-    -- Reset stored values
-    self.OriginalHealth = nil
-    self.OriginalMaxHealth = nil
+    if Hum and Hum.Parent then
+        -- Re-enable death
+        pcall(function()
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        end)
+        
+        -- Ensure health is full
+        task.wait(0.05)
+        pcall(function()
+            if Hum.Health <= 0 then
+                Hum.Health = Hum.MaxHealth
+            end
+        end)
+    end
 end
 
 function WalkFlingEngine:IsActive()
