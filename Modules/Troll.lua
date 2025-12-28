@@ -1,87 +1,120 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE - FEATURE: AUTHENTIC WALKFLING ]]
--- Tab, LP, RunService, Rayfield are injected by Main.lua
+-- Elite WalkFling - Extreme Performance Module
+-- Designed for maximum fling power with anti-cheat evasion
 
-local FlingActive = false
-local SG = game:GetService("StarterGui")
-
--- // ROBLOX NATIVE NOTIFICATION SYSTEM //
-local function SendRobloxNotification(title, text)
-    pcall(function()
-        SG:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Icon = "rbxassetid://6034281358", -- Friend Request / User Icon
-            Duration = 5
-        })
-    end)
-end
-
--- // THE CORE WALKFLING ENGINE (IY-EXACT) //
-local function RunEliteWalkFling()
-    local Char = LP.Character
-    local HRP = Char:FindFirstChild("HumanoidRootPart")
-    local Hum = Char:FindFirstChildOfClass("Humanoid")
-    
-    if not HRP or not Hum then return end
-
-    task.spawn(function()
-        while FlingActive and HRP.Parent do
-            -- IY PHYSICS LOGIC: Massive Velocity + Directional Shifting
-            -- To bypass AC, we oscillate the massive force so the "Average" velocity is low
-            local Time = tick() * 35 
-            local Power = 999999 -- The IY "God" Force
-            
-            -- Rotational Linear Velocity (This is the secret to the WalkFling power)
-            HRP.AssemblyLinearVelocity = Vector3.new(
-                math.sin(Time) * Power, 
-                28.5 + math.sin(tick() * 10), -- The Beast Netless Constant
-                math.cos(Time) * Power
-            )
-            
-            -- Angular Spin for extra launch distance
-            HRP.AssemblyAngularVelocity = Vector3.new(0, Power, 0)
-            
-            -- NORMAL WALKING STATE PRESERVATION
-            -- We prevent the character from falling over while keeping normal walking
-            Hum.AutoRotate = true 
-            
-            -- GHOSTING (Local Only)
-            for _, part in pairs(Char:GetChildren()) do
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                    part.CanCollide = false
-                end
-            end
-            
-            RunService.Heartbeat:Wait()
-        end
-        
-        -- // CLEANUP //
-        if HRP then
-            HRP.AssemblyLinearVelocity = Vector3.zero
-            HRP.AssemblyAngularVelocity = Vector3.zero
-        end
-        if Char then
-            for _, part in pairs(Char:GetChildren()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
-            end
-        end
-    end)
-end
-
--- // UI COMPONENT //
-Tab:CreateToggle({
+local Toggle = Tab:CreateToggle({
     Name = "Elite WalkFling",
     CurrentValue = false,
+    Flag = "EliteWalkFling_Toggle",
     Callback = function(Value)
-        FlingActive = Value
-        
         if Value then
-            -- Trigger Roblox-style notification
-            SendRobloxNotification("Elite-Utility-Hub", "Elite WalkFling Enabled!")
-            _G.EliteLog("WalkFling Activated: IY Physics Engine Loaded", "success")
-            RunEliteWalkFling()
+            -- Enable notification
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Elite WalkFling Enabled!",
+                Duration = 3,
+                Button1 = "OK"
+            })
+            _G.EliteLog("Elite WalkFling activated", "success")
+            
+            -- Spawn the fling loop
+            task.spawn(function()
+                local Char = LP.Character
+                if not Char then return end
+                
+                local HRP = Char:FindFirstChild("HumanoidRootPart")
+                local Humanoid = Char:FindFirstChild("Humanoid")
+                
+                if not HRP or not Humanoid then 
+                    _G.EliteLog("Character components missing", "error")
+                    return 
+                end
+                
+                -- Store original CanCollide states
+                local OriginalCollision = {}
+                for _, part in pairs(Char:GetDescendants()) do
+                    if part:IsA("BasePart") and part ~= HRP then
+                        OriginalCollision[part] = part.CanCollide
+                        part.CanCollide = false
+                    end
+                end
+                
+                -- Physics constants
+                local FLING_MAGNITUDE = 999999
+                local VERTICAL_CONSTANT = 28.5
+                local NETLESS_JITTER = 0.3
+                
+                -- Main fling loop
+                local Connection
+                Connection = RunService.Heartbeat:Connect(function()
+                    if not Toggle.CurrentValue then
+                        Connection:Disconnect()
+                        
+                        -- Restore collision
+                        for part, state in pairs(OriginalCollision) do
+                            if part and part.Parent then
+                                part.CanCollide = state
+                            end
+                        end
+                        
+                        -- Reset velocities
+                        if HRP and HRP.Parent then
+                            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                        end
+                        
+                        _G.EliteLog("Elite WalkFling deactivated", "info")
+                        return
+                    end
+                    
+                    -- Validate character integrity
+                    if not Char or not Char.Parent or not HRP or not HRP.Parent or not Humanoid or Humanoid.Health <= 0 then
+                        Toggle:Set(false)
+                        return
+                    end
+                    
+                    -- Ensure normal walking state (NOT PlatformStand)
+                    if Humanoid.PlatformStand then
+                        Humanoid.PlatformStand = false
+                    end
+                    
+                    -- Velocity Oscillation (Anti-Cheat Bypass)
+                    -- Uses rapid vector shifts so server-side average appears normal
+                    local time = tick()
+                    local oscillation = math.sin(time * 100) -- Extremely fast oscillation
+                    
+                    -- Create oscillating velocity vector
+                    local velocityDirection = Vector3.new(
+                        math.sin(time * 50) * oscillation,
+                        VERTICAL_CONSTANT + (math.sin(time * 30) * NETLESS_JITTER), -- Netless jitter
+                        math.cos(time * 50) * oscillation
+                    ).Unit
+                    
+                    -- Apply massive velocity with oscillation
+                    HRP.AssemblyLinearVelocity = velocityDirection * FLING_MAGNITUDE
+                    
+                    -- Apply angular velocity for spin (increases fling power)
+                    local angularOscillation = math.cos(time * 80)
+                    HRP.AssemblyAngularVelocity = Vector3.new(
+                        angularOscillation * FLING_MAGNITUDE * 0.5,
+                        math.sin(time * 90) * FLING_MAGNITUDE * 0.5,
+                        angularOscillation * FLING_MAGNITUDE * 0.5
+                    )
+                    
+                    -- Maintain ghosting (no collision)
+                    for _, part in pairs(Char:GetDescendants()) do
+                        if part:IsA("BasePart") and part ~= HRP then
+                            part.CanCollide = false
+                        end
+                    end
+                end)
+            end)
         else
-            _G.EliteLog("WalkFling Deactivated", "info")
+            -- Disable is handled by the Heartbeat disconnect logic
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Elite WalkFling",
+                Text = "Elite WalkFling Disabled!",
+                Duration = 2,
+            })
         end
     end,
 })
