@@ -88,28 +88,32 @@ function WalkFlingEngine:Stop()
         local HRP = Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char:FindFirstChild("Humanoid")
         
-        if HRP then
-            HRP.CanCollide = true
-            HRP.Velocity = Vector3.new(0, 0, 0)
-        end
-        
         if Hum then
-            -- Restore original health BEFORE re-enabling death
+            -- Restore original health FIRST
             if self.OriginalMaxHealth and self.OriginalHealth then
                 Hum.MaxHealth = self.OriginalMaxHealth
+                task.wait(0.1)
                 Hum.Health = self.OriginalHealth
             else
                 -- Fallback to 100 if we don't have stored values
                 Hum.MaxHealth = 100
+                task.wait(0.1)
                 Hum.Health = 100
             end
             
-            -- Wait a frame before re-enabling death
-            task.wait()
+            -- Wait before changing states
+            task.wait(0.2)
             
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
             Hum.BreakJointsOnDeath = true
+            
+            -- Return to normal state
             Hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+        
+        if HRP then
+            HRP.CanCollide = true
+            HRP.Velocity = Vector3.new(0, 0, 0)
         end
     end
     
@@ -136,8 +140,8 @@ local Toggle = Tab:CreateToggle({
             -- Show notification
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Elite WalkFling",
-                Text = "Enabled!",
-                Duration = 2,
+                Text = "Enabled! If it doesn't work then disable Fling Guard",
+                Duration = 4,
             })
             
             _G.EliteLog("Elite WalkFling enabled - Walk into players to fling them", "info")
