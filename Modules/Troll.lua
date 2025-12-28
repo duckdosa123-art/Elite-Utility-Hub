@@ -371,23 +371,21 @@ local function GetTrollTarget(name)
 end
 
 -- Utility: Store Joints for Glitcher Reset
-local function StoreJoints(Char)
-    TrollEngine.OriginalJoints = {}
-    for _, v in pairs(Char:GetDescendants()) do
-        if v:IsA("Motor6D") then
-            TrollEngine.OriginalJoints[v] = v.C0
-        end
-    end
-end
+TrollEngine.GlitchTrack = nil
+TrollEngine.GlitchEmoteID = "132185930546482" -- Your provided Emote ID
 
-local function RestoreJoints(Char)
-    for motor, originalC0 in pairs(TrollEngine.OriginalJoints) do
-        if motor and motor.Parent then
-            motor.C0 = originalC0
-        end
+-- Helper: Stop all Glitch Effects
+local function ClearGlitch(Char)
+    TrollEngine.GlitchActive = false
+    -- 1. Stop Animation
+    if TrollEngine.GlitchTrack then 
+        TrollEngine.GlitchTrack:Stop() 
+        TrollEngine.GlitchTrack = nil
     end
+    -- 2. Reset Joints (Original Form)
+    RestoreJoints(Char)
+    _G.EliteLog("Glitcher Disabled: Original Form Restored", "info")
 end
-
 -- Troll Engine State Update
 TrollEngine.PlatformTransparency = 0.8
 TrollEngine.VoidPart = nil
@@ -546,28 +544,57 @@ Tab:CreateSlider({
 
 -- 3. ELITE GLITCHER (Fix/Restoration)
 Tab:CreateToggle({
-    Name = "Elite Glitcher",
+    Name = "Elite Glitcher (FE Emote)",
     CurrentValue = false,
     Callback = function(Value)
-        TrollEngine.GlitchActive = Value
+        local Char = LP.Character
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+        if not Char or not Hum then return end
+
         if Value then
-            StoreJoints(LP.Character)
-            task.spawn(function()
-                while TrollEngine.GlitchActive do
-                    for motor, _ in pairs(TrollEngine.OriginalJoints) do
-                        if motor and motor.Parent then
-                            motor.C0 = motor.C0 * CFrame.Angles(math.rad(math.random(-45,45)), math.rad(math.random(-45,45)), math.rad(math.random(-45,45)))
-                        end
-                    end
-                    task.wait(0.05)
+            TrollEngine.GlitchActive = true
+            StoreJoints(Char) -- Save original form
+            
+            -- Detect Rig Type
+            if Hum.RigType == Enum.HumanoidRigType.R15 then
+                -- R15: Play Marketplace Emote at 10x Speed
+                local Anim = Instance.new("Animation")
+                Anim.AnimationId = "rbxassetid://" .. TrollEngine.GlitchEmoteID
+                
+                local success, track = pcall(function() 
+                    return Hum:FindFirstChildOfClass("Animator"):LoadAnimation(Anim) 
+                end)
+                
+                if success and track then
+                    TrollEngine.GlitchTrack = track
+                    TrollEngine.GlitchTrack.Looped = true
+                    TrollEngine.GlitchTrack:Play()
+                    TrollEngine.GlitchTrack:AdjustSpeed(10) -- 10x Glitch Speed
+                    _G.EliteLog("Playing R15 Glitch Emote (FE)", "success")
                 end
-            end)
+            else
+                -- R6: Joint Scramble (Since Emotes don't work on R6)
+                _G.EliteLog("R6 Detected: Using Joint-Scramble Glitch", "warn")
+                task.spawn(function()
+                    while TrollEngine.GlitchActive do
+                        for motor, _ in pairs(TrollEngine.OriginalJoints) do
+                            if motor and motor.Parent then
+                                motor.C0 = motor.C0 * CFrame.Angles(
+                                    math.rad(math.random(-90,90)), 
+                                    math.rad(math.random(-90,90)), 
+                                    math.rad(math.random(-90,90))
+                                )
+                            end
+                        end
+                        task.wait(0.03) -- Faster jitter for R6
+                    end
+                end)
+            end
         else
-            RestoreJoints(LP.Character)
+            ClearGlitch(Char)
         end
     end,
 })
-
 -- 4. ELITE HEAD-SITTER (Shoulder Sit)
 Tab:CreateToggle({
     Name = "Elite Head-Sitter",
