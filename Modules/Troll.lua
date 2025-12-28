@@ -105,16 +105,24 @@ function WalkFlingEngine:Stop()
     _G.EliteLog("WalkFling engine stopped", "info")
 end
 
--- Elite Targeting Physics Engine
+-- Elite Propeller Fling Engine
 local TargetEngine = {
-    Active = false,
-    LoopActive = false,
     SelectedPlayer = nil,
-    OriginalPos = nil,
+    LoopActive = false,
     Connections = {},
+    OriginalPos = nil,
+    FlingingInProgress = false
 }
 
--- 1. UTILITY: Player Search & List Management
+-- 1. UTILITY: Smart Search & Refresh Logic
+local function GetPlayerList()
+    local list = {}
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP then table.insert(list, v.DisplayName) end
+    end
+    return list
+end
+
 local function GetPlayerByShortName(name)
     name = name:lower()
     for _, v in pairs(game.Players:GetPlayers()) do
@@ -125,77 +133,78 @@ local function GetPlayerByShortName(name)
     return nil
 end
 
-local function GetPlayerList()
-    local list = {}
-    for _, v in pairs(game.Players:GetPlayers()) do
-        if v ~= LP then table.insert(list, v.DisplayName) end
-    end
-    return list
-end
-
--- 2. CORE: The Fling Execution (Fixed TP Logic)
-function TargetEngine:Execute(Target)
-    if not Target or not Target.Character then return end
+-- 2. CORE: The Propeller Spin-Fling
+function TargetEngine:SpinFling(Target)
+    if not Target or not Target.Character or self.FlingingInProgress then return end
+    
     local TChar = Target.Character
     local THRP = TChar:FindFirstChild("HumanoidRootPart")
     local MyChar = LP.Character
     local MyHRP = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
     local MyHum = MyChar and MyChar:FindFirstChild("Humanoid")
-
+    
     if not THRP or not MyHRP or not MyHum then return end
 
-    -- Save Position & Prep Physics
+    self.FlingingInProgress = true
     self.OriginalPos = MyHRP.CFrame
-    local oldVel = MyHRP.AssemblyLinearVelocity
-    
-    -- "Ghost Mode" Prep
+    _G.EliteLog("Flinging: " .. Target.DisplayName, "info")
+
+    -- Setup Physics for Fling
+    local oldMassless = {}
     for _, v in pairs(MyChar:GetDescendants()) do
-        if v:IsA("BasePart") then v.Massless = true end
+        if v:IsA("BasePart") then
+            oldMassless[v] = v.Massless
+            v.Massless = true
+            v.CanCollide = false
+        end
     end
 
-    -- TELEPORT & STRIKE
-    -- We TP slightly behind and set massive velocity TOWARDS them
-    local strikeCount = 0
+    -- The Propeller Loop
+    local flingTime = 0
     repeat
         task.wait()
-        strikeCount = strikeCount + 1
+        flingTime = flingTime + 1
         
-        -- Lock to target position
-        MyHRP.CFrame = THRP.CFrame * CFrame.new(0, 0, 1) 
-        -- Spike velocity
-        MyHRP.AssemblyLinearVelocity = Vector3.new(99999999, 99999999, 99999999)
-        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 99999999, 0)
+        -- TP directly into them and Spin
+        MyHRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(flingTime * 90), 0)
+        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
+        MyHRP.AssemblyLinearVelocity = Vector3.new(999, 999, 999) -- Add some push
         
-    until strikeCount > 10 or (THRP.AssemblyLinearVelocity.Magnitude > 200) or not Target.Parent
-    
-    -- RETURN SAFETY
-    MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        -- Check if they are launched (Velocity > 150)
+    until (THRP.AssemblyLinearVelocity.Magnitude > 150) or (flingTime > 30) or not Target.Parent or not self.Active
+
+    -- Stop Spin & Cleanup
     MyHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    MyHRP.CFrame = self.OriginalPos
+    MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     
-    -- Cleanup Masses
-    for _, v in pairs(MyChar:GetDescendants()) do
-        if v:IsA("BasePart") then v.Massless = false end
+    -- Teleport Back to safety
+    MyHRP.CFrame = self.OriginalPos
+
+    -- Restore collision and mass
+    for part, wasMassless in pairs(oldMassless) do
+        if part and part.Parent then
+            part.Massless = wasMassless
+        end
     end
+
+    self.FlingingInProgress = false
 end
 
--- 3. PERMANENT GODMODE & NOCLIP (For Targeting)
-local function EnableTargetPhysics()
+-- 3. PERMANENT PHYSICS OVERRIDE (Godmode/Noclip)
+local function SetupFlingSafety()
     local Char = LP.Character
     local Hum = Char:FindFirstChildOfClass("Humanoid")
     if not Hum then return end
 
-    -- Health Lock (For Natural Disaster/Killbricks)
+    -- Heartbeat Godmode (Anti-Death)
     table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
         if Hum then 
             Hum.Health = Hum.MaxHealth 
-            if Hum:GetState() == Enum.HumanoidStateType.Dead then
-                Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
     end))
 
-    -- Collision Lock (For Fling Accuracy)
+    -- Stepped Noclip (Essential for Spin Fling)
     table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
         if Char then
             for _, v in pairs(Char:GetDescendants()) do
@@ -204,6 +213,7 @@ local function EnableTargetPhysics()
         end
     end))
 end
+
 -- Rayfield Toggle Integration
 Tab:CreateSection("Fling - Disable Fling Guard First!")
 Tab:CreateToggle({
@@ -220,7 +230,7 @@ Tab:CreateToggle({
 })
 Tab:CreateSection("Advance Fling - Disable Fling Guard First!")
 local PlayerDropdown = Tab:CreateDropdown({
-    Name = "Select Target",
+    Name = "Selected: None",
     Options = GetPlayerList(),
     CurrentOption = {""},
     Callback = function(Option)
@@ -229,15 +239,15 @@ local PlayerDropdown = Tab:CreateDropdown({
 })
 
 Tab:CreateInput({
-    Name = "Quick Search Player",
-    PlaceholderText = "Type half name...",
+    Name = "Search & Auto-Select",
+    PlaceholderText = "Type start of name...",
     Callback = function(Text)
         if Text == "" then return end
         local found = GetPlayerByShortName(Text)
         if found then
             TargetEngine.SelectedPlayer = found
-            PlayerDropdown:Set({found.DisplayName}) -- Auto-select in UI
-            _G.EliteLog("Auto-targeted: " .. found.DisplayName, "success")
+            PlayerDropdown:Set({found.DisplayName}) -- Updates UI
+            _G.EliteLog("Found: " .. found.DisplayName, "success")
         end
     end,
 })
@@ -250,13 +260,11 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Fling Target",
+    Name = "Elite Fling Target",
     Callback = function()
         if TargetEngine.SelectedPlayer then
-            EnableTargetPhysics() -- Ensure Godmode is active during TP
-            TargetEngine:Execute(TargetEngine.SelectedPlayer)
-            -- Clean up physics after one-time fling
-            for _, v in pairs(TargetEngine.Connections) do v:Disconnect() end
+            SetupFlingSafety()
+            TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
         end
     end,
 })
@@ -266,29 +274,28 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         TargetEngine.LoopActive = Value
-        if Value then EnableTargetPhysics() end
+        if Value then SetupFlingSafety() end
         task.spawn(function()
             while TargetEngine.LoopActive do
                 if TargetEngine.SelectedPlayer then
-                    TargetEngine:Execute(TargetEngine.SelectedPlayer)
+                    TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
                 end
-                task.wait(1)
+                task.wait(1.5)
             end
         end)
     end,
 })
 
 Tab:CreateButton({
-    Name = "Fling All (Server Purge)",
+    Name = "Elite Fling All",
     Callback = function()
-        EnableTargetPhysics()
-        _G.EliteLog("Purging server...", "warn")
-        for _, p in pairs(game.Players:GetPlayers()) do
+        SetupFlingSafety()
+        local players = game.Players:GetPlayers()
+        for _, p in pairs(players) do
             if p ~= LP and p.Character then
-                TargetEngine:Execute(p)
+                TargetEngine:SpinFling(p)
                 task.wait(0.1)
             end
         end
-        _G.EliteLog("Purge Complete", "success")
     end,
 })
