@@ -1,11 +1,10 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE - TARGET-ONLY WALKFLING ]]
+-- [[ ELITE-UTILITY-HUB: TROLL MODULE - STABLE WALKFLING ]]
 -- Variables Tab, LP, RunService, Rayfield are injected by Main.lua
 
 local WalkFlingEngine = {
     Active = false,
     Connections = {},
-    Power = 99999999,
-    Flinging = false 
+    Power = 99999999 -- The IY God Power
 }
 
 -- // ROBLOX NATIVE NOTIFICATION SYSTEM //
@@ -18,7 +17,7 @@ local function SendNativeNotification(title, text)
     })
 end
 
--- // THE TARGET-ONLY BRUTE FORCE ENGINE //
+-- // THE STABLE BRUTE FORCE ENGINE //
 function WalkFlingEngine:Start()
     if self.Active then return end
     
@@ -29,9 +28,9 @@ function WalkFlingEngine:Start()
     if not HRP or not Hum then return end
     
     self.Active = true
-    _G.EliteLog("WalkFling: Targets Only Mode Active", "success")
+    _G.EliteLog("WalkFling: Stable Physics Mode Active", "success")
     
-    -- 1. GODMODE TACTIC (STRICT)
+    -- 1. GODMODE TACTIC (PRESERVED)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -47,7 +46,21 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, godmodeConn)
     
-    -- 2. STABILIZED NOCLIP (Prevents Recoil)
+    -- 2. STABILITY LOOP (The fix for self-flinging)
+    -- This forces your Linear Velocity to stay low so you don't fly away
+    local stabilityConn = RunService.Heartbeat:Connect(function()
+        if not self.Active or not HRP then return end
+        
+        -- High Rotational Velocity (The Weapon)
+        HRP.AssemblyAngularVelocity = Vector3.new(0, self.Power, 0)
+        
+        -- Locked Linear Velocity (The Shield)
+        -- We only allow the Y-jitter for Netless, stopping all "Recoil" movement
+        HRP.AssemblyLinearVelocity = Vector3.new(0, 28.5 + math.sin(tick() * 10), 0)
+    end)
+    table.insert(self.Connections, stabilityConn)
+    
+    -- 3. NOCLIP LOOP (Local Collision Disable)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, v in pairs(Char:GetDescendants()) do
@@ -58,56 +71,26 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
     
-    -- 3. SPATIAL QUERY (BRUTE FORCE DETECTION)
+    -- 4. ANY-TO-ANY DETECTION (Spatial Fix)
     local queryConn = RunService.Heartbeat:Connect(function()
-        if not self.Active or self.Flinging or not HRP then return end
+        if not self.Active or not HRP then return end
         
         local overlapParams = OverlapParams.new()
         overlapParams.FilterType = Enum.RaycastFilterType.Exclude
         overlapParams.FilterDescendantsInstances = {Char}
         
-        -- Box check for victims
-        local partsInBox = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(4, 6, 4), overlapParams)
+        -- Check for victims in proximity
+        local parts = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(4, 5, 4), overlapParams)
         
-        for _, part in pairs(partsInBox) do
-            local victimChar = part.Parent
-            local victimHum = victimChar and victimChar:FindFirstChildOfClass("Humanoid")
+        for _, part in pairs(parts) do
+            local vChar = part.Parent
+            local vHum = vChar and vChar:FindFirstChildOfClass("Humanoid")
             
-            if victimHum and victimHum.Health > 0 then
-                self.Flinging = true 
-                
-                task.spawn(function()
-                    -- Store current movement to keep it smooth
-                    local currentMove = HRP.AssemblyLinearVelocity
-                    
-                    local startTime = tick()
-                    while tick() - startTime < 0.15 do -- 0.15s aggressive pulse
-                        if not HRP or not self.Active then break end
-                        
-                        -- THE FIX: We spike X and Z (horizontal) but lock Y to 28.5 (Netless)
-                        -- This flings THEM sideways/away but keeps YOU on the ground
-                        HRP.AssemblyLinearVelocity = Vector3.new(
-                            self.Power * (math.random(0,1) == 0 and 1 or -1), 
-                            28.5 + math.sin(tick() * 20), -- Stable height bypass
-                            self.Power * (math.random(0,1) == 0 and 1 or -1)
-                        )
-                        
-                        -- Massive spin for extra launch power
-                        HRP.AssemblyAngularVelocity = Vector3.new(0, self.Power, 0)
-                        
-                        RunService.RenderStepped:Wait()
-                    end
-                    
-                    -- Reset to normal movement instantly
-                    if HRP then
-                        HRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                        HRP.AssemblyAngularVelocity = Vector3.zero
-                    end
-                    
-                    task.wait(0.05)
-                    self.Flinging = false
-                end)
-                break
+            if vHum and vHum.Health > 0 then
+                -- When touching, we add a tiny Linear "Kick" to the victim
+                -- but because of our Stability Loop (Step 2), we stay grounded.
+                HRP.AssemblyLinearVelocity = Vector3.new(self.Power, 28.5, self.Power)
+                RunService.RenderStepped:Wait() -- Pulse only for 1 frame
             end
         end
     end)
@@ -116,7 +99,6 @@ end
 
 function WalkFlingEngine:Stop()
     self.Active = false
-    self.Flinging = false
     for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
     
@@ -142,10 +124,11 @@ function WalkFlingEngine:Stop()
             if v:IsA("BasePart") then v.CanCollide = true end
         end
     end
-    _G.EliteLog("WalkFling Terminated", "info")
+    _G.EliteLog("WalkFling Disabled", "info")
 end
 
 -- // UI SECTION //
+
 Tab:CreateSection("Fling - Disable Fling Guard First!")
 
 Tab:CreateToggle({
@@ -153,17 +136,18 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         if Value then
-            SendNativeNotification("Elite WalkFling", "Enabled! Walk into targets to launch them!.")
+            SendNativeNotification("Elite WalkFling", "Enabled! You are now a stable kill-brick.")
+            _G.EliteLog("Elite WalkFling enabled", "info")
             WalkFlingEngine:Start()
         else
             SendNativeNotification("Elite WalkFling", "Disabled!")
+            _G.EliteLog("Elite WalkFling disabled", "info")
             WalkFlingEngine:Stop()
         end
     end,
 })
 
+-- Respawn Fix
 LP.CharacterAdded:Connect(function()
-    if WalkFlingEngine.Active then
-        WalkFlingEngine:Stop()
-    end
+    if WalkFlingEngine.Active then WalkFlingEngine:Stop() end
 end)
