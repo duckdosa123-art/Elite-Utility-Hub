@@ -370,22 +370,6 @@ local function GetTrollTarget(name)
     return nil
 end
 
--- Utility: Store Joints for Glitcher Reset
-TrollEngine.GlitchTrack = nil
-TrollEngine.GlitchEmoteID = "132185930546482" -- Your provided Emote ID
-
--- Helper: Stop all Glitch Effects
-local function ClearGlitch(Char)
-    TrollEngine.GlitchActive = false
-    -- 1. Stop Animation
-    if TrollEngine.GlitchTrack then 
-        TrollEngine.GlitchTrack:Stop() 
-        TrollEngine.GlitchTrack = nil
-    end
-    -- 2. Reset Joints (Original Form)
-    RestoreJoints(Char)
-    _G.EliteLog("Glitcher Disabled: Original Form Restored", "info")
-end
 -- Troll Engine State Update
 TrollEngine.PlatformTransparency = 0.8
 TrollEngine.VoidPart = nil
@@ -542,87 +526,92 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.MimicDistance = Value end,
 })
 
--- 3. ELITE GLITCHER (Fix/Restoration)
-Tab:CreateToggle({
-    Name = "Elite Glitcher (FE Emote)",
-    CurrentValue = false,
-    Callback = function(Value)
-        local Char = LP.Character
-        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-        if not Char or not Hum then return end
+-- Elite Head-Sitter State
+TrollEngine.HeadSitJoints = {}
 
-        if Value then
-            TrollEngine.GlitchActive = true
-            StoreJoints(Char) -- Save original form
-            
-            -- Detect Rig Type
-            if Hum.RigType == Enum.HumanoidRigType.R15 then
-                -- R15: Play Marketplace Emote at 10x Speed
-                local Anim = Instance.new("Animation")
-                Anim.AnimationId = "rbxassetid://" .. TrollEngine.GlitchEmoteID
-                
-                local success, track = pcall(function() 
-                    return Hum:FindFirstChildOfClass("Animator"):LoadAnimation(Anim) 
-                end)
-                
-                if success and track then
-                    TrollEngine.GlitchTrack = track
-                    TrollEngine.GlitchTrack.Looped = true
-                    TrollEngine.GlitchTrack:Play()
-                    TrollEngine.GlitchTrack:AdjustSpeed(10) -- 10x Glitch Speed
-                    _G.EliteLog("Playing R15 Glitch Emote (FE)", "success")
-                end
-            else
-                -- R6: Joint Scramble (Since Emotes don't work on R6)
-                _G.EliteLog("R6 Detected: Using Joint-Scramble Glitch", "warn")
-                task.spawn(function()
-                    while TrollEngine.GlitchActive do
-                        for motor, _ in pairs(TrollEngine.OriginalJoints) do
-                            if motor and motor.Parent then
-                                motor.C0 = motor.C0 * CFrame.Angles(
-                                    math.rad(math.random(-90,90)), 
-                                    math.rad(math.random(-90,90)), 
-                                    math.rad(math.random(-90,90))
-                                )
-                            end
-                        end
-                        task.wait(0.03) -- Faster jitter for R6
-                    end
-                end)
-            end
-        else
-            ClearGlitch(Char)
-        end
-    end,
-})
--- 4. ELITE HEAD-SITTER (Shoulder Sit)
 Tab:CreateToggle({
     Name = "Elite Head-Sitter",
     CurrentValue = false,
     Callback = function(Value)
         TrollEngine.HeadSitActive = Value
-        local Hum = LP.Character:FindFirstChild("Humanoid")
-        if Value and Hum then
-            Hum.Sit = true
-        end
-        task.spawn(function()
-            while TrollEngine.HeadSitActive do
-                if TrollEngine.Target and TrollEngine.Target.Character then
-                    local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
-                    local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
-                    if HRP and THRP then
-                        -- Positioning to look like sitting on shoulders
-                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 1.6, 0.2) 
-                        if Hum and not Hum.Sit then Hum.Sit = true end
+        local Char = LP.Character
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+        if not Char or not Hum then return end
+
+        if Value then
+            -- 1. Store Original Joint Positions for Reset
+            TrollEngine.HeadSitJoints = {}
+            for _, v in pairs(Char:GetDescendants()) do
+                if v:IsA("Motor6D") and v.Name:find("Shoulder") then
+                    TrollEngine.HeadSitJoints[v] = v.C0
+                end
+            end
+
+            -- 2. Position, Godmode, and Flap Animation Loop
+            task.spawn(function()
+                while TrollEngine.HeadSitActive do
+                    local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
+                    local HRP = Char:FindFirstChild("HumanoidRootPart")
+                    local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
+
+                    if HRP and THRP and Hum then
+                        -- NO FALL DAMAGE / GODMODE logic
+                        Hum.Health = Hum.MaxHealth
+                        if Hum:GetState() == Enum.HumanoidStateType.Freefall then
+                            Hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+                        end
+
+                        -- POSITIONING (Shoulder Sit Offset)
+                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 1.6, 0.2)
+                        if not Hum.Sit then Hum.Sit = true end
+
+                        -- PROCEDURAL FLAPPING ANIMATION (R15 & R6 Compatible)
+                        local t = tick() * 12 -- Flap Speed
+                        local flap = math.sin(t) * 0.8 -- Flap Intensity
+                        
+                        for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
+                            if joint.Parent then
+                                if joint.Name:find("Left") then
+                                    -- Left hand up/flapping
+                                    joint.C0 = originalC0 * CFrame.Angles(0, 0, math.rad(70) + flap)
+                                elseif joint.Name:find("Right") then
+                                    -- Right hand down/flapping
+                                    joint.C0 = originalC0 * CFrame.Angles(0, 0, -math.rad(70) - flap)
+                                end
+                            end
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+
+            -- 3. NOCLIP LOOP (Prevents Flinging the Target)
+            local sitNoclip = RunService.Stepped:Connect(function()
+                if not TrollEngine.HeadSitActive or not Char then return end
+                for _, part in pairs(Char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
                     end
                 end
-                RunService.Heartbeat:Wait()
+            end)
+            table.insert(TrollEngine.Connections, sitNoclip)
+
+        else
+            -- CLEANUP: Restore Everything
+            if Hum then Hum.Sit = false end
+            
+            -- Restore Joints to original form
+            for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
+                if joint and joint.Parent then
+                    joint.C0 = originalC0
+                end
             end
-        end)
+            TrollEngine.HeadSitJoints = {}
+            _G.EliteLog("Head-Sitter Disabled: Character Restored", "info")
+        end
     end,
 })
-
--- 5. ELITE LAG-FAKE (Slow-Mo & Float)
+-- 4. ELITE LAG-FAKE (Slow-Mo & Float)
 Tab:CreateToggle({
     Name = "Elite Lag-Fake",
     CurrentValue = false,
