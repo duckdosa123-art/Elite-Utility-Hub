@@ -538,6 +538,11 @@ Tab:CreateToggle({
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
         if not Char or not Hum then return end
 
+        -- Toggle the Safety Platform (Reusing the Orbit/Mimic logic)
+        if typeof(ManageTrollPlatform) == "function" then
+            ManageTrollPlatform(Value)
+        end
+
         if Value then
             -- 1. Store Original Joint Positions for Reset
             TrollEngine.HeadSitJoints = {}
@@ -547,7 +552,7 @@ Tab:CreateToggle({
                 end
             end
 
-            -- 2. Position, Godmode, and Flap Animation Loop
+            -- 2. Position, Godmode, Animation, and Safety Loop
             task.spawn(function()
                 while TrollEngine.HeadSitActive do
                     local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
@@ -555,27 +560,30 @@ Tab:CreateToggle({
                     local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
 
                     if HRP and THRP and Hum then
-                        -- NO FALL DAMAGE / GODMODE logic
+                        -- A. FALL DAMAGE PROTECTION (Godmode & State Switch)
                         Hum.Health = Hum.MaxHealth
                         if Hum:GetState() == Enum.HumanoidStateType.Freefall then
                             Hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
                         end
 
-                        -- POSITIONING (Shoulder Sit Offset)
+                        -- B. SAFETY PART SYNC (The "Part Thingy")
+                        -- Keeps the platform exactly under the target's feet while you sit on head
+                        if TrollEngine.VoidPart then
+                            TrollEngine.VoidPart.CFrame = CFrame.new(THRP.Position.X, THRP.Position.Y - 3.5, THRP.Position.Z)
+                        end
+
+                        -- C. POSITIONING (Shoulder Sit Offset)
                         HRP.CFrame = THRP.CFrame * CFrame.new(0, 1.6, 0.2)
                         if not Hum.Sit then Hum.Sit = true end
 
-                        -- PROCEDURAL FLAPPING ANIMATION (R15 & R6 Compatible)
-                        local t = tick() * 12 -- Flap Speed
-                        local flap = math.sin(t) * 0.8 -- Flap Intensity
-                        
+                        -- D. ELITE FLAPPING ANIMATION (R15 & R6)
+                        local t = tick() * 12
+                        local flap = math.sin(t) * 0.8
                         for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
                             if joint.Parent then
                                 if joint.Name:find("Left") then
-                                    -- Left hand up/flapping
                                     joint.C0 = originalC0 * CFrame.Angles(0, 0, math.rad(70) + flap)
                                 elseif joint.Name:find("Right") then
-                                    -- Right hand down/flapping
                                     joint.C0 = originalC0 * CFrame.Angles(0, 0, -math.rad(70) - flap)
                                 end
                             end
@@ -585,7 +593,8 @@ Tab:CreateToggle({
                 end
             end)
 
-            -- 3. NOCLIP LOOP (Prevents Flinging the Target)
+            -- 3. HARD NOCLIP (Ensures Target Can Move Freely)
+            -- Running on Stepped to disable collisions BEFORE physics solve
             local sitNoclip = RunService.Stepped:Connect(function()
                 if not TrollEngine.HeadSitActive or not Char then return end
                 for _, part in pairs(Char:GetDescendants()) do
@@ -593,21 +602,31 @@ Tab:CreateToggle({
                         part.CanCollide = false
                     end
                 end
+                -- Also noclip target's parts locally to prevent friction "hitching"
+                if TrollEngine.Target and TrollEngine.Target.Character then
+                    for _, part in pairs(TrollEngine.Target.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
             end)
             table.insert(TrollEngine.Connections, sitNoclip)
 
         else
-            -- CLEANUP: Restore Everything
-            if Hum then Hum.Sit = false end
+            -- CLEANUP: Restore Original Form
+            if Hum then 
+                Hum.Sit = false 
+                Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
             
-            -- Restore Joints to original form
             for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
                 if joint and joint.Parent then
                     joint.C0 = originalC0
                 end
             end
             TrollEngine.HeadSitJoints = {}
-            _G.EliteLog("Head-Sitter Disabled: Character Restored", "info")
+            _G.EliteLog("Head-Sitter Disabled", "info")
         end
     end,
 })
