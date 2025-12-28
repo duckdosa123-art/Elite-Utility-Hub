@@ -1,4 +1,4 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE ]]
+-- [[ ELITE-UTILITY-HUB: TROLL MODULE (WALKFLING EDITION) ]]
 -- Variables Tab, LP, RunService, etc., are injected by Main.lua
 
 local BeastState = "Idle"
@@ -6,26 +6,42 @@ local SelectedTarget = nil
 local OG_Spot = nil
 local FlingAllRunning = false
 
--- // THE BEAST PHYSICS ENGINE //
--- Uses High Angular Velocity + Vertical Jitter to bypass most Anti-Cheats
-local function ApplyEliteBeastPhysics(Part)
+-- // ELITE WALKFLING ENGINE //
+-- Combines IY's WalkFling with Beast Physics for AC Bypass
+local function ApplyEliteWalkFling(Part)
     if not Part or not Part:IsA("BasePart") then return end
+    local Hum = LP.Character:FindFirstChildOfClass("Humanoid")
     
     task.spawn(function()
         while BeastState ~= "Idle" and Part.Parent do
+            -- 1. Physics: The "WalkFling" Vector
+            -- We rotate the velocity vector rapidly to maximize launch power
+            local rotTick = tick() * 30
+            local flingForce = 90000 -- Massive force like IY
+            
             if BeastState == "Fling" or BeastState == "Void" then
-                -- Spinning is harder for ACs to detect than linear speed
-                Part.AssemblyAngularVelocity = Vector3.new(0, 75000, 0)
-                -- Netless Jitter (Ownership Bypass)
-                Part.AssemblyLinearVelocity = Vector3.new(0, 28.5 + math.sin(tick() * 8), 0)
-            elseif BeastState == "Shield" then
-                Part.AssemblyAngularVelocity = Vector3.new(0, 10000, 0)
-                Part.AssemblyLinearVelocity = Vector3.new(0, 25, 0)
+                -- Anti-Cheat Bypass: Oscillating velocity vectors
+                Part.AssemblyLinearVelocity = Vector3.new(
+                    math.sin(rotTick) * flingForce, 
+                    28.5 + math.sin(tick() * 10), -- Beast Netless Constant
+                    math.cos(rotTick) * flingForce
+                )
+                Part.AssemblyAngularVelocity = Vector3.new(0, 95000, 0)
             end
+
+            -- 2. Movement Logic (Mobile-First Steering)
+            -- Allows you to "Walk" while flinging despite the massive velocity
+            if Hum and Hum.MoveDirection.Magnitude > 0 then
+                local moveDir = Hum.MoveDirection
+                LP.Character:TranslateBy(moveDir * 0.4) -- Manual move offset
+            end
+            
             RunService.Heartbeat:Wait()
         end
-        Part.AssemblyAngularVelocity = Vector3.zero
+        -- Cleanup
         Part.AssemblyLinearVelocity = Vector3.zero
+        Part.AssemblyAngularVelocity = Vector3.zero
+        if Hum then Hum.PlatformStand = false end
     end)
 end
 
@@ -33,10 +49,21 @@ end
 local function SetGhost(state)
     local char = LP.Character
     if not char then return end
-    for _, v in pairs(char:GetDescendants()) do
-        if v:IsA("BasePart") then
-            v.CanCollide = not state
-            v.CanTouch = true -- Must be true to register fling hitboxes
+    local Hum = char:FindFirstChildOfClass("Humanoid")
+    
+    if state then
+        if Hum then Hum.PlatformStand = true end -- Required for clean WalkFling
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+                -- Important: RootPart MUST have CanTouch = true to hit victims
+                if v.Name == "HumanoidRootPart" then v.CanTouch = true end
+            end
+        end
+    else
+        if Hum then Hum.PlatformStand = false end
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide = true end
         end
     end
 end
@@ -52,18 +79,18 @@ end
 
 -- // UI CONSTRUCTION //
 
-Tab:CreateSection("Elite Fling (Beast Engine)")
+Tab:CreateSection("Elite WalkFling (Bypass Engine)")
 
--- 1. Elite Fling (Main)
+-- 1. Elite WalkFling (Main)
 Tab:CreateToggle({
-    Name = "Elite Fling (Main)",
+    Name = "Elite WalkFling (Main)",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
             BeastState = "Fling"
             SetGhost(true)
-            ApplyEliteBeastPhysics(LP.Character:FindFirstChild("HumanoidRootPart"))
-            _G.EliteLog("Fling Enabled: Touch players to launch", "success")
+            ApplyEliteWalkFling(LP.Character:FindFirstChild("HumanoidRootPart"))
+            _G.EliteLog("WalkFling Active: Move into players to launch", "success")
         else
             BeastState = "Idle"
             SetGhost(false)
@@ -87,9 +114,9 @@ local TargetDropdown = Tab:CreateDropdown({
     end,
 })
 
--- 3. Orbit Fling
+-- 3. Elite Orbit WalkFling
 Tab:CreateToggle({
-    Name = "Elite Orbit Fling",
+    Name = "Elite Orbit WalkFling",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
@@ -101,15 +128,15 @@ Tab:CreateToggle({
             OG_Spot = LP.Character.HumanoidRootPart.CFrame
             BeastState = "Fling"
             SetGhost(true)
-            ApplyEliteBeastPhysics(LP.Character:FindFirstChild("HumanoidRootPart"))
+            ApplyEliteWalkFling(LP.Character:FindFirstChild("HumanoidRootPart"))
             
             task.spawn(function()
                 while BeastState == "Fling" and SelectedTarget and SelectedTarget.Character do
                     local tarHRP = SelectedTarget.Character:FindFirstChild("HumanoidRootPart")
                     if tarHRP then
-                        local angle = tick() * 20
-                        -- Orbiting 3 studs away to ensure contact without getting stuck
-                        local pos = tarHRP.CFrame * CFrame.new(math.cos(angle) * 2.5, 0, math.sin(angle) * 2.5)
+                        local angle = tick() * 25
+                        -- Orbiting extremely close with WalkFling velocity
+                        local pos = tarHRP.CFrame * CFrame.new(math.cos(angle) * 1.5, 0, math.sin(angle) * 1.5)
                         LP.Character.HumanoidRootPart.CFrame = pos
                     end
                     task.wait()
@@ -123,26 +150,25 @@ Tab:CreateToggle({
     end,
 })
 
--- 4. Fling All
+-- 4. Elite Fling All (WalkFling Mode)
 Tab:CreateButton({
-    Name = "Elite Fling All",
+    Name = "Elite Fling All (Beast)",
     Callback = function()
         if FlingAllRunning then return end
         FlingAllRunning = true
         OG_Spot = LP.Character.HumanoidRootPart.CFrame
         BeastState = "Fling"
         SetGhost(true)
-        ApplyEliteBeastPhysics(LP.Character:FindFirstChild("HumanoidRootPart"))
+        ApplyEliteWalkFling(LP.Character:FindFirstChild("HumanoidRootPart"))
         
         task.spawn(function()
             for _, p in pairs(game.Players:GetPlayers()) do
                 if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                    _G.EliteLog("Flinging: " .. p.DisplayName, "info")
                     local tarHRP = p.Character.HumanoidRootPart
                     local startTime = tick()
-                    while tick() - startTime < 1.0 do -- 1 second per victim
-                        local angle = tick() * 30
-                        LP.Character.HumanoidRootPart.CFrame = tarHRP.CFrame * CFrame.new(math.cos(angle) * 1.5, 0, math.sin(angle) * 1.5)
+                    while tick() - startTime < 0.8 do -- Faster kill time with WalkFling
+                        local angle = tick() * 35
+                        LP.Character.HumanoidRootPart.CFrame = tarHRP.CFrame * CFrame.new(math.cos(angle) * 1, 0, math.sin(angle) * 1)
                         task.wait()
                     end
                 end
@@ -151,54 +177,12 @@ Tab:CreateButton({
             SetGhost(false)
             LP.Character.HumanoidRootPart.CFrame = OG_Spot
             FlingAllRunning = false
-            _G.EliteLog("Fling All sequence finished", "success")
+            _G.EliteLog("Elite Fling All Complete", "success")
         end)
     end,
 })
 
-Tab:CreateSection("Elite Combat Trolls")
-
--- 5. Elite Void-Launch
-Tab:CreateButton({
-    Name = "Elite Void-Launch (Selected)",
-    Callback = function()
-        if not SelectedTarget or not SelectedTarget.Character then return end
-        local voidDepth = workspace.FallenPartsDestroyHeight + 5
-        BeastState = "Void"
-        SetGhost(true)
-        ApplyEliteBeastPhysics(LP.Character:FindFirstChild("HumanoidRootPart"))
-        
-        task.spawn(function()
-            local tarHRP = SelectedTarget.Character:FindFirstChild("HumanoidRootPart")
-            if tarHRP then
-                LP.Character.HumanoidRootPart.CFrame = tarHRP.CFrame
-                task.wait(0.1)
-                -- Apply massive downward velocity
-                LP.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, voidDepth * 15, 0)
-                task.wait(0.5)
-            end
-            BeastState = "Idle"
-            SetGhost(false)
-        end)
-    end,
-})
-
--- 6. Elite Defender (Anti-Touch)
-Tab:CreateToggle({
-    Name = "Elite Defender (Anti-Touch)",
-    CurrentValue = false,
-    Callback = function(Value)
-        if Value then
-            BeastState = "Shield"
-            ApplyEliteBeastPhysics(LP.Character:FindFirstChild("HumanoidRootPart"))
-            _G.EliteLog("Shield Active: Touchers will be flung", "success")
-        else
-            BeastState = "Idle"
-        end
-    end,
-})
-
--- Auto-Refresh Victim List
+-- Refresh Player List
 task.spawn(function()
     while task.wait(10) do
         TargetDropdown:Refresh(GetPlayerList(), true)
