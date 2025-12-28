@@ -107,6 +107,7 @@ end
 
 -- Elite Propeller Fling Engine
 local TargetEngine = {
+    Active = true, -- Set to true so loops run
     SelectedPlayer = nil,
     LoopActive = false,
     Connections = {},
@@ -114,7 +115,16 @@ local TargetEngine = {
     FlingingInProgress = false
 }
 
--- 1. UTILITY: Smart Search & Refresh Logic
+-- 1. UTILITY: Notifications & Search
+local function Notify(title, text)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Icon = "rbxassetid://6023426926",
+        Duration = 3
+    })
+end
+
 local function GetPlayerList()
     local list = {}
     for _, v in pairs(game.Players:GetPlayers()) do
@@ -124,6 +134,7 @@ local function GetPlayerList()
 end
 
 local function GetPlayerByShortName(name)
+    if not name then return nil end
     name = name:lower()
     for _, v in pairs(game.Players:GetPlayers()) do
         if v ~= LP and (v.DisplayName:lower():sub(1, #name) == name or v.Name:lower():sub(1, #name) == name) then
@@ -165,20 +176,21 @@ function TargetEngine:SpinFling(Target)
         task.wait()
         flingTime = flingTime + 1
         
-        -- TP directly into them and Spin
-        MyHRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(flingTime * 90), 0)
-        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
-        MyHRP.AssemblyLinearVelocity = Vector3.new(999, 999, 999) -- Add some push
+        -- TP directly into them and Spin physically
+        if THRP and MyHRP then
+            MyHRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(flingTime * 90), 0)
+            MyHRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
+            MyHRP.AssemblyLinearVelocity = Vector3.new(500, 500, 500) 
+        end
         
-        -- Check if they are launched (Velocity > 150)
-    until (THRP.AssemblyLinearVelocity.Magnitude > 150) or (flingTime > 30) or not Target.Parent or not self.Active
+    until (THRP and THRP.AssemblyLinearVelocity.Magnitude > 150) or (flingTime > 35) or not Target.Parent or not self.Active
 
     -- Stop Spin & Cleanup
-    MyHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-    
-    -- Teleport Back to safety
-    MyHRP.CFrame = self.OriginalPos
+    if MyHRP then
+        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        MyHRP.CFrame = self.OriginalPos
+    end
 
     -- Restore collision and mass
     for part, wasMassless in pairs(oldMassless) do
@@ -187,48 +199,39 @@ function TargetEngine:SpinFling(Target)
         end
     end
 
+    Notify("Elite Utility", Target.DisplayName .. " flinged!")
     self.FlingingInProgress = false
 end
 
 -- 3. PERMANENT PHYSICS OVERRIDE (Godmode/Noclip)
 local function SetupFlingSafety()
+    if #TargetEngine.Connections > 0 then return end -- Prevent duplicate connections/lag
+    
     local Char = LP.Character
-    local Hum = Char:FindFirstChildOfClass("Humanoid")
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Hum then return end
 
-    -- Heartbeat Godmode (Anti-Death)
+    -- Heartbeat Godmode
     table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
-        if Hum then 
+        if Hum and Hum.Parent then 
             Hum.Health = Hum.MaxHealth 
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
     end))
 
-    -- Stepped Noclip (Essential for Spin Fling)
+    -- Stepped Noclip
     table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
-        if Char then
-            for _, v in pairs(Char:GetDescendants()) do
+        if LP.Character then
+            for _, v in pairs(LP.Character:GetDescendants()) do
                 if v:IsA("BasePart") then v.CanCollide = false end
             end
         end
     end))
 end
 
--- Rayfield Toggle Integration
+-- 4. UI INTEGRATION
 Tab:CreateSection("Fling - Disable Fling Guard First!")
-Tab:CreateToggle({
-    Name = "Elite WalkFling - NoClip",
-    CurrentValue = false,
-    Flag = "WalkFling",
-    Callback = function(Value)
-        if Value then
-            task.spawn(function() WalkFlingEngine:Start() end)
-        else
-            WalkFlingEngine:Stop()
-        end
-    end,
-})
-Tab:CreateSection("Advance Fling - Disable Fling Guard First!")
+
 local PlayerDropdown = Tab:CreateDropdown({
     Name = "Selected: None",
     Options = GetPlayerList(),
@@ -238,6 +241,8 @@ local PlayerDropdown = Tab:CreateDropdown({
     end,
 })
 
+Tab:CreateSection("Advance Fling - Disable Fling Guard First!")
+
 Tab:CreateInput({
     Name = "Search & Auto-Select",
     PlaceholderText = "Type start of name...",
@@ -246,7 +251,7 @@ Tab:CreateInput({
         local found = GetPlayerByShortName(Text)
         if found then
             TargetEngine.SelectedPlayer = found
-            PlayerDropdown:Set({found.DisplayName}) -- Updates UI
+            PlayerDropdown:Set({found.DisplayName}) 
             _G.EliteLog("Found: " .. found.DisplayName, "success")
         end
     end,
@@ -264,7 +269,9 @@ Tab:CreateButton({
     Callback = function()
         if TargetEngine.SelectedPlayer then
             SetupFlingSafety()
-            TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
+            task.spawn(function() TargetEngine:SpinFling(TargetEngine.SelectedPlayer) end)
+        else
+            Notify("Error", "No player selected!")
         end
     end,
 })
@@ -274,15 +281,17 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         TargetEngine.LoopActive = Value
-        if Value then SetupFlingSafety() end
-        task.spawn(function()
-            while TargetEngine.LoopActive do
-                if TargetEngine.SelectedPlayer then
-                    TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
+        if Value then 
+            SetupFlingSafety() 
+            task.spawn(function()
+                while TargetEngine.LoopActive do
+                    if TargetEngine.SelectedPlayer then
+                        TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
+                    end
+                    task.wait(2)
                 end
-                task.wait(1.5)
-            end
-        end)
+            end)
+        end
     end,
 })
 
@@ -290,12 +299,15 @@ Tab:CreateButton({
     Name = "Elite Fling All",
     Callback = function()
         SetupFlingSafety()
-        local players = game.Players:GetPlayers()
-        for _, p in pairs(players) do
-            if p ~= LP and p.Character then
-                TargetEngine:SpinFling(p)
-                task.wait(0.1)
+        Notify("Elite Utility", "Flinging all server...")
+        task.spawn(function()
+            local players = game.Players:GetPlayers()
+            for _, p in pairs(players) do
+                if p ~= LP and p.Character then
+                    TargetEngine:SpinFling(p)
+                    task.wait(0.2)
+                end
             end
-        end
+        end)
     end,
 })
