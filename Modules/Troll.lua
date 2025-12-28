@@ -7,16 +7,6 @@ local WalkFling = {
     Power = 9999999 -- The IY-exact launch force
 }
 
--- // ROBLOX NATIVE NOTIFICATION SYSTEM //
-local function SendNativeNotification(title, text)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Icon = "rbxassetid://6034281358", -- Friend Request Icon
-        Duration = 4
-    })
-end
-
 -- // THE SURGICAL STRIKE ENGINE //
 function WalkFling:Start()
     local Char = LP.Character
@@ -26,9 +16,9 @@ function WalkFling:Start()
     if not HRP or not Hum then return end
 
     self.Active = true
-    _G.EliteLog("WalkFling Engine: Active", "success")
+    _G.EliteLog("WalkFling Engine: Noclip & Engine Active", "success")
 
-    -- 1. GODMODE TACTIC (STRICT IMPLEMENTATION)
+    -- 1. GODMODE TACTIC (PRESERVED)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -37,7 +27,6 @@ function WalkFling:Start()
         if not self.Active then return end
         if Hum and Hum.Parent then
             Hum.Health = Hum.MaxHealth
-            -- Prevent any state changes
             if Hum:GetState() == Enum.HumanoidStateType.Dead then
                 Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
@@ -45,7 +34,19 @@ function WalkFling:Start()
     end)
     table.insert(self.Connections, godmodeConn)
 
-    -- // ACCURATE TOUCH DETECTION //
+    -- 2. NORMAL NOCLIP LOOP (Crucial to prevent self-flinging)
+    -- This runs every frame before physics to ensure you don't hit the floor/walls
+    local noclipConn = RunService.Stepped:Connect(function()
+        if not self.Active or not Char then return end
+        for _, v in pairs(Char:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end)
+    table.insert(self.Connections, noclipConn)
+
+    -- 3. ACCURATE ANY-TO-ANY TOUCH DETECTION
     local function ConnectPart(part)
         if not part:IsA("BasePart") then return end
         
@@ -56,34 +57,28 @@ function WalkFling:Start()
             local victimHum = victimChar and victimChar:FindFirstChildOfClass("Humanoid")
             local victimHRP = victimChar and victimChar:FindFirstChild("HumanoidRootPart")
 
-            -- Accuracy Fix: If we touch ANY part of another player, launch instantly
+            -- Trigger only on other players
             if victimHum and victimHRP and victimChar ~= Char then
                 local oldVel = HRP.AssemblyLinearVelocity
-                local oldRotVel = HRP.AssemblyAngularVelocity
                 
-                -- Instant Fling Pulse: Applied in all directions to catch running targets
+                -- The Pulse: Applies massive force to YOU, which transfers to THEM on touch
+                -- Noclip prevents this force from launching you into the sky via floor friction
                 HRP.AssemblyLinearVelocity = Vector3.new(self.Power, self.Power, self.Power)
                 HRP.AssemblyAngularVelocity = Vector3.new(self.Power, self.Power, self.Power)
                 
-                -- Accuracy Fix: We wait slightly longer (0.1s) to ensure server registers the hit
-                task.wait(0.1)
+                task.wait(0.1) -- Pulse duration
                 
-                -- Reset to normal walking state
                 if HRP and HRP.Parent then
                     HRP.AssemblyLinearVelocity = oldVel
-                    HRP.AssemblyAngularVelocity = oldRotVel
+                    HRP.AssemblyAngularVelocity = Vector3.zero
                 end
             end
         end)
         table.insert(self.Connections, touchConn)
     end
 
-    -- Apply to all existing parts
-    for _, part in pairs(Char:GetDescendants()) do
-        ConnectPart(part)
-    end
-
-    -- Apply to any parts added later (tools/accessories)
+    -- Connect all existing and future body parts
+    for _, part in pairs(Char:GetDescendants()) do ConnectPart(part) end
     local childConn = Char.DescendantAdded:Connect(function(obj)
         if self.Active then ConnectPart(obj) end
     end)
@@ -93,14 +88,15 @@ end
 function WalkFling:Stop()
     self.Active = false
     
-    -- Disconnect all connections
+    -- Disconnect all loops and events
     for _, conn in pairs(self.Connections) do
         if conn then conn:Disconnect() end
     end
     self.Connections = {}
 
-    -- Restore Humanoid State Safely
-    local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    -- Restore Humanoid & Collision State Safely
+    local Char = LP.Character
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if Hum then 
         pcall(function() 
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true) 
@@ -109,10 +105,16 @@ function WalkFling:Stop()
         end)
     end
     
+    if Char then
+        for _, v in pairs(Char:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide = true end
+        end
+    end
+    
     _G.EliteLog("WalkFling Engine: Terminated", "info")
 end
 
--- // UI INTEGRATION //
+-- // UI SECTION //
 Tab:CreateToggle({
     Name = "Elite WalkFling",
     CurrentValue = false,
@@ -120,11 +122,11 @@ Tab:CreateToggle({
         if Value then
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Elite WalkFling",
-                Text = "Enabled! If it doesn't work then disable Fling Guard",
+                Text = "Enabled! Noclip and Surgical Strike Active.",
                 Duration = 4,
             })
             
-            _G.EliteLog("Elite WalkFling enabled - Walk into players to fling them", "info")
+            _G.EliteLog("Elite WalkFling enabled - Noclip active", "info")
             WalkFling:Start()
         else
             game:GetService("StarterGui"):SetCore("SendNotification", {
