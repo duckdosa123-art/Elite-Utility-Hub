@@ -388,6 +388,47 @@ local function RestoreJoints(Char)
     end
 end
 
+-- Troll Engine State Update
+TrollEngine.PlatformTransparency = 0.8
+TrollEngine.VoidPart = nil
+
+-- 1. Helper: Platform & Godmode Controller
+local function ManageTrollPlatform(State)
+    if State then
+        if not TrollEngine.VoidPart then
+            TrollEngine.VoidPart = Instance.new("Part")
+            TrollEngine.VoidPart.Name = "Elite_SafetyAnchor"
+            TrollEngine.VoidPart.Size = Vector3.new(15, 1, 15) -- Large enough to catch you
+            TrollEngine.VoidPart.Anchored = true
+            TrollEngine.VoidPart.CanCollide = true
+            TrollEngine.VoidPart.Material = Enum.Material.ForceField
+            TrollEngine.VoidPart.Transparency = TrollEngine.PlatformTransparency
+            TrollEngine.VoidPart.Parent = workspace
+        end
+    else
+        if not TrollEngine.OrbitActive and not TrollEngine.MimicActive then
+            if TrollEngine.VoidPart then 
+                TrollEngine.VoidPart:Destroy() 
+                TrollEngine.VoidPart = nil 
+            end
+        end
+    end
+end
+
+-- Fall Damage & Health Lock (Godmode)
+RunService.Heartbeat:Connect(function()
+    if (TrollEngine.OrbitActive or TrollEngine.MimicActive) and LP.Character then
+        local Hum = LP.Character:FindFirstChild("Humanoid")
+        if Hum then
+            Hum.Health = Hum.MaxHealth -- Lock Health
+            -- Force State to Landed if falling to prevent fall damage scripts from triggering
+            if Hum:GetState() == Enum.HumanoidStateType.Freefall then
+                Hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+            end
+        end
+    end
+end)
+
 -- 2. THE UI SECTION (Dedicated List & Search)
 Tab:CreateSection("Elite Troll Target")
 
@@ -428,6 +469,7 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         TrollEngine.OrbitActive = Value
+        ManageTrollPlatform(Value)
         local angle = 0
         task.spawn(function()
             while TrollEngine.OrbitActive do
@@ -436,7 +478,14 @@ Tab:CreateToggle({
                     local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
                     if HRP and THRP then
                         angle = angle + TrollEngine.OrbitSpeed
-                        HRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, TrollEngine.OrbitHeight, TrollEngine.OrbitDistance)
+                        local TargetPos = THRP.CFrame
+                        -- Orbit Position
+                        HRP.CFrame = TargetPos * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, TrollEngine.OrbitHeight, TrollEngine.OrbitDistance)
+                        
+                        -- Safety Part: Syncs to Target Y but stays under the PLAYER
+                        if TrollEngine.VoidPart then
+                            TrollEngine.VoidPart.CFrame = CFrame.new(HRP.Position.X, THRP.Position.Y - 3.5, HRP.Position.Z)
+                        end
                     end
                 end
                 RunService.Heartbeat:Wait()
@@ -444,7 +493,6 @@ Tab:CreateToggle({
         end)
     end,
 })
-
 Tab:CreateSlider({
     Name = "Orbit Speed",
     Range = {1, 20},
@@ -467,26 +515,20 @@ Tab:CreateToggle({
     CurrentValue = false,
     Callback = function(Value)
         TrollEngine.MimicActive = Value
-        if Value then
-            TrollEngine.VoidPart = Instance.new("Part")
-            TrollEngine.VoidPart.Name = "EliteVoidAnchor"
-            TrollEngine.VoidPart.Size = Vector3.new(10, 1, 10)
-            TrollEngine.VoidPart.Transparency = 0.8 -- Semi-visible so you know it's there
-            TrollEngine.VoidPart.Material = Enum.Material.ForceField
-            TrollEngine.VoidPart.Anchored = true
-            TrollEngine.VoidPart.Parent = workspace
-        else
-            if TrollEngine.VoidPart then TrollEngine.VoidPart:Destroy() end
-        end
-
+        ManageTrollPlatform(Value)
         task.spawn(function()
             while TrollEngine.MimicActive do
                 if TrollEngine.Target and TrollEngine.Target.Character then
                     local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
                     local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
                     if HRP and THRP then
+                        -- Mirror CFrame with Offset
                         HRP.CFrame = THRP.CFrame * CFrame.new(0, 0, TrollEngine.MimicDistance)
-                        TrollEngine.VoidPart.CFrame = THRP.CFrame * CFrame.new(0, -3.5, 0)
+                        
+                        -- Safety Part: Syncs to Target Y but stays under the PLAYER
+                        if TrollEngine.VoidPart then
+                            TrollEngine.VoidPart.CFrame = CFrame.new(HRP.Position.X, THRP.Position.Y - 3.5, HRP.Position.Z)
+                        end
                     end
                 end
                 RunService.Heartbeat:Wait()
@@ -494,7 +536,6 @@ Tab:CreateToggle({
         end)
     end,
 })
-
 Tab:CreateSlider({
     Name = "Mimic Distance Offset",
     Range = {-20, 20},
@@ -591,4 +632,20 @@ Tab:CreateSlider({
     Increment = 0.5,
     CurrentValue = 0,
     Callback = function(Value) TrollEngine.LagFloat = Value end,
+})
+
+
+Tab:CreateSection("Safety Platform Settings")
+
+Tab:CreateSlider({
+    Name = "Platform Transparency",
+    Range = {0, 1},
+    Increment = 0.1,
+    CurrentValue = 0.8,
+    Callback = function(Value)
+        TrollEngine.PlatformTransparency = Value
+        if TrollEngine.VoidPart then
+            TrollEngine.VoidPart.Transparency = Value
+        end
+    end,
 })
