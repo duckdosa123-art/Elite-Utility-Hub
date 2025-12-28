@@ -133,7 +133,7 @@ Tab:CreateToggle({
                 Duration = 2,
             })
             
-            _G.EliteLog("Elite WalkFling disabled", "info"
+            _G.EliteLog("Elite WalkFling disabled", "info")
             WalkFling:Stop()
         end
     end,
