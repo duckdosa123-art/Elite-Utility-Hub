@@ -1,8 +1,13 @@
--- WalkFling Logic for Elite-Utility-Hub (Dynamic Physics Ceiling Version)
+-- WalkFling Logic for Elite-Utility-Hub
 local WalkFlingEngine = {
     Active = false,
     Connections = {},
-    SafeLimit = 50, -- Will be calculated dynamically
+    Storage = {
+        JumpPower = 50,
+        JumpHeight = 7.2,
+        Gravity = 196.2,
+        Masses = {}
+    }
 }
 
 function WalkFlingEngine:Notify(title, text)
@@ -14,22 +19,6 @@ function WalkFlingEngine:Notify(title, text)
     })
 end
 
--- Advanced Calculation to find the "Lethal Threshold"
-function WalkFlingEngine:UpdateSafeLimit(Hum)
-    local Gravity = workspace.Gravity
-    local MaxVel = 0
-    
-    if Hum.UseJumpPower then
-        MaxVel = Hum.JumpPower
-    else
-        -- If game uses JumpHeight, V = sqrt(2 * g * h)
-        MaxVel = math.sqrt(2 * Gravity * Hum.JumpHeight)
-    end
-    
-    -- Add a 15-stud buffer for slopes, elevators, or jump pads
-    self.SafeLimit = MaxVel + 15
-end
-
 function WalkFlingEngine:Start()
     if self.Active then return end
     
@@ -39,40 +28,82 @@ function WalkFlingEngine:Start()
     if not HRP or not Hum then return end
     
     self.Active = true
-    self:UpdateSafeLimit(Hum)
-    self:Notify("Elite Utility", "WalkFling Enabled - NoClip")
+    
+    -- 1. SAVE: Capture original physics state
+    self.Storage.JumpPower = Hum.JumpPower
+    self.Storage.JumpHeight = Hum.JumpHeight
+    self.Storage.Gravity = workspace.Gravity
+    
+    for _, part in pairs(Char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            self.Storage.Masses[part] = part.Massless
+            part.Massless = true -- Become a 'Ghost' to physics recoil
+        end
+    end
+    
+    self:Notify("Elite Utility", "WalkFling Enabled")
 
-    -- 1. Godmode & Anti-Trip
+    -- 2. GODMODE & STATE LOCK
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    local godmodeConn = RunService.Heartbeat:Connect(function()
+    local stateConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not Hum then return end
         Hum.Health = Hum.MaxHealth
-        -- Prevent the "stumble" effect when hitting people
+        -- Prevent the 'trip' animation when hitting targets
         Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     end)
-    table.insert(self.Connections, godmodeConn)
+    table.insert(self.Connections, stateConn)
 
-    -- 2. Surgical Spike (Reactive Fling)
+    -- 3. THE FLING ENGINE (Angular + Linear Spike)
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
             if not self.Active or hit:IsDescendantOf(Char) then return end
-            if hit.Parent:FindFirstChild("Humanoid") then
-                -- Store old velocity to restore after the frame
-                local oldVel = HRP.AssemblyLinearVelocity
-                -- Apply massive impulse
-                HRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
+            local targetChar = hit.Parent
+            if targetChar:FindFirstChild("Humanoid") then
+                -- Apply massive Spin + Forward Velocity
+                -- Spinning flings targets away; Linear velocity pushes them back.
+                -- By combining them, the player stays stable.
+                HRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
+                HRP.AssemblyLinearVelocity = Vector3.new(999999, 999999, 999999)
+                
                 RunService.RenderStepped:Wait()
-                if HRP then HRP.AssemblyLinearVelocity = oldVel end
+                
+                if HRP then
+                    HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                end
             end
         end)
         table.insert(self.Connections, touchConn)
     end
+    
     for _, part in pairs(Char:GetDescendants()) do setupTouch(part) end
     table.insert(self.Connections, Char.DescendantAdded:Connect(setupTouch))
 
-    -- 3. Noclip (Physics Passthrough)
+    -- 4. DYNAMIC PHYSICS MAINTENANCE
+    -- This allows jumping and falling to feel 100% normal while negating recoil.
+    local physicsConn = RunService.Heartbeat:Connect(function()
+        if not self.Active or not HRP or not Hum then return end
+        
+        local currentVel = HRP.AssemblyLinearVelocity
+        
+        -- Detect the "Heaven Spike" (Recoil)
+        -- A normal jump never exceeds ~100 velocity. If we are over that, it's a glitch.
+        local jumpCeiling = (Hum.UseJumpPower and Hum.JumpPower or 100) + 20
+        
+        if currentVel.Y > jumpCeiling then
+            -- Reset only the Y velocity, maintaining X/Z walking momentum
+            HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, 0, currentVel.Z)
+        end
+        
+        -- Grounding Force: If walking, keep the player glued to the floor
+        if Hum.FloorMaterial ~= Enum.Material.Air and not Hum.Jump then
+            HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, -1, currentVel.Z)
+        end
+    end)
+    table.insert(self.Connections, physicsConn)
+
+    -- 5. NOCLIP (Stepped)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, part in pairs(Char:GetDescendants()) do
@@ -80,42 +111,31 @@ function WalkFlingEngine:Start()
         end
     end)
     table.insert(self.Connections, noclipConn)
-
-    -- 4. Dynamic Recoil Snatcher (The "Anti-Heaven" Logic)
-    local snatcherConn = RunService.Heartbeat:Connect(function()
-        if not self.Active or not HRP or not Hum then return end
-        
-        -- Refresh the limit in case the game changes Gravity or JumpPower mid-way
-        self:UpdateSafeLimit(Hum)
-        
-        local currentVel = HRP.AssemblyLinearVelocity
-        
-        -- If our upward velocity (Y) is higher than a legal jump, it's recoil.
-        -- We snip it back to 0 immediately to stay grounded.
-        if currentVel.Y > self.SafeLimit then
-            HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, 0, currentVel.Z)
-        end
-        
-        -- Fall Safety: Don't let recoil bounce us back UP while we are falling
-        if Hum:GetState() == Enum.HumanoidStateType.Freefall and currentVel.Y > 5 then
-             HRP.AssemblyLinearVelocity = Vector3.new(currentVel.X, -5, currentVel.Z)
-        end
-    end)
-    table.insert(self.Connections, snatcherConn)
 end
 
 function WalkFlingEngine:Stop()
     if not self.Active then return end
     self.Active = false
     
+    -- Cleanup Connections
     for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
     
-    local Hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-    if Hum then
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    -- RESTORE: Put character back to normal
+    local Char = LP.Character
+    if Char then
+        local Hum = Char:FindFirstChild("Humanoid")
+        if Hum then 
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        end
+        
+        for part, wasMassless in pairs(self.Storage.Masses) do
+            if part and part.Parent then
+                part.Massless = wasMassless
+            end
+        end
     end
     
     self:Notify("Elite Utility", "WalkFling Disabled")
