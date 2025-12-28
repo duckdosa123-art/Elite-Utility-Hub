@@ -1,42 +1,49 @@
--- [[ ELITE-UTILITY-HUB: TROLL MODULE - NORMAL WALKFLING ]]
+-- [[ ELITE-UTILITY-HUB: TROLL MODULE - AUTHENTIC IY WALKFLING ]]
 -- Variables Tab, LP, RunService, Rayfield are injected by Main.lua
 
-local WalkFlingEngine = {
+local WalkFling = {
     Active = false,
-    Connections = {},
-    Power = 9999999 -- Invisible Jitter Power
+    Connections = {}
 }
 
--- // THE INVISIBLE BRUTE FORCE ENGINE //
-function WalkFlingEngine:Start()
-    if self.Active then return end
-    
+-- // THE AUTHENTIC IY ENGINE //
+function WalkFling:Start()
     local Char = LP.Character
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     
     if not HRP or not Hum then return end
-    
     self.Active = true
-    _G.EliteLog("WalkFling: Invisible Power Active", "success")
-    
-    -- 1. GODMODE TACTIC (PRESERVED)
+
+    -- 1. IY GODMODE & STATE LOCK
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
     
     local godmodeConn = RunService.Heartbeat:Connect(function()
-        if not self.Active then return end
-        if Hum and Hum.Parent then
-            Hum.Health = Hum.MaxHealth
-            if Hum:GetState() == Enum.HumanoidStateType.Dead then
-                Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
+        if not self.Active or not Hum then return end
+        Hum.Health = Hum.MaxHealth
+        if Hum:GetState() == Enum.HumanoidStateType.Dead then
+            Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
     end)
     table.insert(self.Connections, godmodeConn)
-    
-    -- 2. STABILIZED NOCLIP
+
+    -- 2. IY PHYSICS LOOP (Grounded Buzzsaw)
+    -- This is the exact method IY uses: Negative Y to stay on floor + Massive Torque
+    local physicsConn = RunService.Heartbeat:Connect(function()
+        if not self.Active or not HRP then return end
+        
+        -- THE WEAPON: Massive Spinning Torque
+        HRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
+        
+        -- THE SHIELD: Force character INTO the floor to prevent ascending
+        -- We use -25.1 for Netless ownership and -1000 for Grounding
+        HRP.AssemblyLinearVelocity = Vector3.new(0, -1000, 0)
+    end)
+    table.insert(self.Connections, physicsConn)
+
+    -- 3. IY NOCLIP (Prevents you from tripping on victims)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, v in pairs(Char:GetDescendants()) do
@@ -47,52 +54,14 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
     
-    -- 3. INVISIBLE JITTER PHYSICS (THE "NORMAL LOOK" FIX)
-    -- We oscillate X and Z so fast the eye can't see it, but the Y stays grounded.
-    local physicsConn = RunService.Heartbeat:Connect(function()
-        if not self.Active or not HRP then return end
-        
-        local Force = WalkFlingEngine.Power
-        -- High-frequency oscillation (tick * 100) makes the movement invisible
-        local Jitter = math.sin(tick() * 100) 
-        
-        -- Y is locked to 28.5 (Grounded)
-        -- Angular is 0 (No Spinning)
-        HRP.AssemblyLinearVelocity = Vector3.new(Jitter * Force, 28.5, Jitter * Force)
-        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    end)
-    table.insert(self.Connections, physicsConn)
-    
-    -- 4. SPATIAL QUERY (ANY-TO-ANY DETECTION)
-    local queryConn = RunService.Heartbeat:Connect(function()
-        if not self.Active or not HRP then return end
-        
-        local overlapParams = OverlapParams.new()
-        overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-        overlapParams.FilterDescendantsInstances = {Char}
-        
-        -- Detects victims in the "Kill Zone"
-        local parts = workspace:GetPartBoundsInBox(HRP.CFrame, Vector3.new(5, 5, 5), overlapParams)
-        
-        for _, part in pairs(parts) do
-            local vChar = part.Parent
-            local vHum = vChar and vChar:FindFirstChildOfClass("Humanoid")
-            
-            if vHum and vHum.Health > 0 then
-                -- The Jitter physics above is already running.
-                -- Overlapping hitboxes will trigger the launch.
-                break 
-            end
-        end
-    end)
-    table.insert(self.Connections, queryConn)
+    _G.EliteLog("Authentic WalkFling: Lethal", "success")
 end
 
-function WalkFlingEngine:Stop()
+function WalkFling:Stop()
     self.Active = false
     for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
-    
+
     local Char = LP.Character
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
@@ -115,7 +84,7 @@ function WalkFlingEngine:Stop()
             if v:IsA("BasePart") then v.CanCollide = true end
         end
     end
-    _G.EliteLog("WalkFling Engine Disabled", "info")
+    _G.EliteLog("WalkFling Engine Terminated", "info")
 end
 
 -- // UI SECTION //
@@ -129,11 +98,11 @@ Tab:CreateToggle({
         if Value then
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Elite WalkFling",
-                Text = "Enabled! Normal Appearance & Grounded Physics.",
+                Text = "Enabled! Authentic IY Physics Loaded.",
                 Duration = 4,
             })
-            _G.EliteLog("Elite WalkFling enabled (Stealth Mode)", "info")
-            WalkFlingEngine:Start()
+            _G.EliteLog("Elite WalkFling enabled", "info")
+            WalkFling:Start()
         else
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Elite WalkFling",
@@ -141,12 +110,12 @@ Tab:CreateToggle({
                 Duration = 2,
             })
             _G.EliteLog("Elite WalkFling disabled", "info")
-            WalkFlingEngine:Stop()
+            WalkFling:Stop()
         end
     end,
 })
 
 -- Respawn Logic
 LP.CharacterAdded:Connect(function()
-    if WalkFlingEngine.Active then WalkFlingEngine:Stop() end
+    if WalkFling.Active then WalkFling:Stop() end
 end)
