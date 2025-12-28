@@ -1,10 +1,7 @@
 -- WalkFling Logic for Elite-Utility-Hub (Reference-Based Perfection)
 local WalkFlingEngine = {
     Active = false,
-    Connections = {},
-    TargetPlayer = nil,
-    LoopFlinging = false,
-    OriginalPos = nil
+    Connections = {}
 }
 
 function WalkFlingEngine:Notify(text)
@@ -107,35 +104,67 @@ function WalkFlingEngine:Stop()
     self:Notify("WalkFling Disabled")
     _G.EliteLog("WalkFling engine stopped", "info")
 end
--- Utility: Save and Restore Position
-function WalkFlingEngine:SavePos()
-    local HRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    if HRP then self.OriginalPos = HRP.CFrame end
-end
 
-function WalkFlingEngine:ReturnPos()
-    local HRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    if HRP and self.OriginalPos then HRP.CFrame = self.OriginalPos end
-end
+-- Elite Targeting & Physics Engine
+local TargetEngine = {
+    SelectedPlayer = nil,
+    LoopActive = false,
+    IsFlinging = false,
+    OriginalPos = nil
+}
 
--- Core Fling Action (TP -> Spike -> Return)
-function WalkFlingEngine:ExecuteFling(Target)
-    if not Target or not Target.Character then return end
-    local TargetHRP = Target.Character:FindFirstChild("HumanoidRootPart")
-    local MyHRP = LP.Character:FindFirstChild("HumanoidRootPart")
-    
-    if TargetHRP and MyHRP then
-        self:SavePos()
-        
-        -- TP to target (slightly offset to ensure Touch)
-        MyHRP.CFrame = TargetHRP.CFrame * CFrame.new(0, 0, 1)
-        
-        -- The Surgical Spike (High velocity for 1 frame)
-        MyHRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
-        task.wait(0.1) -- Time for physics to register impact
-        
-        self:ReturnPos()
+-- Utility: Smart Name Search (Shortening)
+local function GetPlayerByShortName(name)
+    name = name:lower()
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP and (v.DisplayName:lower():sub(1, #name) == name or v.Name:lower():sub(1, #name) == name) then
+            return v
+        end
     end
+    return nil
+end
+
+-- The Verification Scanner: TP -> Hit -> Scan -> Return
+function TargetEngine:Execute(Target)
+    if not Target or not Target.Character then return end
+    local TChar = Target.Character
+    local THRP = TChar:FindFirstChild("HumanoidRootPart")
+    local THum = TChar:FindFirstChild("Humanoid")
+    local MyChar = LP.Character
+    local MyHRP = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
+    
+    if not THRP or not MyHRP or THum.Health <= 0 then return end
+
+    self.IsFlinging = true
+    self.OriginalPos = MyHRP.CFrame
+    
+    -- Set Massless to prevent physics drag during TP
+    for _, v in pairs(MyChar:GetDescendants()) do
+        if v:IsA("BasePart") then v.Massless = true end
+    end
+
+    -- 1. TP & Hit
+    MyHRP.CFrame = THRP.CFrame * CFrame.new(0, 0, 1.5)
+    MyHRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
+    
+    -- 2. THE SCAN: Wait until target's velocity spikes or they are far away
+    local timeout = 0
+    repeat
+        task.wait()
+        timeout = timeout + 1
+        -- If target velocity is high or they are moved, the fling worked
+    until (THRP.AssemblyLinearVelocity.Magnitude > 100) or timeout > 20 or not self.Active
+
+    -- 3. RETURN
+    MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    MyHRP.CFrame = self.OriginalPos
+    
+    -- Reset Physics
+    for _, v in pairs(MyChar:GetDescendants()) do
+        if v:IsA("BasePart") then v.Massless = false end
+    end
+    
+    self.IsFlinging = false
 end
 
 -- Rayfield Toggle Integration
@@ -152,64 +181,64 @@ Tab:CreateToggle({
         end
     end,
 })
-local PlayerNames = {}
-for _, p in pairs(game.Players:GetPlayers()) do
-    if p ~= LP then table.insert(PlayerNames, p.DisplayName) end
+local PlayerList = {}
+local function RefreshList()
+    PlayerList = {}
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= LP then table.insert(PlayerList, v.DisplayName) end
+    end
 end
+RefreshList()
 
-local SearchBox = Tab:CreateInput({
-    Name = "Search Player",
-    PlaceholderText = "Type display name...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Text)
-        local filtered = {}
-        for _, p in pairs(game.Players:GetPlayers()) do
-            if p.DisplayName:lower():find(Text:lower()) and p ~= LP then
-                table.insert(filtered, p.DisplayName)
-            end
-        end
-        -- Assuming your Dropdown variable is 'PlayerDropdown'
-        PlayerDropdown:Refresh(filtered)
+local TargetDropdown = Tab:CreateDropdown({
+    Name = "Selected: None",
+    Options = PlayerList,
+    CurrentOption = {""},
+    Callback = function(Option)
+        TargetEngine.SelectedPlayer = GetPlayerByShortName(Option[1])
     end,
 })
 
-local PlayerDropdown = Tab:CreateDropdown({
-    Name = "Select Target",
-    Options = PlayerNames,
-    CurrentOption = "",
-    MultipleOptions = false,
-    Flag = "FlingTarget",
-    Callback = function(Option)
-        for _, p in pairs(game.Players:GetPlayers()) do
-            if p.DisplayName == Option[1] then
-                WalkFlingEngine.TargetPlayer = p
-                break
-            end
+Tab:CreateInput({
+    Name = "Search & Auto-Select",
+    PlaceholderText = "Type part of name...",
+    Callback = function(Text)
+        if Text == "" then return end
+        local found = GetPlayerByShortName(Text)
+        if found then
+            TargetEngine.SelectedPlayer = found
+            TargetDropdown:Set({found.DisplayName}) -- Auto-updates dropdown
+            _G.EliteLog("Auto-Selected: " .. found.DisplayName, "info")
         end
     end,
 })
 
 Tab:CreateButton({
-    Name = "Fling Selected",
+    Name = "Fling Target",
     Callback = function()
-        if WalkFlingEngine.TargetPlayer then
-            WalkFlingEngine:ExecuteFling(WalkFlingEngine.TargetPlayer)
+        if TargetEngine.SelectedPlayer then
+            TargetEngine:Execute(TargetEngine.SelectedPlayer)
+        else
+            Rayfield:Notify({Title = "Error", Content = "No target selected!", Duration = 2})
         end
     end,
 })
 
 Tab:CreateToggle({
-    Name = "Loop Fling Selected",
+    Name = "Loop Fling",
     CurrentValue = false,
-    Flag = "LoopFling",
     Callback = function(Value)
-        WalkFlingEngine.LoopFlinging = Value
+        TargetEngine.LoopActive = Value
         task.spawn(function()
-            while WalkFlingEngine.LoopFlinging do
-                if WalkFlingEngine.TargetPlayer then
-                    WalkFlingEngine:ExecuteFling(WalkFlingEngine.TargetPlayer)
+            while TargetEngine.LoopActive do
+                if TargetEngine.SelectedPlayer and not TargetEngine.IsFlinging then
+                    -- Only fling if they are alive
+                    local char = TargetEngine.SelectedPlayer.Character
+                    if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                        TargetEngine:Execute(TargetEngine.SelectedPlayer)
+                    end
                 end
-                task.wait(2) -- Wait for respawn/physics reset
+                task.wait(1.5)
             end
         end)
     end,
@@ -218,30 +247,16 @@ Tab:CreateToggle({
 Tab:CreateButton({
     Name = "Fling All",
     Callback = function()
-        self:SavePos()
-        for _, p in pairs(game.Players:GetPlayers()) do
-            if p ~= LP and p.Character then
-                WalkFlingEngine:ExecuteFling(p)
-                task.wait(0.2)
+        _G.EliteLog("Starting Server Purge", "warn")
+        for _, v in pairs(game.Players:GetPlayers()) do
+            if v ~= LP and v.Character then
+                TargetEngine:Execute(v)
+                task.wait(0.1)
             end
         end
-        self:ReturnPos()
     end,
 })
 
--- Auto-Update Player List when someone joins/leaves
-game.Players.PlayerAdded:Connect(function()
-    local list = {}
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= LP then table.insert(list, p.DisplayName) end
-    end
-    PlayerDropdown:Refresh(list)
-end)
-
-game.Players.PlayerRemoving:Connect(function()
-    local list = {}
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= LP then table.insert(list, p.DisplayName) end
-    end
-    PlayerDropdown:Refresh(list)
-end)
+-- Keep list updated
+game.Players.PlayerAdded:Connect(function() RefreshList(); TargetDropdown:Refresh(PlayerList) end)
+game.Players.PlayerRemoving:Connect(function() RefreshList(); TargetDropdown:Refresh(PlayerList) end)
