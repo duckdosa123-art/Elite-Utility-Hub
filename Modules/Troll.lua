@@ -1,31 +1,31 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local TrollTab = _G.EliteTab -- Assuming Main.lua passes the Tab object
 local LP = _G.LP
 local RS = game:GetService("RunService")
+local TrollTab = _G.EliteTab -- Accessing the tab created in Main.lua
 
--- // BEAST PHYSICS ENGINE (Bypass Specialized) //
-local BeastState = "Idle" -- Idle, Fling, Shield, Void
+-- // BEAST ENGINE VARIABLES //
+local BeastState = "Idle"
 local SelectedTarget = nil
 local OG_Spot = nil
+local FlingAllRunning = false
 
-local function ApplyBeastPhysics(Part)
+-- // THE BEAST PHYSICS ENGINE (Anti-Cheat Bypass Edition) //
+local function ApplyEliteBeastPhysics(Part)
     if not Part or not Part:IsA("BasePart") then return end
     
-    -- Anti-Cheat Bypass: Rapidly oscillating velocity to confuse server-side checks
     task.spawn(function()
         while BeastState ~= "Idle" and Part.Parent do
             if BeastState == "Fling" or BeastState == "Void" then
-                -- Extreme rotational torque (The actual "Fling" force)
-                Part.AssemblyAngularVelocity = Vector3.new(0, 99999, 0)
-                -- Netless Jitter (Bypasses ownership resets)
+                -- Rotational Force (Spin) - Harder for AC to detect than linear speed
+                Part.AssemblyAngularVelocity = Vector3.new(0, 60000, 0)
+                -- Netless Jitter (Bypass Ownership)
                 Part.AssemblyLinearVelocity = Vector3.new(0, 28.5 + math.sin(tick() * 10), 0)
             elseif BeastState == "Shield" then
-                Part.AssemblyAngularVelocity = Vector3.new(0, 5000, 0)
+                Part.AssemblyAngularVelocity = Vector3.new(0, 8000, 0)
                 Part.AssemblyLinearVelocity = Vector3.new(0, 25, 0)
             end
             RS.Heartbeat:Wait()
         end
-        -- Cleanup
+        -- Reset physics on stop
         Part.AssemblyAngularVelocity = Vector3.zero
         Part.AssemblyLinearVelocity = Vector3.zero
     end)
@@ -38,23 +38,14 @@ local function SetGhost(state)
     for _, v in pairs(char:GetDescendants()) do
         if v:IsA("BasePart") then
             v.CanCollide = not state
-            v.CanTouch = true -- Must be true to register Fling contact
-            v.CanQuery = not state
+            v.CanTouch = true -- Critical for Fling contact
         end
     end
 end
 
--- // TARGET LIST LOGIC //
-local function GetPlayerNames()
-    local names = {}
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= LP then table.insert(names, p.DisplayName) end
-    end
-    return names
-end
+-- // UI ELEMENTS //
 
--- // UI SECTION //
-local Section = TrollTab:CreateSection("Elite Fling Category")
+TrollTab:CreateSection("Elite Fling (Beast Engine)")
 
 -- 1. Elite Fling (Main)
 TrollTab:CreateToggle({
@@ -64,8 +55,8 @@ TrollTab:CreateToggle({
         if Value then
             BeastState = "Fling"
             SetGhost(true)
-            ApplyBeastPhysics(LP.Character.HumanoidRootPart)
-            _G.EliteLog("Fling Activated - Touch targets to launch", "Info")
+            ApplyEliteBeastPhysics(LP.Character.HumanoidRootPart)
+            _G.EliteLog("Fling Enabled: Touch players to launch", "Info")
         else
             BeastState = "Idle"
             SetGhost(false)
@@ -73,12 +64,19 @@ TrollTab:CreateToggle({
     end,
 })
 
--- 2. Target Dropdown
+-- 2. Player Selection Dropdown
+local function GetPlayerList()
+    local tbl = {}
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= LP then table.insert(tbl, p.DisplayName) end
+    end
+    return tbl
+end
+
 local TargetDropdown = TrollTab:CreateDropdown({
-    Name = "Select Victim",
-    Options = GetPlayerNames(),
+    Name = "Select Target",
+    Options = GetPlayerList(),
     CurrentOption = {"None"},
-    MultipleOptions = false,
     Callback = function(Option)
         for _, p in pairs(game.Players:GetPlayers()) do
             if p.DisplayName == Option[1] then
@@ -89,105 +87,116 @@ local TargetDropdown = TrollTab:CreateDropdown({
     end,
 })
 
--- Refresh Dropdown
-task.spawn(function()
-    while task.wait(5) do
-        TargetDropdown:Refresh(GetPlayerNames())
-    end
-end)
-
--- 3. Orbit Fling (Selected)
+-- 3. Elite Orbit Fling
 TrollTab:CreateToggle({
     Name = "Elite Orbit Fling",
     CurrentValue = false,
     Callback = function(Value)
-        if Value and SelectedTarget then
+        if Value then
+            if not SelectedTarget then 
+                _G.EliteLog("No Target Selected!", "Error") 
+                return 
+            end
+            
             OG_Spot = LP.Character.HumanoidRootPart.CFrame
             BeastState = "Fling"
-            _G.EliteLog("Orbiting: " .. SelectedTarget.DisplayName, "Info")
+            SetGhost(true)
+            ApplyEliteBeastPhysics(LP.Character.HumanoidRootPart)
             
             task.spawn(function()
                 while BeastState == "Fling" and SelectedTarget and SelectedTarget.Character do
-                    local targetHRP = SelectedTarget.Character:FindFirstChild("HumanoidRootPart")
-                    if targetHRP then
-                        -- High speed orbit around target
-                        local angle = tick() * 15 -- Rotation speed
-                        local offset = Vector3.new(math.cos(angle) * 3, 0, math.sin(angle) * 3)
-                        LP.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(offset)
+                    local tarHRP = SelectedTarget.Character:FindFirstChild("HumanoidRootPart")
+                    if tarHRP then
+                        local angle = tick() * 18
+                        local pos = tarHRP.CFrame * CFrame.new(math.cos(angle) * 3, 0, math.sin(angle) * 3)
+                        LP.Character.HumanoidRootPart.CFrame = pos
                     end
                     task.wait()
                 end
-                -- Return to OG Spot
                 if OG_Spot then LP.Character.HumanoidRootPart.CFrame = OG_Spot end
             end)
         else
             BeastState = "Idle"
+            SetGhost(false)
         end
     end,
 })
 
--- 4. Fling All
+-- 4. Elite Fling All
 TrollTab:CreateButton({
     Name = "Elite Fling All",
     Callback = function()
+        if FlingAllRunning then return end
+        FlingAllRunning = true
         OG_Spot = LP.Character.HumanoidRootPart.CFrame
         BeastState = "Fling"
-        _G.EliteLog("Initiating Fling All...", "Warn")
-
+        SetGhost(true)
+        ApplyEliteBeastPhysics(LP.Character.HumanoidRootPart)
+        
         task.spawn(function()
             for _, p in pairs(game.Players:GetPlayers()) do
                 if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetHRP = p.Character.HumanoidRootPart
-                    -- Brief burst orbit to fling
-                    local startTime = tick()
-                    while tick() - startTime < 1.5 do -- 1.5 seconds per player
+                    _G.EliteLog("Flinging: " .. p.DisplayName, "Info")
+                    local tarHRP = p.Character.HumanoidRootPart
+                    local start = tick()
+                    while tick() - start < 1.2 do -- 1.2 seconds per victim
                         local angle = tick() * 25
-                        LP.Character.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(math.cos(angle)*2, 0, math.sin(angle)*2)
+                        LP.Character.HumanoidRootPart.CFrame = tarHRP.CFrame * CFrame.new(math.cos(angle) * 2, 0, math.sin(angle) * 2)
                         task.wait()
                     end
                 end
             end
             BeastState = "Idle"
+            SetGhost(false)
             LP.Character.HumanoidRootPart.CFrame = OG_Spot
-            _G.EliteLog("Fling All Complete", "Success")
+            FlingAllRunning = false
+            _G.EliteLog("Fling All Finished", "Success")
         end)
     end,
 })
 
+TrollTab:CreateSection("Elite Combat Trolls")
+
 -- 5. Elite Void-Launch
-TrollTab:CreateToggle({
-    Name = "Elite Void-Launch",
-    CurrentValue = false,
-    Callback = function(Value)
-        if Value and SelectedTarget then
-            BeastState = "Void"
-            local voidPos = workspace.FallenPartsDestroyHeight + 5
-            task.spawn(function()
-                if SelectedTarget.Character and SelectedTarget.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = LP.Character.HumanoidRootPart
-                    local targetHRP = SelectedTarget.Character.HumanoidRootPart
-                    -- Force push towards void
-                    hrp.CFrame = targetHRP.CFrame
-                    LP.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, voidPos * 5, 0)
-                end
-                task.wait(0.5)
-                BeastState = "Idle"
-            end)
-        end
+TrollTab:CreateButton({
+    Name = "Elite Void-Launch (Selected)",
+    Callback = function()
+        if not SelectedTarget then return end
+        local voidDepth = workspace.FallenPartsDestroyHeight + 5
+        BeastState = "Void"
+        SetGhost(true)
+        ApplyEliteBeastPhysics(LP.Character.HumanoidRootPart)
+        
+        task.spawn(function()
+            local tarHRP = SelectedTarget.Character.HumanoidRootPart
+            LP.Character.HumanoidRootPart.CFrame = tarHRP.CFrame
+            task.wait(0.1)
+            -- Apply downward force + jitter
+            LP.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, voidDepth * 10, 0)
+            task.wait(0.5)
+            BeastState = "Idle"
+            SetGhost(false)
+        end)
     end,
 })
 
--- 6. Elite Defender
+-- 6. Elite Defender (Anti-Touch)
 TrollTab:CreateToggle({
     Name = "Elite Defender (Anti-Touch)",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
             BeastState = "Shield"
-            _G.EliteLog("Shield Active", "Success")
-            ApplyBeastPhysics(LP.Character.HumanoidRootPart)
+            ApplyEliteBeastPhysics(LP.Character.HumanoidRootPart)
         else
             BeastState = "Idle"
         end
     end,
 })
+
+-- Auto-Refresh Player List every 10 seconds
+task.spawn(function()
+    while task.wait(10) do
+        TargetDropdown:Refresh(GetPlayerList(), true)
+    end
+end)
