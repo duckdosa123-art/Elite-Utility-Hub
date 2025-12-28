@@ -23,8 +23,8 @@ _G.VisualTab = Window:CreateTab("Visuals", 4483362458)
 _G.MiscTab = Window:CreateTab("Misc", 4483362458)
 _G.ToolTab = Window:CreateTab("Tools", 4483362458)
 _G.PartTab = Window:CreateTab("Part control", 4483362458)
-_G.FeTab = Window:CreateTab("FE Scripts", 4483362458)
 _G.TrollTab = Window:CreateTab("Troll", 4483362458)
+_G.FeTab = Window:CreateTab("FE Scripts", 4483362458)
 _G.AdminTab = Window:CreateTab("Admin and dev", 4483362458)
 _G.LogTab = Window:CreateTab("Logs", 4483362458)
 
@@ -45,8 +45,8 @@ local ModuleMappings = {
     ["Misc.lua"]     = "_G.MiscTab",
     ["Tool.lua"]     = "_G.ToolTab",
     ["Part.lua"]     = "_G.PartTab",
-    ["Fescripts.lua"] = "_G.FeTab",
     ["Troll.lua"]     = "_G.TrollTab",
+    ["Fescripts.lua"] = "_G.FeTab",
     ["AdminCmd.lua"] = "_G.AdminTab",
     ["Log.lua"]      = "_G.LogTab"
 }
@@ -99,8 +99,8 @@ task.spawn(function()
         "Misc.lua", 
         "Tool.lua", 
         "Part.lua",
-        "Fescripts.lua",
         "Troll.lua",
+        "Fescripts.lua",
         "AdminCmd.lua"
     }
     
