@@ -528,6 +528,7 @@ Tab:CreateSlider({
 
 -- Elite Head-Sitter State
 TrollEngine.HeadSitJoints = {}
+TrollEngine.LastTargetCFrame = nil
 
 Tab:CreateToggle({
     Name = "Elite Head-Sitter",
@@ -535,57 +536,63 @@ Tab:CreateToggle({
     Callback = function(Value)
         TrollEngine.HeadSitActive = Value
         local Char = LP.Character
-        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-        if not Char or not Hum then return end
+        local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+        local Hum = Char and Char:FindFirstChild("Humanoid")
+        
+        if not HRP or not Hum then return end
 
-        -- Toggle the Safety Platform (Reusing the Orbit/Mimic logic)
-        if typeof(ManageTrollPlatform) == "function" then
-            ManageTrollPlatform(Value)
+        -- 1. Helper: Find Nearest Ground (Safe Land)
+        local function GetNearestGround()
+            local rayParam = RaycastParams.new()
+            rayParam.FilterDescendantsInstances = {Char, TrollEngine.Target and TrollEngine.Target.Character}
+            rayParam.FilterType = Enum.RaycastFilterType.Exclude
+            
+            local ray = workspace:Raycast(HRP.Position, Vector3.new(0, -500, 0), rayParam)
+            if ray then return ray.Position + Vector3.new(0, 3, 0) end
+            return HRP.Position
         end
 
         if Value then
-            -- 1. Store Original Joint Positions for Reset
+            -- 2. SETUP: Store Joints & Prepare Massless
             TrollEngine.HeadSitJoints = {}
             for _, v in pairs(Char:GetDescendants()) do
-                if v:IsA("Motor6D") and v.Name:find("Shoulder") then
+                if v:IsA("BasePart") then
+                    v.Massless = true -- Prevents weight-based flings
+                elseif v:IsA("Motor6D") and v.Name:find("Shoulder") then
                     TrollEngine.HeadSitJoints[v] = v.C0
                 end
             end
 
-            -- 2. Position, Godmode, Animation, and Safety Loop
+            -- 3. MAIN LOOP: CFrame Positioning & Fall Safety
             task.spawn(function()
                 while TrollEngine.HeadSitActive do
                     local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
-                    local HRP = Char:FindFirstChild("HumanoidRootPart")
                     local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
 
                     if HRP and THRP and Hum then
-                        -- A. FALL DAMAGE PROTECTION (Godmode & State Switch)
-                        Hum.Health = Hum.MaxHealth
+                        -- A. CFrame Fall Damage Bypass
+                        -- We force the character state and kill all velocity
+                        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                         if Hum:GetState() == Enum.HumanoidStateType.Freefall then
                             Hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
                         end
 
-                        -- B. SAFETY PART SYNC (The "Part Thingy")
-                        -- Keeps the platform exactly under the target's feet while you sit on head
-                        if TrollEngine.VoidPart then
-                            TrollEngine.VoidPart.CFrame = CFrame.new(THRP.Position.X, THRP.Position.Y - 3.5, THRP.Position.Z)
-                        end
-
-                        -- C. POSITIONING (Shoulder Sit Offset)
-                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 1.6, 0.2)
+                        -- B. ELITE POSITIONING
+                        HRP.CFrame = THRP.CFrame * CFrame.new(0, 1.7, 0.1)
                         if not Hum.Sit then Hum.Sit = true end
 
-                        -- D. ELITE FLAPPING ANIMATION (R15 & R6)
-                        local t = tick() * 12
-                        local flap = math.sin(t) * 0.8
+                        -- C. SAFETY PLATFORM (Under YOU)
+                        if TrollEngine.VoidPart then
+                            TrollEngine.VoidPart.Transparency = TrollEngine.PlatformTransparency
+                            TrollEngine.VoidPart.CFrame = HRP.CFrame * CFrame.new(0, -3.5, 0)
+                        end
+
+                        -- D. ANIMATION (Flap)
+                        local t, flap = tick() * 12, math.sin(tick() * 12) * 0.8
                         for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
                             if joint.Parent then
-                                if joint.Name:find("Left") then
-                                    joint.C0 = originalC0 * CFrame.Angles(0, 0, math.rad(70) + flap)
-                                elseif joint.Name:find("Right") then
-                                    joint.C0 = originalC0 * CFrame.Angles(0, 0, -math.rad(70) - flap)
-                                end
+                                joint.C0 = originalC0 * CFrame.Angles(0, 0, (joint.Name:find("Left") and (math.rad(70) + flap) or (-math.rad(70) - flap)))
                             end
                         end
                     end
@@ -593,40 +600,40 @@ Tab:CreateToggle({
                 end
             end)
 
-            -- 3. HARD NOCLIP (Ensures Target Can Move Freely)
-            -- Running on Stepped to disable collisions BEFORE physics solve
-            local sitNoclip = RunService.Stepped:Connect(function()
+            -- 4. IMPROVED HARD NOCLIP (Local Collision Nullifier)
+            local headSitNoclip = RunService.Stepped:Connect(function()
                 if not TrollEngine.HeadSitActive or not Char then return end
-                for _, part in pairs(Char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                    end
+                -- Noclip YOU
+                for _, v in pairs(Char:GetDescendants()) do
+                    if v:IsA("BasePart") then v.CanCollide = false end
                 end
-                -- Also noclip target's parts locally to prevent friction "hitching"
+                -- Noclip TARGET (Locally) to stop friction flings
                 if TrollEngine.Target and TrollEngine.Target.Character then
-                    for _, part in pairs(TrollEngine.Target.Character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
+                    for _, v in pairs(TrollEngine.Target.Character:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
                     end
                 end
             end)
-            table.insert(TrollEngine.Connections, sitNoclip)
+            table.insert(TrollEngine.Connections, headSitNoclip)
 
         else
-            -- CLEANUP: Restore Original Form
+            -- 5. CLEANUP & SAFE LANDING
             if Hum then 
                 Hum.Sit = false 
                 Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
-            
+
+            -- Restore Joints
             for joint, originalC0 in pairs(TrollEngine.HeadSitJoints) do
-                if joint and joint.Parent then
-                    joint.C0 = originalC0
-                end
+                if joint and joint.Parent then joint.C0 = originalC0 end
             end
-            TrollEngine.HeadSitJoints = {}
-            _G.EliteLog("Head-Sitter Disabled", "info")
+
+            -- Safe Land Sequence: Teleport to nearest floor
+            local landingSpot = GetNearestGround()
+            HRP.CFrame = CFrame.new(landingSpot)
+            HRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+
+            _G.EliteLog("Head-Sitter Disabled: Safe Landing at " .. tostring(math.floor(landingSpot.Y)), "success")
         end
     end,
 })
