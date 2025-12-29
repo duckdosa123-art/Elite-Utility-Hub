@@ -48,7 +48,7 @@ function WalkFlingEngine:Start()
     end)
     table.insert(self.Connections, noclipConn)
 
-    -- 3. The Surgical Spike with Recoil Anchor
+    -- Replace ONLY the setupTouch function inside WalkFlingEngine:Start()
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
@@ -58,20 +58,17 @@ function WalkFlingEngine:Start()
             if targetChar:FindFirstChild("Humanoid") then
                 local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
-                    -- THE FIX: Save current state to prevent "Ascending to Heaven"
                     local oldVel = HRP.AssemblyLinearVelocity
                     local oldCFrame = HRP.CFrame
                     
-                    -- Spike velocity to extreme levels
+                    -- Force Physics State to prevent joint breakage
+                    Hum:ChangeState(Enum.HumanoidStateType.Physics)
                     HRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
                     
-                    -- Wait one physics frame for the impact to register
                     RunService.RenderStepped:Wait()
                     
-                    -- Immediately restore position and velocity to cancel recoil
                     if HRP then
                         HRP.AssemblyLinearVelocity = oldVel
-                        -- This line stops the "fling back" effect instantly
                         HRP.CFrame = oldCFrame 
                     end
                 end
@@ -94,8 +91,29 @@ function WalkFlingEngine:Stop()
     end
     self.Connections = {}
     
-    local Hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+    local Char = LP.Character
+    local Hum = Char and Char:FindFirstChild("Humanoid")
+    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+
+    -- 1. PURGE VELOCITY: Prevents the "Velocity-Kill" when states re-enable
+    if HRP then
+        HRP.AssemblyLinearVelocity = Vector3.zero
+        HRP.AssemblyAngularVelocity = Vector3.zero
+    end
+
+    -- 2. RESTORE COLLISION: Fixes the permanent noclip
+    if Char then
+        for _, part in pairs(Char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+    
+    -- 3. SAFETY DELAY: Wait for physics to settle before allowing death
     if Hum then
+        Hum.Health = Hum.MaxHealth
+        task.wait(0.1)
         Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
         Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
@@ -104,7 +122,6 @@ function WalkFlingEngine:Stop()
     self:Notify("WalkFling Disabled")
     _G.EliteLog("WalkFling engine stopped", "info")
 end
-
 -- Elite Propeller Fling Engine
 local TargetEngine = {
     Active = true, -- Set to true so loops run
@@ -125,36 +142,6 @@ local function Notify(title, text)
     })
 end
 
-local function GetPlayerList()
-    local names = {}
-    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-        if v ~= LP then -- Exclude local player for trolling modules
-            table.insert(names, v.DisplayName)
-        end
-    end
-    return names
-end
-
-local function GetPlayerByShortName(text)
-    local search = string.lower(text)
-    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
-        if v ~= LP then
-            local display = string.lower(v.DisplayName)
-            local username = string.lower(v.Name)
-            
-            -- Priority 1: Prefix matching (Typing "D" finds "Diddyo")
-            if string.sub(display, 1, #search) == search or string.sub(username, 1, #search) == search then
-                return v
-            end
-            
-            -- Priority 2: Substring matching (Typing "id" finds "Diddyo")
-            if string.find(display, search) or string.find(username, search) then
-                return v
-            end
-        end
-    end
-    return nil
-end
 -- 2. CORE: The Propeller Spin-Fling
 function TargetEngine:SpinFling(Target)
     if not Target or not Target.Character or self.FlingingInProgress then return end
@@ -196,39 +183,56 @@ function TargetEngine:SpinFling(Target)
         
     until (THRP and THRP.AssemblyLinearVelocity.Magnitude > 150) or (flingTime > 35) or not Target.Parent or not self.Active
 
-    -- Stop Spin & Cleanup
-    if MyHRP then
-        MyHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-        MyHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        MyHRP.CFrame = self.OriginalPos
-    end
-
-    -- Restore collision and mass
-    for part, wasMassless in pairs(oldMassless) do
-        if part and part.Parent then
-            part.Massless = wasMassless
+        -- Stop Spin & Cleanup
+        if MyHRP then
+            MyHRP.AssemblyAngularVelocity = Vector3.zero
+            MyHRP.AssemblyLinearVelocity = Vector3.zero
+            MyHRP.CFrame = self.OriginalPos
         end
+    
+        -- Restore collision and mass (FIXED NOCLIP)
+        for v, wasMassless in pairs(oldMassless) do
+            if v and v.Parent then
+                v.Massless = wasMassless
+                v.CanCollide = true -- Explicitly re-enable
+            end
+        end
+        
+        -- Force collision refresh
+        if MyChar then
+            for _, p in pairs(MyChar:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+        end
+    
+        Notify("Elite Utility", Target.DisplayName .. " flinged!")
+        self.FlingingInProgress = false
     end
-
-    Notify("Elite Utility", Target.DisplayName .. " flinged!")
-    self.FlingingInProgress = false
-end
 
 -- 3. PERMANENT PHYSICS OVERRIDE (Godmode/Noclip)
 local function SetupFlingSafety()
-    if #TargetEngine.Connections > 0 then return end -- Prevent duplicate connections/lag
+    if #TargetEngine.Connections > 0 then return end 
     
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Hum then return end
 
-    -- Heartbeat Godmode
     table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
-        if Hum and Hum.Parent then 
+        if TargetEngine.Active and Hum and Hum.Parent then 
             Hum.Health = Hum.MaxHealth 
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
     end))
+
+    table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
+        -- Only noclip if the engine is active OR flinging is in progress
+        if (TargetEngine.Active or TargetEngine.FlingingInProgress) and LP.Character then
+            for _, v in pairs(LP.Character:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end))
+end
 
     -- Stepped Noclip
     table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
@@ -240,6 +244,36 @@ local function SetupFlingSafety()
     end))
 end
 
+local function GetPlayerList()
+    local names = {}
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= LP then -- Exclude local player for trolling modules
+            table.insert(names, v.DisplayName)
+        end
+    end
+    return names
+end
+
+local function GetPlayerByShortName(text)
+    local search = string.lower(text)
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= LP then
+            local display = string.lower(v.DisplayName)
+            local username = string.lower(v.Name)
+            
+            -- Priority 1: Prefix matching (Typing "D" finds "Diddyo")
+            if string.sub(display, 1, #search) == search or string.sub(username, 1, #search) == search then
+                return v
+            end
+            
+            -- Priority 2: Substring matching (Typing "id" finds "Diddyo")
+            if string.find(display, search) or string.find(username, search) then
+                return v
+            end
+        end
+    end
+    return nil
+end
 -- 4. UI INTEGRATION
 
 Tab:CreateSection("Fling - Disable Fling Guard First!")
