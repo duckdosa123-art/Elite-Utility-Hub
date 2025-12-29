@@ -230,11 +230,13 @@ local function SetupFlingSafety()
 end
 
 -- 4. UI INTEGRATION
+
 Tab:CreateSection("Fling - Disable Fling Guard First!")
-TrollTab:CreateToggle({
+
+Tab:CreateToggle({
    Name = "Elite Walk-Fling",
    CurrentValue = false,
-   Flag = "WalkFling_Toggle", -- Unique flag for config saving
+   Flag = "WalkFling_Toggle", 
    Callback = function(Value)
       if Value then
           task.spawn(function()
@@ -245,7 +247,9 @@ TrollTab:CreateToggle({
       end
    end,
 })
-Tab:CreateSection("Advance Fling - Disable Fling Guard First!")
+
+-- Test Paragraph to confirm loading continues
+Tab:CreateParagraph({Title = "Status", Content = "Troll Module loaded successfully."})
 
 Tab:CreateInput({
     Name = "Search & Auto-Select",
