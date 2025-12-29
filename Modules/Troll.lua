@@ -126,23 +126,22 @@ local function TogglePassengerMagnet(Value)
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
     
     if Value and Root then
-        if MagnetPlate then MagnetPlate:Destroy() end -- Cleanup existing
+        if MagnetPlate then MagnetPlate:Destroy() end 
         
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(6, 0.5, 9)
+        -- Increased Size slightly to accommodate multiple R15 players (larger hitboxes)
+        MagnetPlate.Size = Vector3.new(8, 0.6, 11)
         
-        -- FIX: Start with CanCollide FALSE to prevent the initial fling
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE PHYSICS
+        -- ELITE PHYSICS: High Friction (5.0) and FrictionWeight (100) to "glue" R15 players
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
         MagnetPlate.Parent = Char
         
-        -- FIX: Create No-Collision BEFORE turning on collisions
         local NoCol = Instance.new("NoCollisionConstraint")
         NoCol.Part0 = MagnetPlate
         NoCol.Part1 = Root
@@ -153,33 +152,47 @@ local function TogglePassengerMagnet(Value)
         Weld.Part1 = MagnetPlate
         Weld.Parent = MagnetPlate
         
-        -- Now it is safe to turn on collisions
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
         
-        _G.EliteLog("Passenger Magnet: Safely Engaged", "success")
+        _G.EliteLog("Passenger Magnet: Multi-User Sync Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Passenger Magnet: Disengaged", "info")
     end
 end
 
--- Ensure the plate stays active and aligned if the bridge is moving
+-- Elite Multi-Passenger Sync Loop
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
             MagnetPlate.CanCollide = true
             
-            -- [[ FIX BUG 2: PASSENGER HOOKING ]]
-            -- Manually sync nearby player velocity to your bridge velocity
+            -- Capture current bridge velocity once to apply to all passengers
+            local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
+            
+            -- Iterate through all players to check for proximity
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
-                if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                    local pRoot = p.Character.HumanoidRootPart
-                    local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
+                if p ~= LP and p.Character then
+                    local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
-                    if distance < 7 then -- If they are standing on the magnet area
-                        -- Forcibly set their velocity to match your bridge movement
-                        pRoot.AssemblyLinearVelocity = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
+                    if pRoot and pHum and pHum.Health > 0 then
+                        local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
+                        
+                        -- Radius of 8.5 covers the entire magnet plate for multiple R15 players
+                        if distance < 8.5 then 
+                            -- 1. LINEAR SYNC: Matches your speed
+                            pRoot.AssemblyLinearVelocity = bridgeVel
+                            
+                            -- 2. ANGULAR LOCK: Essential for R15. Stops them from tripping/rotating off.
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            
+                            -- 3. ANTI-GLITCH: Slightly nudges them up if they sink into your character
+                            if distance < 1.5 then
+                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.1, 0)
+                            end
+                        end
                     end
                 end
             end
@@ -244,7 +257,7 @@ Tab:CreateToggle({
       end
    end,
 })
-Tab:CreateSection("Position Adjust (Smooth)")
+Tab:CreateSection("Position The Bridge")
 
 Tab:CreateButton({
    Name = "UP (one stud)",
@@ -261,9 +274,6 @@ Tab:CreateButton({
        _G.EliteLog("Position: -1 Stud World-DOWN", "info")
    end,
 })
-
--- Continuous Movement (The "Hold" Alternative)
-Tab:CreateSection("Continuous Adjust (Hold Simulation)")
 
 local MoveUpActive = false
 Tab:CreateToggle({
