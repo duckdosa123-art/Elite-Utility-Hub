@@ -456,43 +456,41 @@ local function TogglePassengerMagnet(Value)
     local Char = LP.Character
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
     
-    if Value then
-        if not Root then return end
-        -- Create the Elite Magnetic Plate
+    if Value and Root then
+        if MagnetPlate then MagnetPlate:Destroy() end -- Cleanup existing
+        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
-        MagnetPlate.Transparency = 1 -- Keep it invisible
-        MagnetPlate.Size = Vector3.new(6, 0.5, 9) -- INCREASED SIZE FOR BETTER HOOKING
-        MagnetPlate.CanCollide = true
-        MagnetPlate.Massless = true
+        MagnetPlate.Transparency = 1
+        MagnetPlate.Size = Vector3.new(6, 0.5, 9)
         
-        -- [[ FIX BUG 1: NO-COLLISION CONSTRAINT ]]
-        -- This prevents the plate from hitting YOUR character (The fling fix)
+        -- FIX: Start with CanCollide FALSE to prevent the initial fling
+        MagnetPlate.CanCollide = false 
+        MagnetPlate.Massless = true
+        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
+        
+        -- ELITE PHYSICS
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
+        MagnetPlate.Parent = Char
+        
+        -- FIX: Create No-Collision BEFORE turning on collisions
         local NoCol = Instance.new("NoCollisionConstraint")
         NoCol.Part0 = MagnetPlate
         NoCol.Part1 = Root
         NoCol.Parent = MagnetPlate
         
-        -- ELITE PHYSICS: Maximum Friction (Prevents sliding)
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
-        
-        MagnetPlate.Parent = Char
-        
-        -- Weld the plate to your back (slightly above the HRP)
         local Weld = Instance.new("WeldConstraint")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
         Weld.Parent = MagnetPlate
         
-        -- Position adjustment: Flat on your back when in bridge mode
-        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
+        -- Now it is safe to turn on collisions
+        task.wait(0.1)
+        if MagnetPlate then MagnetPlate.CanCollide = true end
         
-        _G.EliteLog("Passenger Magnet: Engaged (High-Friction Surface)", "success")
+        _G.EliteLog("Passenger Magnet: Safely Engaged", "success")
     else
-        if MagnetPlate then
-            MagnetPlate:Destroy()
-            MagnetPlate = nil
-        end
+        if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Passenger Magnet: Disengaged", "info")
     end
 end
@@ -534,9 +532,16 @@ Tab:CreateToggle({
    end,
 })
 
--- 2. Trigger logic immediately so the plate exists on startup
+-- Only activate the magnet once the character is stationary and grounded
 task.spawn(function()
-    TogglePassengerMagnet(true)
+    repeat task.wait() until LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    task.wait(2) -- Wait for character to settle
+    
+    -- Ensure we only activate if the user actually has the toggle set to true
+    local configValue = true -- Or pull from your Rayfield flags
+    if configValue then
+        TogglePassengerMagnet(true)
+    end
 end)
 
 Tab:CreateParagraph({
