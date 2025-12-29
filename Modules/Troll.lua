@@ -1,4 +1,16 @@
--- [[ ELITE-UTILITY-HUB: BUG-FIXED TROLL ENGINES ]]
+-- [[ ELITE-UTILITY-HUB: STABILIZED FLING ENGINES ]]
+
+-- Helper: Brute Force Collision Reset
+local function ResetCollision(Char)
+    if not Char then return end
+    for _, part in pairs(Char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+            part.CanTouch = true
+            part.CanQuery = true
+        end
+    end
+end
 
 -- WalkFling Logic
 local WalkFlingEngine = {
@@ -6,54 +18,40 @@ local WalkFlingEngine = {
     Connections = {}
 }
 
-function WalkFlingEngine:Notify(text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Elite Utility",
-            Text = text,
-            Icon = "rbxassetid://6023426926",
-            Duration = 3
-        })
-    end)
-end
-
 function WalkFlingEngine:Start()
     if self.Active then return end
-    
     local Char = LP.Character
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
     local Hum = Char and Char:FindFirstChild("Humanoid")
     if not HRP or not Hum then return end
     
     self.Active = true
-    _G.EliteLog("WalkFling engine started", "success")
+    _G.EliteLog("WalkFling active", "success")
 
-    -- 1. Godmode & Fall Damage Protection
+    -- Godmode & Fall Protection
     Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     
     local godmodeConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not Hum then return end
         Hum.Health = Hum.MaxHealth
-        -- Prevent NDS fall damage by forcing state
         if Hum:GetState() == Enum.HumanoidStateType.Freefall then
             Hum:ChangeState(Enum.HumanoidStateType.Physics)
         end
     end)
     table.insert(self.Connections, godmodeConn)
 
-    -- 2. Stepped Noclip
+    -- Noclip (Tripled for accuracy)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+            if part:IsA("BasePart") then 
+                part.CanCollide = false 
+                part.CanTouch = false
             end
         end
     end)
     table.insert(self.Connections, noclipConn)
 
-    -- 3. The Surgical Spike
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
@@ -72,45 +70,27 @@ function WalkFlingEngine:Start()
         end)
         table.insert(self.Connections, touchConn)
     end
-    
     for _, part in pairs(Char:GetDescendants()) do setupTouch(part) end
-    table.insert(self.Connections, Char.DescendantAdded:Connect(setupTouch))
 end
 
 function WalkFlingEngine:Stop()
     if not self.Active then return end
     self.Active = false
-    
-    -- Cleanup Connections
     for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
     
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChild("Humanoid")
-    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
-    
     if Hum then
-        Hum.Health = Hum.MaxHealth -- Max out before releasing state
-        task.wait(0.1) -- Small buffer to prevent instant death
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+        Hum.Health = Hum.MaxHealth
         Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        task.wait(0.1) -- Buffer to prevent instant death from engine lag
+        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
     end
-    
-    -- [[ FIX: BRUTE FORCE NOCLIP DISABLE ]]
-    if Char then
-        for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-    end
-    
-    if HRP then HRP.AssemblyLinearVelocity = Vector3.zero end
-    _G.EliteLog("WalkFling engine stopped & Noclip reset", "info")
+    ResetCollision(Char)
 end
 
--- Elite Propeller Fling Engine (Fixed for NDS/Fall Damage)
+-- Propeller Target Engine
 local TargetEngine = {
     Active = true,
     SelectedPlayer = nil,
@@ -122,7 +102,6 @@ local TargetEngine = {
 
 function TargetEngine:SpinFling(Target)
     if not Target or not Target.Character or self.FlingingInProgress then return end
-    
     local TChar = Target.Character
     local THRP = TChar:FindFirstChild("HumanoidRootPart")
     local MyChar = LP.Character
@@ -134,7 +113,7 @@ function TargetEngine:SpinFling(Target)
     self.FlingingInProgress = true
     self.OriginalPos = MyHRP.CFrame
     
-    -- Setup Physics
+    -- Start Noclip
     for _, v in pairs(MyChar:GetDescendants()) do
         if v:IsA("BasePart") then v.CanCollide = false end
     end
@@ -143,7 +122,6 @@ function TargetEngine:SpinFling(Target)
     repeat
         RunService.Heartbeat:Wait()
         flingTime = flingTime + 1
-        
         if THRP and MyHRP then
             MyHRP.CFrame = THRP.CFrame * CFrame.Angles(0, math.rad(flingTime * 90), 0)
             MyHRP.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
@@ -151,55 +129,35 @@ function TargetEngine:SpinFling(Target)
         end
     until (THRP and THRP.AssemblyLinearVelocity.Magnitude > 150) or (flingTime > 40) or not Target.Parent
 
-    -- [[ FIX: SAFE LANDING ]]
+    -- [[ THE NDS FIX: Safe Deceleration ]]
     if MyHRP then
         MyHRP.AssemblyAngularVelocity = Vector3.zero
         MyHRP.AssemblyLinearVelocity = Vector3.zero
         MyHRP.CFrame = self.OriginalPos
-        -- Force NoPhysics state briefly so game doesn't register "Fall Damage" from the TP
-        MyHum:ChangeState(Enum.HumanoidStateType.NoPhysics)
-        task.wait(0.1)
+        -- Essential: Reset velocity again after TP to clear physics buffer
+        task.wait() 
         MyHRP.AssemblyLinearVelocity = Vector3.zero
         MyHum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 
-    -- Restore Collisions
-    for _, v in pairs(MyChar:GetDescendants()) do
-        if v:IsA("BasePart") then v.CanCollide = true end
-    end
-
+    ResetCollision(MyChar)
     self.FlingingInProgress = false
 end
 
--- Modular Safety (To be called once in Troll.lua)
-function TargetEngine:ToggleSafety(Value)
-    if not Value then
-        for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
-        self.Connections = {}
-        -- Reset collisions
-        if LP.Character then
-            for _, v in pairs(LP.Character:GetDescendants()) do
-                if v:IsA("BasePart") then v.CanCollide = true end
-            end
-        end
-        return
-    end
-
-    -- Heartbeat Godmode
-    table.insert(self.Connections, RunService.Heartbeat:Connect(function()
+-- Unified Safety Logic
+local function SetupFlingSafety()
+    if #TargetEngine.Connections > 0 then return end
+    
+    table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
         local Hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
         if Hum then 
             Hum.Health = Hum.MaxHealth 
             Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-            -- Anti-Fall Damage for NDS
-            if Hum:GetState() == Enum.HumanoidStateType.Freefall then
-                Hum:ChangeState(Enum.HumanoidStateType.Physics)
-            end
+            if Hum:GetState() == Enum.HumanoidStateType.Freefall then Hum:ChangeState(Enum.HumanoidStateType.Physics) end
         end
     end))
 
-    -- Stepped Noclip
-    table.insert(self.Connections, RunService.Stepped:Connect(function()
+    table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
         if LP.Character then
             for _, v in pairs(LP.Character:GetDescendants()) do
                 if v:IsA("BasePart") then v.CanCollide = false end
@@ -218,6 +176,7 @@ Tab:CreateToggle({
    Callback = function(Value)
       if Value then
           task.spawn(function()
+              SetupFlingSafety()
               WalkFlingEngine:Start()
           end)
       else
@@ -237,13 +196,6 @@ local PlayerDropdown = Tab:CreateDropdown({
         TargetEngine.SelectedPlayer = GetPlayerByShortName(Option[1])
     end,
 })
-
-Tab:CreateButton({
-    Name = "Refresh Player List",
-    Callback = function()
-        PlayerDropdown:Refresh(GetPlayerList())
-    end,
-})
 Tab:CreateInput({
     Name = "Search & Auto-Select",
     PlaceholderText = "Type start of name...",
@@ -257,13 +209,19 @@ Tab:CreateInput({
         end
     end,
 })
+Tab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        PlayerDropdown:Refresh(GetPlayerList())
+    end,
+})
 Tab:CreateSection("")
 Tab:CreateButton({
     Name = "Elite Fling Target",
     Callback = function()
         if TargetEngine.SelectedPlayer then
-            SetupFlingSafety()
-            task.spawn(function() TargetEngine:SpinFling(TargetEngine.SelectedPlayer) end)
+            SetupFlingSafety() -- Ensures safety is ON
+            task.spawn(function() TargetEngine:SpinFling(TargetEngine.SelectedPlayer) end))
         else
             Notify("Error", "No player selected!")
         end
@@ -280,6 +238,7 @@ Tab:CreateToggle({
             task.spawn(function()
                 while TargetEngine.LoopActive do
                     if TargetEngine.SelectedPlayer then
+                        SetupFlingSafety()
                         TargetEngine:SpinFling(TargetEngine.SelectedPlayer)
                     end
                     task.wait(2)
@@ -298,6 +257,7 @@ Tab:CreateButton({
             local players = game.Players:GetPlayers()
             for _, p in pairs(players) do
                 if p ~= LP and p.Character then
+                    SetupFlingSafety()
                     TargetEngine:SpinFling(p)
                     task.wait(0.2)
                 end
