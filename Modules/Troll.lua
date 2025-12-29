@@ -126,24 +126,35 @@ local function Notify(title, text)
 end
 
 local function GetPlayerList()
-    local list = {}
-    for _, v in pairs(game.Players:GetPlayers()) do
-        if v ~= LP then table.insert(list, v.DisplayName) end
+    local names = {}
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= LP then -- Exclude local player for trolling modules
+            table.insert(names, v.DisplayName)
+        end
     end
-    return list
+    return names
 end
 
-local function GetPlayerByShortName(name)
-    if not name then return nil end
-    name = name:lower()
-    for _, v in pairs(game.Players:GetPlayers()) do
-        if v ~= LP and (v.DisplayName:lower():sub(1, #name) == name or v.Name:lower():sub(1, #name) == name) then
-            return v
+local function GetPlayerByShortName(text)
+    local search = string.lower(text)
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= LP then
+            local display = string.lower(v.DisplayName)
+            local username = string.lower(v.Name)
+            
+            -- Priority 1: Prefix matching (Typing "D" finds "Diddyo")
+            if string.sub(display, 1, #search) == search or string.sub(username, 1, #search) == search then
+                return v
+            end
+            
+            -- Priority 2: Substring matching (Typing "id" finds "Diddyo")
+            if string.find(display, search) or string.find(username, search) then
+                return v
+            end
         end
     end
     return nil
 end
-
 -- 2. CORE: The Propeller Spin-Fling
 function TargetEngine:SpinFling(Target)
     if not Target or not Target.Character or self.FlingingInProgress then return end
@@ -248,35 +259,44 @@ Tab:CreateToggle({
    end,
 })
 
+local PlayerDropdown -- Pre-declare to reference inside Input
+
 Tab:CreateInput({
-    Name = "Search & Auto-Select",
-    PlaceholderText = "Type start of name...",
+    Name = "Elite Search & Select",
+    PlaceholderText = "Type start of name (e.g. 'D')",
+    RemoveTextAfterFocusLost = false,
     Callback = function(Text)
         if Text == "" then return end
         local found = GetPlayerByShortName(Text)
         if found then
             TargetEngine.SelectedPlayer = found
+            -- Elite Sync: Updates the dropdown visual to match the search result
             PlayerDropdown:Set({found.DisplayName}) 
-            _G.EliteLog("Found: " .. found.DisplayName, "success")
+            _G.EliteLog("Target Locked: " .. found.DisplayName .. " (@" .. found.Name .. ")", "success")
         end
     end,
 })
-local PlayerDropdown = Tab:CreateDropdown({
-    Name = "Player List",
-    Options = GetPlayerList(), -- Uses your function to get names
+
+PlayerDropdown = Tab:CreateDropdown({
+    Name = "Target Player List",
+    Options = GetPlayerList(),
     CurrentOption = {""},
     MultipleOptions = false,
     Flag = "ElitePlayerList", 
     Callback = function(Option)
-        -- Sets the target when you click a name in the list
-        TargetEngine.SelectedPlayer = GetPlayerByShortName(Option[1])
+        local selection = Option[1]
+        if selection and selection ~= "" then
+            TargetEngine.SelectedPlayer = GetPlayerByShortName(selection)
+            _G.EliteLog("Target Selected: " .. TargetEngine.SelectedPlayer.DisplayName, "info")
+        end
     end,
 })
 
 Tab:CreateButton({
     Name = "Refresh Player List",
     Callback = function()
-        PlayerDropdown:Refresh(GetPlayerList())
+        PlayerDropdown:Refresh(GetPlayerList(), true)
+        _G.EliteLog("Player list synchronized", "info")
     end,
 })
 Tab:CreateSection("")
