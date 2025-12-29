@@ -424,10 +424,26 @@ task.spawn(function()
         end
     end)
 end)
+local TweenService = game:GetService("TweenService")
 
+-- Helper: Elite Smooth Tween (For 1-stud adjustments)
+local function EliteTween(offset)
+    local Char = LP.Character
+    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+    if not Root then return end
+    
+    local targetCF = Root.CFrame * CFrame.new(0, offset, 0)
+    local info = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    TweenService:Create(Root, info, {CFrame = targetCF}):Play()
+    _G.EliteLog("Position Adjusted: " .. tostring(offset) .. " Studs", "info")
+end
 -- UI INTEGRATION (Place in Troll Tab)
 Tab:CreateSection("Helpful Troll Features")
-
+Tab:CreateParagraph({
+    Title = "⚠️ Collaboration Note",
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled. If you pass through players, this feature will only be visual."
+})
 Tab:CreateToggle({
    Name = "Elite Flying Bridge",
    CurrentValue = false,
@@ -440,33 +456,63 @@ Tab:CreateToggle({
       end
    end,
 })
+Tab:CreateSection("Position Adjust (Smooth)")
 
-Tab:CreateParagraph({
-    Title = "How to use:",
-    Content = "1. Toggle on. \n2. Use Joystick/WASD to fly. \n3. Space/CTRL for Up/Down. \n4. Your body stays flat regardless of where you look!"
-})
-Tab:CreateSection("Helpful - Interaction")
-
-Tab:CreateToggle({
-   Name = "Elite Flying Bridge",
-   CurrentValue = false,
-   Flag = "FlyingBridge_Toggle",
-   Callback = function(Value)
-      FlyingBridgeActive = Value
-      SetBridgePose(Value)
-      
-      if Value then
-          _G.EliteLog("Flying Bridge Active - Stay flat for others!", "success")
-      else
-          _G.EliteLog("Flying Bridge Disabled", "info")
-      end
+Tab:CreateButton({
+   Name = "UP (one stud)",
+   Callback = function()
+       EliteTween(1)
    end,
 })
 
-Tab:CreateParagraph({
-    Title = "⚠️ Collaboration Note",
-    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled. If you pass through players, this feature will only be visual."
+Tab:CreateButton({
+   Name = "DOWN (one stud)",
+   Callback = function()
+       EliteTween(-1)
+   end,
 })
+
+-- Continuous Movement (The "Hold" Alternative)
+Tab:CreateSection("Continuous Adjust (Hold Simulation)")
+
+local MoveUpActive = false
+Tab:CreateToggle({
+   Name = "Continuous UP",
+   CurrentValue = false,
+   Flag = "ContUp",
+   Callback = function(Value)
+      MoveUpActive = Value
+      task.spawn(function()
+          while MoveUpActive do
+              local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+              if Root then
+                  Root.CFrame = Root.CFrame * CFrame.new(0, 0.2, 0) -- Move 0.2 studs per frame
+              end
+              _G.RunService.Heartbeat:Wait()
+          end
+      end)
+   end,
+})
+
+local MoveDownActive = false
+Tab:CreateToggle({
+   Name = "Continuous DOWN",
+   CurrentValue = false,
+   Flag = "ContDown",
+   Callback = function(Value)
+      MoveDownActive = Value
+      task.spawn(function()
+          while MoveDownActive do
+              local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+              if Root then
+                  Root.CFrame = Root.CFrame * CFrame.new(0, -0.2, 0)
+              end
+              _G.RunService.Heartbeat:Wait()
+          end
+      end)
+   end,
+})
+
 --=========================================================- Elite Troll Section –==========================================================================
 
 -- Elite Troll Engine (Updated for Customization)
