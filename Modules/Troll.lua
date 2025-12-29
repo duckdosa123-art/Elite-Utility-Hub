@@ -1,8 +1,8 @@
 
 --==========================================================- Elite Help Section -==========================================================================
 
--- [[ ELITE FLYING BRIDGE ENGINE ]]
-_G.EliteFlySpeed = 10 -- Default Elite Speed
+-- [[ ELITE FLYING BRIDGE ENGINE (STABILIZED) ]]
+_G.EliteFlySpeed = 10 
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
@@ -15,19 +15,21 @@ local function SetBridgePose(active)
     if not Char or not Hum then return end
 
     if active then
+        -- FIX: Disable AutoRotate to stop First-Person Freak Out
+        Hum.AutoRotate = false 
         for _, v in pairs(Char:GetDescendants()) do
             if v:IsA("Motor6D") then
                 original_joints[v] = v.C0
-                -- Stretch arms forward and legs back
-                if v.Name:find("Shoulder") then
+                if v.Name:find("Shoulder") or v.Name:find("Arm") then
                     v.C0 = v.C0 * CFrame.Angles(math.rad(90), 0, 0)
-                elseif v.Name:find("Hip") then
+                elseif v.Name:find("Hip") or v.Name:find("Leg") then
                     v.C0 = v.C0 * CFrame.Angles(math.rad(-90), 0, 0)
                 end
             end
         end
         Hum.PlatformStand = true
     else
+        Hum.AutoRotate = true -- Restore for normal walking
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
         end
@@ -46,29 +48,32 @@ task.spawn(function()
         local Cam = workspace.CurrentCamera
         local UIS = game:GetService("UserInputService")
         
-        local speed = _G.EliteFlySpeed or 10
+        local speed = _G.EliteFlySpeed or 16
 
         if FlyingBridgeActive and Root and Hum and Cam then
-            -- 1. FIRST-PERSON STABILIZER
-            Hum.AutoRotate = false -- ELITE FIX: Stops camera from spinning the body
-
-            -- 2. Initialize Physics Objects
+            -- 1. Physics Setup
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity")
-                bridge_bv.Name = "EliteBridge_Velocity"
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
                 bridge_bv.Parent = Root
             end
             if not bridge_bg then
                 bridge_bg = Instance.new("BodyGyro")
-                bridge_bg.Name = "EliteBridge_Gyro"
                 bridge_bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
                 bridge_bg.P = 25000 
                 bridge_bg.D = 500
                 bridge_bg.Parent = Root
             end
 
-            -- 3. Input Handling
+            -- 2. Elite Noclip Integration (GHOST MODE)
+            -- We noclip your character parts so you can fly through walls
+            for _, part in pairs(Char:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "ElitePassengerMagnet" then 
+                    part.CanCollide = false 
+                end
+            end
+
+            -- 3. Movement
             local moveDir = Hum.MoveDirection 
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
@@ -81,27 +86,19 @@ task.spawn(function()
                 bridge_bv.Velocity = Vector3.zero
             end
 
-            -- 4. ELITE ORIENTATION
+            -- 4. Rotation Fix (First-Person Stability)
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-
-            -- 5. ELITE NOCLIP (Ghost Body, Solid Magnet)
-            -- This allows you to fly through walls while the plate carries the people.
-            for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if part.Name == "ElitePassengerMagnet" then
-                        part.CanCollide = true -- Keeps passengers on top
-                    else
-                        part.CanCollide = false -- Lets you fly through buildings/ground
-                    end
-                end
-            end
         else
-            -- 6. Cleanup & Reset
+            -- 5. Cleanup
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
-            if Hum then 
-                Hum.AutoRotate = true -- Restore standard camera control
+            
+            -- Restore Collisions when Bridge is OFF (unless Noclip Toggle is ON)
+            if not _nc and Char then
+                for _, p in pairs(Char:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = true end
+                end
             end
         end
     end)
