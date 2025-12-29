@@ -22,54 +22,51 @@ function WalkFlingEngine:Start()
     if not HRP or not Hum then return end
     
     self.Active = true
-    self:Notify("WalkFling Enabled")
-    _G.EliteLog("WalkFling engine started", "success")
+    Hum.BreakJointsOnDeath = false -- ELITE IMMORTALITY LAYER
+    _G.EliteLog("WalkFling active - Floor Lock engaged", "success")
 
-    -- 1. Godmode & Anti-Trip (Keeps you standing during hits)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-    
+    -- 1. Anti-Death & Stability Loop
     local godmodeConn = RunService.Heartbeat:Connect(function()
         if not self.Active or not Hum then return end
         Hum.Health = Hum.MaxHealth
+        Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        -- Force a "Walking" state to prevent the engine from tripping you
+        if Hum:GetState() == Enum.HumanoidStateType.FallingDown then
+            Hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
     end)
     table.insert(self.Connections, godmodeConn)
 
-    -- 2. Stepped Noclip (Essential for Fling Accuracy)
-    -- This allows you to walk through the target so every part of you touches them.
+    -- 2. SELECTIVE FLOOR-LOCK NOCLIP (Stops falling through ground)
     local noclipConn = RunService.Stepped:Connect(function()
         if not self.Active or not Char then return end
         for _, part in pairs(Char:GetDescendants()) do
             if part:IsA("BasePart") then
-                part.CanCollide = false
+                -- Keep HRP collidable for floor interaction; Noclip everything else
+                if part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = false
+                end
             end
         end
     end)
     table.insert(self.Connections, noclipConn)
 
-    -- Replace ONLY the setupTouch function inside WalkFlingEngine:Start()
+    -- 3. Collision Logic
     local function setupTouch(part)
         if not part:IsA("BasePart") then return end
         local touchConn = part.Touched:Connect(function(hit)
             if not self.Active or hit:IsDescendantOf(Char) then return end
-            
             local targetChar = hit.Parent
             if targetChar:FindFirstChild("Humanoid") then
                 local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
                     local oldVel = HRP.AssemblyLinearVelocity
-                    local oldCFrame = HRP.CFrame
-                    
-                    -- Force Physics State to prevent joint breakage
-                    Hum:ChangeState(Enum.HumanoidStateType.Physics)
-                    HRP.AssemblyLinearVelocity = Vector3.new(9e7, 9e7, 9e7)
-                    
+                    local oldCF = HRP.CFrame
+                    HRP.AssemblyLinearVelocity = Vector3.new(0, 9e7, 0) -- Vertical Spike for maximum air-time
                     RunService.RenderStepped:Wait()
-                    
                     if HRP then
                         HRP.AssemblyLinearVelocity = oldVel
-                        HRP.CFrame = oldCFrame 
+                        HRP.CFrame = oldCF
                     end
                 end
             end
@@ -77,50 +74,40 @@ function WalkFlingEngine:Start()
         table.insert(self.Connections, touchConn)
     end
     
-    -- Connect every part of the player for 100% accuracy
     for _, part in pairs(Char:GetDescendants()) do setupTouch(part) end
-    table.insert(self.Connections, Char.DescendantAdded:Connect(setupTouch))
 end
 
 function WalkFlingEngine:Stop()
     if not self.Active then return end
     self.Active = false
     
-    for _, conn in pairs(self.Connections) do 
-        pcall(function() conn:Disconnect() end) 
-    end
+    -- 1. Purge Connections Immediately
+    for _, conn in pairs(self.Connections) do pcall(function() conn:Disconnect() end) end
     self.Connections = {}
     
     local Char = LP.Character
-    local Hum = Char and Char:FindFirstChild("Humanoid")
     local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+    local Hum = Char and Char:FindFirstChild("Humanoid")
 
-    -- 1. PURGE VELOCITY: Prevents the "Velocity-Kill" when states re-enable
+    -- 2. THE VELOCITY BUFFER: Essential to prevent instant death upon disabling
     if HRP then
         HRP.AssemblyLinearVelocity = Vector3.zero
         HRP.AssemblyAngularVelocity = Vector3.zero
     end
 
-    -- 2. RESTORE COLLISION: Fixes the permanent noclip
     if Char then
         for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
+            if part:IsA("BasePart") then part.CanCollide = true end
         end
     end
-    
-    -- 3. SAFETY DELAY: Wait for physics to settle before allowing death
+
+    -- 3. Delayed State Reset
+    task.wait(0.2)
     if Hum then
         Hum.Health = Hum.MaxHealth
-        task.wait(0.1)
         Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-        Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
     end
-    
-    self:Notify("WalkFling Disabled")
-    _G.EliteLog("WalkFling engine stopped", "info")
+    _G.EliteLog("WalkFling stopped - Safety Buffer cleared", "info")
 end
 -- Elite Propeller Fling Engine
 local TargetEngine = {
@@ -208,36 +195,28 @@ function TargetEngine:SpinFling(Target)
         Notify("Elite Utility", Target.DisplayName .. " flinged!")
         self.FlingingInProgress = false
     end
-
--- 3. PERMANENT PHYSICS OVERRIDE (Godmode/Noclip)
+end
 local function SetupFlingSafety()
-    if #TargetEngine.Connections > 0 then return end 
-    
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+    if not Hum then return end
     
-    -- Heartbeat Godmode: Maintains health during high-velocity impacts
-    table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
-        if TargetEngine.Active and Hum and Hum.Parent then 
-            Hum.Health = Hum.MaxHealth 
-            Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        end
-    end))
+    Hum.BreakJointsOnDeath = false
 
-    -- Stepped Noclip: Prevents physics kickback
-    table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
-        if (TargetEngine.Active or TargetEngine.FlingingInProgress) and LP.Character then
+    -- Permanent Noclip Guard (Updated for floor safety)
+    RunService.Stepped:Connect(function()
+        if (WalkFlingEngine.Active or TargetEngine.FlingingInProgress) and LP.Character then
             for _, v in pairs(LP.Character:GetDescendants()) do
-                if v:IsA("BasePart") then 
+                -- NEVER NOCLIP THE HRP SO YOU DON'T FALL
+                if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then 
                     v.CanCollide = false 
                 end
             end
         end
-    end))
+    end)
 end
 
--- INITIALIZE SAFETY (Crucial for the engine to run)
-SetupFlingSafety()
+
 
 -- List Logic
 
