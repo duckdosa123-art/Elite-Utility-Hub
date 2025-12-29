@@ -1,22 +1,23 @@
 
 --==========================================================- Elite Help Section -==========================================================================
 
--- [[ ELITE FLYING BRIDGE ENGINE (STABILIZED) ]]
+-- [[ ELITE FLYING BRIDGE ENGINE (STABILIZED + INTEGRATED NOCLIP) ]]
 _G.EliteFlySpeed = 10 
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
 
--- Function to lock limbs into a "Stretched Plank" pose
+-- Function to lock limbs and stabilize first-person
 local function SetBridgePose(active)
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Char or not Hum then return end
 
     if active then
-        -- FIX: Disable AutoRotate to stop First-Person Freak Out
+        -- ELITE FIX 1: Disable AutoRotate to stop the First-Person spinning/shaking
         Hum.AutoRotate = false 
+        
         for _, v in pairs(Char:GetDescendants()) do
             if v:IsA("Motor6D") then
                 original_joints[v] = v.C0
@@ -29,7 +30,8 @@ local function SetBridgePose(active)
         end
         Hum.PlatformStand = true
     else
-        Hum.AutoRotate = true -- Restore for normal walking
+        -- Restore for normal gameplay
+        Hum.AutoRotate = true 
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
         end
@@ -39,7 +41,7 @@ local function SetBridgePose(active)
     end
 end
 
--- Main Physics Loop
+-- Main Physics Loop (Handles Fly + Noclip + Passenger Stability)
 task.spawn(function()
     _G.RunService.RenderStepped:Connect(function()
         local Char = LP.Character
@@ -48,10 +50,8 @@ task.spawn(function()
         local Cam = workspace.CurrentCamera
         local UIS = game:GetService("UserInputService")
         
-        local speed = _G.EliteFlySpeed or 16
-
         if FlyingBridgeActive and Root and Hum and Cam then
-            -- 1. Physics Setup
+            -- 1. PHYSICS INITIALIZATION
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity")
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
@@ -65,36 +65,42 @@ task.spawn(function()
                 bridge_bg.Parent = Root
             end
 
-            -- 2. Elite Noclip Integration (GHOST MODE)
-            -- We noclip your character parts so you can fly through walls
+            -- 2. INTEGRATED NOCLIP (Based on your provided logic)
+            -- This runs every frame to ensure you can pass through walls
             for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "ElitePassengerMagnet" then 
-                    part.CanCollide = false 
+                if part:IsA("BasePart") then
+                    -- ELITE FILTER: Noclip your body, but KEEP the Magnet Plate solid
+                    if part.Name ~= "ElitePassengerMagnet" then
+                        part.CanCollide = false
+                    else
+                        part.CanCollide = true -- Keeps passengers on your back
+                    end
                 end
             end
 
-            -- 3. Movement
+            -- 3. MOVEMENT HANDLING
+            local speed = _G.EliteFlySpeed or 10
             local moveDir = Hum.MoveDirection 
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
-            local vertical = Vector3.new(0, (up - down) * speed, 0)
             
             if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
                 local worldMove = Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))
-                bridge_bv.Velocity = worldMove + vertical
+                bridge_bv.Velocity = worldMove + Vector3.new(0, (up - down) * speed, 0)
             else
                 bridge_bv.Velocity = Vector3.zero
             end
 
-            -- 4. Rotation Fix (First-Person Stability)
+            -- 4. ORIENTATION (Locked Horizontal + Yaw Sync)
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+
         else
-            -- 5. Cleanup
+            -- 5. CLEANUP & COLLISION RESTORATION
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
             
-            -- Restore Collisions when Bridge is OFF (unless Noclip Toggle is ON)
+            -- Only restore collisions if the main Noclip Toggle (_nc) is ALSO off
             if not _nc and Char then
                 for _, p in pairs(Char:GetDescendants()) do
                     if p:IsA("BasePart") then p.CanCollide = true end
