@@ -1,23 +1,21 @@
+--==========================================================- Elite Help Section (COMPLETE & FIXED) -==========================================================================
 
---==========================================================- Elite Help Section -==========================================================================
-
--- [[ ELITE FLYING BRIDGE ENGINE (STABILIZED + INTEGRATED NOCLIP) ]]
-_G.EliteFlySpeed = 10 
+-- [[ ELITE FLYING BRIDGE ENGINE ]]
+_G.EliteFlySpeed = 10 -- Default Elite Speed
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
 
--- Function to lock limbs and stabilize first-person
+-- Function to lock limbs and fix First-Person Camera
 local function SetBridgePose(active)
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Char or not Hum then return end
 
     if active then
-        -- ELITE FIX 1: Disable AutoRotate to stop the First-Person spinning/shaking
+        -- FIX: Disable AutoRotate to stop the First-Person spinning/shaking
         Hum.AutoRotate = false 
-        
         for _, v in pairs(Char:GetDescendants()) do
             if v:IsA("Motor6D") then
                 original_joints[v] = v.C0
@@ -30,7 +28,6 @@ local function SetBridgePose(active)
         end
         Hum.PlatformStand = true
     else
-        -- Restore for normal gameplay
         Hum.AutoRotate = true 
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
@@ -41,7 +38,7 @@ local function SetBridgePose(active)
     end
 end
 
--- Main Physics Loop (Handles Fly + Noclip + Passenger Stability)
+-- Main Physics Loop (Fly + Integrated Noclip)
 task.spawn(function()
     _G.RunService.RenderStepped:Connect(function()
         local Char = LP.Character
@@ -50,8 +47,9 @@ task.spawn(function()
         local Cam = workspace.CurrentCamera
         local UIS = game:GetService("UserInputService")
         
+        local speed = _G.EliteFlySpeed or 10
+
         if FlyingBridgeActive and Root and Hum and Cam then
-            -- 1. PHYSICS INITIALIZATION
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity")
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
@@ -65,42 +63,32 @@ task.spawn(function()
                 bridge_bg.Parent = Root
             end
 
-            -- 2. INTEGRATED NOCLIP (Based on your provided logic)
-            -- This runs every frame to ensure you can pass through walls
+            -- [[ ELITE NOCLIP INTEGRATION ]]
             for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    -- ELITE FILTER: Noclip your body, but KEEP the Magnet Plate solid
-                    if part.Name ~= "ElitePassengerMagnet" then
-                        part.CanCollide = false
-                    else
-                        part.CanCollide = true -- Keeps passengers on your back
-                    end
+                if part:IsA("BasePart") then 
+                    part.CanCollide = false 
                 end
             end
 
-            -- 3. MOVEMENT HANDLING
-            local speed = _G.EliteFlySpeed or 10
             local moveDir = Hum.MoveDirection 
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
+            local vertical = Vector3.new(0, (up - down) * speed, 0)
             
             if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
                 local worldMove = Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))
-                bridge_bv.Velocity = worldMove + Vector3.new(0, (up - down) * speed, 0)
+                bridge_bv.Velocity = worldMove + vertical
             else
                 bridge_bv.Velocity = Vector3.zero
             end
 
-            -- 4. ORIENTATION (Locked Horizontal + Yaw Sync)
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-
         else
-            -- 5. CLEANUP & COLLISION RESTORATION
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
             
-            -- Only restore collisions if the main Noclip Toggle (_nc) is ALSO off
+            -- Restore Noclip only if main toggle is off
             if not _nc and Char then
                 for _, p in pairs(Char:GetDescendants()) do
                     if p:IsA("BasePart") then p.CanCollide = true end
@@ -109,21 +97,18 @@ task.spawn(function()
         end
     end)
 end)
-local TweenService = game:GetService("TweenService")
 
--- Helper: World-Space Vertical Tween
+local TweenService = game:GetService("TweenService")
 local function EliteVerticalTween(amount)
     local Char = LP.Character
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
     if not Root then return end
-    
-    -- Using + Vector3.new ensures it moves on the Global Y Axis (UP)
-    -- even if the character is laying down or rotated.
     local targetCF = Root.CFrame + Vector3.new(0, amount, 0)
     local info = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
-    
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
+
+-- [[ PASSENGER MAGNET ENGINE ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
 
@@ -134,18 +119,13 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
-        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        -- Increased Size slightly to accommodate multiple R15 players (larger hitboxes)
         MagnetPlate.Size = Vector3.new(8, 0.6, 11)
-        
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
-        
-        -- ELITE PHYSICS: High Friction (5.0) and FrictionWeight (100) to "glue" R15 players
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
         MagnetPlate.Parent = Char
         
@@ -161,44 +141,28 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        
-        _G.EliteLog("Passenger Magnet: Multi-User Sync Active", "success")
+        _G.EliteLog("Passenger Magnet: Multi-User Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Passenger Magnet: Disengaged", "info")
     end
 end
 
--- Elite Multi-Passenger Sync Loop
+-- Multi-Passenger Sync Loop
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
-            MagnetPlate.CanCollide = true
-            
-            -- Capture current bridge velocity once to apply to all passengers
+            MagnetPlate.CanCollide = true -- Always solid for OTHERS
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
-            -- Iterate through all players to check for proximity
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
                     local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    local pHum = p.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    if pRoot and pHum and pHum.Health > 0 then
+                    if pRoot then
                         local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
-                        
-                        -- Radius of 8.5 covers the entire magnet plate for multiple R15 players
                         if distance < 8.5 then 
-                            -- 1. LINEAR SYNC: Matches your speed
                             pRoot.AssemblyLinearVelocity = bridgeVel
-                            
-                            -- 2. ANGULAR LOCK: Essential for R15. Stops them from tripping/rotating off.
                             pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                            
-                            -- 3. ANTI-GLITCH: Slightly nudges them up if they sink into your character
-                            if distance < 1.5 then
-                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.1, 0)
-                            end
                         end
                     end
                 end
@@ -206,28 +170,37 @@ task.spawn(function()
         end
     end)
 end)
--- UI INTEGRATION (Place in Troll Tab)
+
+-- UI INTEGRATION
 Tab:CreateSection("Helpful Troll Features")
 Tab:CreateParagraph({
     Title = "⚠️ Collaboration Note",
-    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled. If you pass through players, this feature will only be visual."
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
 })
+
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = true, -- Defaulted to ON
+   CurrentValue = true,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
       TogglePassengerMagnet(Value)
    end,
 })
 
--- Only activate the magnet once the character is stationary and grounded
+Tab:CreateToggle({
+    Name = "Elite Flying Bridge",
+    CurrentValue = false,
+    Callback = function(Value)
+        FlyingBridgeActive = Value
+        SetBridgePose(Value)
+    end
+})
+
+-- Startup Task
 task.spawn(function()
     repeat task.wait() until LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    task.wait(2) -- Wait for character to settle
-    
-    -- Ensure we only activate if the user actually has the toggle set to true
-    local configValue = true -- Or pull from your Rayfield flags
+    task.wait(2)
+    local configValue = true 
     if configValue then
         TogglePassengerMagnet(true)
     end
