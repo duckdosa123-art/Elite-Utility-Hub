@@ -426,18 +426,20 @@ task.spawn(function()
 end)
 local TweenService = game:GetService("TweenService")
 
--- Helper: Elite Smooth Tween (For 1-stud adjustments)
-local function EliteTween(offset)
+-- Helper: World-Space Vertical Tween
+local function EliteVerticalTween(amount)
     local Char = LP.Character
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
     if not Root then return end
     
-    local targetCF = Root.CFrame * CFrame.new(0, offset, 0)
-    local info = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    -- Using + Vector3.new ensures it moves on the Global Y Axis (UP)
+    -- even if the character is laying down or rotated.
+    local targetCF = Root.CFrame + Vector3.new(0, amount, 0)
+    local info = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
     
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
-    _G.EliteLog("Position Adjusted: " .. tostring(offset) .. " Studs", "info")
 end
+
 -- UI INTEGRATION (Place in Troll Tab)
 Tab:CreateSection("Helpful Troll Features")
 Tab:CreateParagraph({
@@ -461,14 +463,16 @@ Tab:CreateSection("Position Adjust (Smooth)")
 Tab:CreateButton({
    Name = "UP (one stud)",
    Callback = function()
-       EliteTween(1)
+       EliteVerticalTween(1)
+       _G.EliteLog("Position: +1 Stud World-UP", "info")
    end,
 })
 
 Tab:CreateButton({
    Name = "DOWN (one stud)",
    Callback = function()
-       EliteTween(-1)
+       EliteVerticalTween(-1)
+       _G.EliteLog("Position: -1 Stud World-DOWN", "info")
    end,
 })
 
@@ -486,7 +490,8 @@ Tab:CreateToggle({
           while MoveUpActive do
               local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
               if Root then
-                  Root.CFrame = Root.CFrame * CFrame.new(0, 0.2, 0) -- Move 0.2 studs per frame
+                  -- Adds to the Y axis every frame for smooth vertical rise
+                  Root.CFrame = Root.CFrame + Vector3.new(0, 0.2, 0)
               end
               _G.RunService.Heartbeat:Wait()
           end
@@ -505,14 +510,14 @@ Tab:CreateToggle({
           while MoveDownActive do
               local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
               if Root then
-                  Root.CFrame = Root.CFrame * CFrame.new(0, -0.2, 0)
+                  -- Subtracts from the Y axis every frame for smooth descent
+                  Root.CFrame = Root.CFrame + Vector3.new(0, -0.2, 0)
               end
               _G.RunService.Heartbeat:Wait()
           end
       end)
    end,
 })
-
 --=========================================================- Elite Troll Section –==========================================================================
 
 -- Elite Troll Engine (Updated for Customization)
