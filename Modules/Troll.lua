@@ -2,7 +2,7 @@
 --==========================================================- Elite Help Section -==========================================================================
 
 -- [[ ELITE FLYING BRIDGE ENGINE ]]
-_G.EliteFlySpeed = 16 -- Default Elite Speed
+_G.EliteFlySpeed = 10 -- Default Elite Speed
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
@@ -46,11 +46,13 @@ task.spawn(function()
         local Cam = workspace.CurrentCamera
         local UIS = game:GetService("UserInputService")
         
-        -- 1. Dynamic Speed Check
-        local speed = _G.EliteFlySpeed or 16
+        local speed = _G.EliteFlySpeed or 10
 
         if FlyingBridgeActive and Root and Hum and Cam then
-            -- 2. Initialize Physics Objects (Elite Setup)
+            -- 1. FIRST-PERSON STABILIZER
+            Hum.AutoRotate = false -- ELITE FIX: Stops camera from spinning the body
+
+            -- 2. Initialize Physics Objects
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity")
                 bridge_bv.Name = "EliteBridge_Velocity"
@@ -61,44 +63,46 @@ task.spawn(function()
                 bridge_bg = Instance.new("BodyGyro")
                 bridge_bg.Name = "EliteBridge_Gyro"
                 bridge_bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
-                bridge_bg.P = 25000 -- High power for platform stability
+                bridge_bg.P = 25000 
                 bridge_bg.D = 500
                 bridge_bg.Parent = Root
             end
 
-            -- 3. Input Handling (Mobile & PC Friendly)
-            local moveDir = Hum.MoveDirection -- Works for Joysticks and WASD
+            -- 3. Input Handling
+            local moveDir = Hum.MoveDirection 
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
-            
-            -- 4. Directional Velocity (World-Space Translation)
             local vertical = Vector3.new(0, (up - down) * speed, 0)
             
             if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
-                -- Calculations: Translate local movement to world space relative to camera
                 local worldMove = Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))
                 bridge_bv.Velocity = worldMove + vertical
             else
-                -- Full stop to prevent sliding when no input is given
                 bridge_bv.Velocity = Vector3.zero
             end
 
-            -- 5. ELITE ORIENTATION (Locked Horizontal Plank)
+            -- 4. ELITE ORIENTATION
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
-            -- Lock character pitch to -90 degrees (laying down) while allowing left/right look (yaw)
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
 
-            -- 6. Collision Enforcement (Helpful Troll Mode)
-            -- We force collisions on so people can actually stand on your character
+            -- 5. ELITE NOCLIP (Ghost Body, Solid Magnet)
+            -- This allows you to fly through walls while the plate carries the people.
             for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") then 
-                    part.CanCollide = true 
+                if part:IsA("BasePart") then
+                    if part.Name == "ElitePassengerMagnet" then
+                        part.CanCollide = true -- Keeps passengers on top
+                    else
+                        part.CanCollide = false -- Lets you fly through buildings/ground
+                    end
                 end
             end
         else
-            -- 7. Cleanup
+            -- 6. Cleanup & Reset
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
+            if Hum then 
+                Hum.AutoRotate = true -- Restore standard camera control
+            end
         end
     end)
 end)
@@ -234,13 +238,12 @@ Tab:CreateSlider({
    Name = "Bridge Flying Speed",
    Range = {0, 300},
    Increment = 1,
-   Suffix = "SPS (Studs Per Sec)",
+   Suffix = "SPS",
    CurrentValue = 16,
-   Flag = "BridgeSpeed_Slider", -- For config saving
+   Flag = "BridgeSpeed_Slider",
    Callback = function(Value)
-      _G.EliteFlySpeed = Value
-      -- Optional: Log speed change if significant
-      if Value > 150 and _G.EliteLog then
+      _G.EliteFlySpeed = Value -- Only update the global speed variable
+      if Value > 150 then
           _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
       end
    end,
@@ -248,12 +251,15 @@ Tab:CreateSlider({
 Tab:CreateToggle({
    Name = "Elite Flying Bridge",
    CurrentValue = false,
-   Flag = "FlyingBridge_Toggle",
+   Flag = "BridgeActive_Toggle",
    Callback = function(Value)
-      FlyingBridgeActive = Value
-      SetBridgePose(Value)
+      FlyingBridgeActive = Value -- Sets it to true or false
+      SetBridgePose(Value)       -- Triggers the plank animation correctly
+      
       if Value then
-          _G.EliteLog("Bridge Active: You are now a flat platform.", "success")
+          _G.EliteLog("Flying Bridge: Engaged", "success")
+      else
+          _G.EliteLog("Flying Bridge: Disengaged", "info")
       end
    end,
 })
