@@ -337,7 +337,7 @@ local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
-
+_G.EliteFlySpeed = 16 -- Default Elite Speed
 -- Function to lock limbs into a "Stretched Plank" pose
 local function SetBridgePose(active)
     local Char = LP.Character
@@ -374,51 +374,59 @@ task.spawn(function()
         local Root = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
         local Cam = workspace.CurrentCamera
-        local speed = _G.EliteFlySpeed or 50
         local UIS = game:GetService("UserInputService")
+        
+        -- 1. Dynamic Speed Check
+        local speed = _G.EliteFlySpeed or 16
 
         if FlyingBridgeActive and Root and Hum and Cam then
-            -- 1. Create Physics Objects if missing
+            -- 2. Initialize Physics Objects (Elite Setup)
             if not bridge_bv then
-                bridge_bv = Instance.new("BodyVelocity", Root)
+                bridge_bv = Instance.new("BodyVelocity")
+                bridge_bv.Name = "EliteBridge_Velocity"
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
+                bridge_bv.Parent = Root
             end
             if not bridge_bg then
-                bridge_bg = Instance.new("BodyGyro", Root)
+                bridge_bg = Instance.new("BodyGyro")
+                bridge_bg.Name = "EliteBridge_Gyro"
                 bridge_bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
-                bridge_bg.P = 25000 -- Massive power to stay flat
-                bridge_bg.D = 500   -- Dampening to prevent jitter
+                bridge_bg.P = 25000 -- High power for platform stability
+                bridge_bg.D = 500
+                bridge_bg.Parent = Root
             end
 
-            -- 2. Movement Logic (All Directions)
-            local moveDir = Hum.MoveDirection -- Joystick/WASD
+            -- 3. Input Handling (Mobile & PC Friendly)
+            local moveDir = Hum.MoveDirection -- Works for Joysticks and WASD
             local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
             local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
             
-            -- Calculate Direction based on Camera Look
-            local forward = Cam.CFrame.LookVector * moveDir.Magnitude
+            -- 4. Directional Velocity (World-Space Translation)
             local vertical = Vector3.new(0, (up - down) * speed, 0)
             
-            -- Final Velocity
             if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
-                bridge_bv.Velocity = (Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))) + vertical
+                -- Calculations: Translate local movement to world space relative to camera
+                local worldMove = Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))
+                bridge_bv.Velocity = worldMove + vertical
             else
+                -- Full stop to prevent sliding when no input is given
                 bridge_bv.Velocity = Vector3.zero
             end
 
-            -- 3. ELITE ORIENTATION (Perfectly Flat Bridge)
-            -- Extract only the Y-rotation (Yaw) from the camera
+            -- 5. ELITE ORIENTATION (Locked Horizontal Plank)
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
-            -- Lock X to -90 degrees (laying down) and use camera's Y rotation
+            -- Lock character pitch to -90 degrees (laying down) while allowing left/right look (yaw)
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
 
-            -- 4. Force Collisions (So people can stand on you)
+            -- 6. Collision Enforcement (Helpful Troll Mode)
+            -- We force collisions on so people can actually stand on your character
             for _, part in pairs(Char:GetDescendants()) do
                 if part:IsA("BasePart") then 
                     part.CanCollide = true 
                 end
             end
         else
+            -- 7. Cleanup
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
         end
@@ -439,12 +447,97 @@ local function EliteVerticalTween(amount)
     
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
+local PassengerMagnetActive = false
+local MagnetPlate = nil
 
+local function TogglePassengerMagnet(Value)
+    PassengerMagnetActive = Value
+    local Char = LP.Character
+    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+    
+    if Value then
+        if not Root then return end
+        -- Create the Elite Magnetic Plate
+        MagnetPlate = Instance.new("Part")
+        MagnetPlate.Name = "ElitePassengerMagnet"
+        MagnetPlate.Transparency = 1 -- Keep it invisible
+        MagnetPlate.Size = Vector3.new(4, 0.5, 7) -- Shaped to cover your 'Bridge' body
+        MagnetPlate.CanCollide = true
+        MagnetPlate.Massless = true
+        
+        -- ELITE PHYSICS: Maximum Friction (Prevents sliding)
+        -- Friction: 2 (Max), FrictionWeight: 100 (Overrides default shoe friction)
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 2, 0, 100, 100)
+        
+        MagnetPlate.Parent = Char
+        
+        -- Weld the plate to your back (slightly above the HRP)
+        local Weld = Instance.new("WeldConstraint")
+        Weld.Part0 = Root
+        Weld.Part1 = MagnetPlate
+        Weld.Parent = MagnetPlate
+        
+        -- Position adjustment: Flat on your back when in bridge mode
+        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
+        
+        _G.EliteLog("Passenger Magnet: Engaged (High-Friction Surface)", "success")
+    else
+        if MagnetPlate then
+            MagnetPlate:Destroy()
+            MagnetPlate = nil
+        end
+        _G.EliteLog("Passenger Magnet: Disengaged", "info")
+    end
+end
+
+-- Ensure the plate stays active and aligned if the bridge is moving
+task.spawn(function()
+    _G.RunService.Heartbeat:Connect(function()
+        if PassengerMagnetActive and MagnetPlate and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+            -- Optional: If you find people still sliding, 
+            -- we can force the plate to be slightly larger or stickier here.
+            MagnetPlate.CanCollide = true
+        end
+    end)
+end)
 -- UI INTEGRATION (Place in Troll Tab)
 Tab:CreateSection("Helpful Troll Features")
 Tab:CreateParagraph({
     Title = "⚠️ Collaboration Note",
     Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled. If you pass through players, this feature will only be visual."
+})
+Tab:CreateToggle({
+   Name = "Elite Passenger Magnet",
+   CurrentValue = true, -- Defaulted to ON
+   Flag = "PassengerMagnet_Toggle",
+   Callback = function(Value)
+      TogglePassengerMagnet(Value)
+   end,
+})
+
+-- 2. Trigger logic immediately so the plate exists on startup
+task.spawn(function()
+    TogglePassengerMagnet(true)
+end)
+
+Tab:CreateParagraph({
+    Title = "🧲 Magnet Instructions",
+    Content = "This is enabled by default to assist with 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+})
+Tab:CreateSlider({
+   Name = "Bridge Flying Speed",
+   Range = {0, 300},
+   Increment = 1,
+   Suffix = "SPS (Studs Per Sec)",
+   CurrentValue = 16,
+   Flag = "BridgeSpeed_Slider", -- For config saving
+   Callback = function(Value)
+      _G.EliteFlySpeed = Value
+      -- Optional: Log speed change if significant
+      if Value > 150 and _G.EliteLog then
+          _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
+      end
+   end,
 })
 Tab:CreateToggle({
    Name = "Elite Flying Bridge",
