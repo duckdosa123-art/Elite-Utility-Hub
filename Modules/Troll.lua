@@ -332,33 +332,32 @@ game.Players.PlayerRemoving:Connect(RefreshEverything)
 
 --==========================================================- Elite Help Section -==========================================================================
 
+-- [[ ELITE FLYING BRIDGE ENGINE ]]
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
 
--- Function to make the character perfectly flat and stretched
+-- Function to lock limbs into a "Stretched Plank" pose
 local function SetBridgePose(active)
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Char or not Hum then return end
 
     if active then
-        -- Lock Joints into "Board" position
         for _, v in pairs(Char:GetDescendants()) do
             if v:IsA("Motor6D") then
                 original_joints[v] = v.C0
-                -- Stretch arms/legs out flat
-                if v.Name:find("Shoulder") or v.Name:find("Arm") then
-                    v.C0 = v.C0 * CFrame.Angles(0, 0, math.rad(90))
-                elseif v.Name:find("Hip") or v.Name:find("Leg") then
-                    v.C0 = v.C0 * CFrame.Angles(0, 0, math.rad(-5))
+                -- Stretch arms forward and legs back
+                if v.Name:find("Shoulder") then
+                    v.C0 = v.C0 * CFrame.Angles(math.rad(90), 0, 0)
+                elseif v.Name:find("Hip") then
+                    v.C0 = v.C0 * CFrame.Angles(math.rad(-90), 0, 0)
                 end
             end
         end
         Hum.PlatformStand = true
     else
-        -- Restore Joints
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
         end
@@ -368,22 +367,18 @@ local function SetBridgePose(active)
     end
 end
 
-local function CleanBridge()
-    if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
-    if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
-    SetBridgePose(false)
-end
-
--- MAIN ENGINE LOOP
+-- Main Physics Loop
 task.spawn(function()
-    game:GetService("RunService").RenderStepped:Connect(function()
+    _G.RunService.RenderStepped:Connect(function()
         local Char = LP.Character
         local Root = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
         local Cam = workspace.CurrentCamera
-        local speed = _G.EliteFlySpeed or 50 -- Uses global speed if defined
+        local speed = _G.EliteFlySpeed or 50
+        local UIS = game:GetService("UserInputService")
 
         if FlyingBridgeActive and Root and Hum and Cam then
+            -- 1. Create Physics Objects if missing
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity", Root)
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
@@ -391,33 +386,65 @@ task.spawn(function()
             if not bridge_bg then
                 bridge_bg = Instance.new("BodyGyro", Root)
                 bridge_bg.MaxTorque = Vector3.new(1, 1, 1) * math.huge
-                bridge_bg.P = 15000 -- Higher P for platform stability
+                bridge_bg.P = 25000 -- Massive power to stay flat
+                bridge_bg.D = 500   -- Dampening to prevent jitter
             end
 
-            -- CALCULATE DIRECTION
-            local moveDir = Hum.MoveDirection
-            local up = game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) and 1 or 0
-            local down = game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftControl) and 1 or 0
-            local vertical = Vector3.new(0, (up - down) * speed, 0)
-
-            -- Flat orientation (Laying down)
-            -- We rotate the BodyGyro 90 degrees so the "Bridge" is horizontal
-            local lookCF = Cam.CFrame
-            bridge_bg.CFrame = CFrame.lookAt(Root.Position, Root.Position + lookCF.LookVector) * CFrame.Angles(math.rad(-90), 0, 0)
-
-            -- Velocity logic
-            local velocity = (lookCF.LookVector * (moveDir.Magnitude * speed)) 
-            bridge_bv.Velocity = (moveDir.Magnitude > 0 or up ~= 0 or down ~= 0) and (velocity + vertical) or Vector3.zero
+            -- 2. Movement Logic (All Directions)
+            local moveDir = Hum.MoveDirection -- Joystick/WASD
+            local up = UIS:IsKeyDown(Enum.KeyCode.Space) and 1 or 0
+            local down = (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.ButtonL2)) and 1 or 0
             
-            -- Keep us solid!
+            -- Calculate Direction based on Camera Look
+            local forward = Cam.CFrame.LookVector * moveDir.Magnitude
+            local vertical = Vector3.new(0, (up - down) * speed, 0)
+            
+            -- Final Velocity
+            if moveDir.Magnitude > 0 or up ~= 0 or down ~= 0 then
+                bridge_bv.Velocity = (Cam.CFrame:VectorToWorldSpace(Cam.CFrame:VectorToObjectSpace(moveDir * speed))) + vertical
+            else
+                bridge_bv.Velocity = Vector3.zero
+            end
+
+            -- 3. ELITE ORIENTATION (Perfectly Flat Bridge)
+            -- Extract only the Y-rotation (Yaw) from the camera
+            local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
+            -- Lock X to -90 degrees (laying down) and use camera's Y rotation
+            bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+
+            -- 4. Force Collisions (So people can stand on you)
             for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
+                if part:IsA("BasePart") then 
+                    part.CanCollide = true 
+                end
             end
         else
-            if bridge_bv or bridge_bg then CleanBridge() end
+            if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
+            if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
         end
     end)
 end)
+
+-- UI INTEGRATION (Place in Troll Tab)
+Tab:CreateSection("Helpful Troll Features")
+
+Tab:CreateToggle({
+   Name = "Elite Flying Bridge",
+   CurrentValue = false,
+   Flag = "FlyingBridge_Toggle",
+   Callback = function(Value)
+      FlyingBridgeActive = Value
+      SetBridgePose(Value)
+      if Value then
+          _G.EliteLog("Bridge Active: You are now a flat platform.", "success")
+      end
+   end,
+})
+
+Tab:CreateParagraph({
+    Title = "How to use:",
+    Content = "1. Toggle on. \n2. Use Joystick/WASD to fly. \n3. Space/CTRL for Up/Down. \n4. Your body stays flat regardless of where you look!"
+})
 Tab:CreateSection("Helpful - Interaction")
 
 Tab:CreateToggle({
