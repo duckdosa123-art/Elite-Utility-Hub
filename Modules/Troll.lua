@@ -333,11 +333,12 @@ game.Players.PlayerRemoving:Connect(RefreshEverything)
 --==========================================================- Elite Help Section -==========================================================================
 
 -- [[ ELITE FLYING BRIDGE ENGINE ]]
+_G.EliteFlySpeed = 16 -- Default Elite Speed
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
-_G.EliteFlySpeed = 16 -- Default Elite Speed
+
 -- Function to lock limbs into a "Stretched Plank" pose
 local function SetBridgePose(active)
     local Char = LP.Character
@@ -461,13 +462,19 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1 -- Keep it invisible
-        MagnetPlate.Size = Vector3.new(4, 0.5, 7) -- Shaped to cover your 'Bridge' body
+        MagnetPlate.Size = Vector3.new(6, 0.5, 9) -- INCREASED SIZE FOR BETTER HOOKING
         MagnetPlate.CanCollide = true
         MagnetPlate.Massless = true
         
+        -- [[ FIX BUG 1: NO-COLLISION CONSTRAINT ]]
+        -- This prevents the plate from hitting YOUR character (The fling fix)
+        local NoCol = Instance.new("NoCollisionConstraint")
+        NoCol.Part0 = MagnetPlate
+        NoCol.Part1 = Root
+        NoCol.Parent = MagnetPlate
+        
         -- ELITE PHYSICS: Maximum Friction (Prevents sliding)
-        -- Friction: 2 (Max), FrictionWeight: 100 (Overrides default shoe friction)
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 2, 0, 100, 100)
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
         
         MagnetPlate.Parent = Char
         
@@ -494,9 +501,21 @@ end
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
-            -- Optional: If you find people still sliding, 
-            -- we can force the plate to be slightly larger or stickier here.
             MagnetPlate.CanCollide = true
+            
+            -- [[ FIX BUG 2: PASSENGER HOOKING ]]
+            -- Manually sync nearby player velocity to your bridge velocity
+            for _, p in pairs(game:GetService("Players"):GetPlayers()) do
+                if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local pRoot = p.Character.HumanoidRootPart
+                    local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
+                    
+                    if distance < 7 then -- If they are standing on the magnet area
+                        -- Forcibly set their velocity to match your bridge movement
+                        pRoot.AssemblyLinearVelocity = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
+                    end
+                end
+            end
         end
     end)
 end)
