@@ -215,8 +215,8 @@ local function SetupFlingSafety()
     
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-    if not Hum then return end
-
+    
+    -- Heartbeat Godmode: Maintains health during high-velocity impacts
     table.insert(TargetEngine.Connections, RunService.Heartbeat:Connect(function()
         if TargetEngine.Active and Hum and Hum.Parent then 
             Hum.Health = Hum.MaxHealth 
@@ -224,25 +224,22 @@ local function SetupFlingSafety()
         end
     end))
 
+    -- Stepped Noclip: Prevents physics kickback
     table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
-        -- Only noclip if the engine is active OR flinging is in progress
         if (TargetEngine.Active or TargetEngine.FlingingInProgress) and LP.Character then
             for _, v in pairs(LP.Character:GetDescendants()) do
-                if v:IsA("BasePart") then v.CanCollide = false end
+                if v:IsA("BasePart") then 
+                    v.CanCollide = false 
+                end
             end
         end
     end))
 end
 
-    -- Stepped Noclip
-    table.insert(TargetEngine.Connections, RunService.Stepped:Connect(function()
-        if LP.Character then
-            for _, v in pairs(LP.Character:GetDescendants()) do
-                if v:IsA("BasePart") then v.CanCollide = false end
-            end
-        end
-    end))
-end
+-- INITIALIZE SAFETY (Crucial for the engine to run)
+SetupFlingSafety()
+
+-- List Logic
 
 local function GetPlayerList()
     local names = {}
