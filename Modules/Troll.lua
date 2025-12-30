@@ -6,6 +6,7 @@ local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
+local wasFlying = false
 
 -- Function to lock limbs and fix First-Person Camera
 local function SetBridgePose(active)
@@ -40,7 +41,7 @@ end
 
 -- Main Physics Loop (Fly + Integrated Noclip)
 task.spawn(function()
-    _G.RunService.RenderStepped:Connect(function()
+    game:GetService("RunService").RenderStepped:Connect(function()
         local Char = LP.Character
         local Root = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
@@ -50,6 +51,7 @@ task.spawn(function()
         local speed = _G.EliteFlySpeed or 10
 
         if FlyingBridgeActive and Root and Hum and Cam then
+            wasFlying = true -- Mark that we are currently using physics overrides
             if not bridge_bv then
                 bridge_bv = Instance.new("BodyVelocity")
                 bridge_bv.MaxForce = Vector3.new(1, 1, 1) * math.huge
@@ -63,7 +65,6 @@ task.spawn(function()
                 bridge_bg.Parent = Root
             end
 
-            -- [[ ELITE NOCLIP INTEGRATION ]]
             for _, part in pairs(Char:GetDescendants()) do
                 if part:IsA("BasePart") then 
                     part.CanCollide = false 
@@ -85,28 +86,26 @@ task.spawn(function()
             local _, yRotation, _ = Cam.CFrame:ToEulerAnglesYXZ()
             bridge_bg.CFrame = CFrame.Angles(0, yRotation, 0) * CFrame.Angles(math.rad(-90), 0, 0)
         else
+            -- CLEANUP SECTION
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
             
-            -- Restore Noclip only if main toggle is off
-            if not _nc and Char then
-                for _, p in pairs(Char:GetDescendants()) do
-                    if p:IsA("BasePart") then p.CanCollide = true end
+            -- FIX: Only restore collisions ONCE when the feature is turned off
+            if wasFlying then
+                wasFlying = false -- Reset the gate
+                if not _nc and Char then
+                    for _, p in pairs(Char:GetDescendants()) do
+                        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then 
+                            -- We exclude HumanoidRootPart because it should usually stay non-collidable
+                            -- and we don't spam this every frame anymore.
+                            p.CanCollide = true 
+                        end
+                    end
                 end
             end
         end
     end)
 end)
-
-local TweenService = game:GetService("TweenService")
-local function EliteVerticalTween(amount)
-    local Char = LP.Character
-    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
-    if not Root then return end
-    local targetCF = Root.CFrame + Vector3.new(0, amount, 0)
-    local info = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
-    TweenService:Create(Root, info, {CFrame = targetCF}):Play()
-end
 
 -- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + LIMB ISOLATION) ]]
 local PassengerMagnetActive = false
@@ -202,6 +201,17 @@ task.spawn(function()
         end
     end)
 end)
+
+
+local TweenService = game:GetService("TweenService")
+local function EliteVerticalTween(amount)
+    local Char = LP.Character
+    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+    if not Root then return end
+    local targetCF = Root.CFrame + Vector3.new(0, amount, 0)
+    local info = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
+    TweenService:Create(Root, info, {CFrame = targetCF}):Play()
+end
 -- UI INTEGRATION
 Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
