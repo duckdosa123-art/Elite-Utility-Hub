@@ -230,44 +230,41 @@ task.spawn(function()
 end)
 
 Tab:CreateToggle({
-   Name = "Elite Passenger Magnet",
-   CurrentValue = true,
-   Flag = "PassengerMagnet_Toggle",
+   Name = "Elite Flying Bridge",
+   CurrentValue = false,
+   Flag = "EliteFlyingBridge_Combined",
    Callback = function(Value)
-      -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
+      -- 1. STATE SYNC
+      FlyingBridgeActive = Value
+      
       local Char = LP.Character
       local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
       local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
       
+      -- 2. PHYSICS PRE-SETTLE
+      -- Clears any existing forces before the engines take over to prevent "launching"
       if HRP then
           HRP.AssemblyLinearVelocity = Vector3.zero
           HRP.AssemblyAngularVelocity = Vector3.zero
       end
 
-      -- 2. TRIGGER ENGINE
-      TogglePassengerMagnet(Value)
+      -- 3. ENGINE TRIGGER (Both Fly Bridge and Magnet)
+      SetBridgePose(Value)          -- Triggers the Plank Pose & Collision Logic
+      TogglePassengerMagnet(Value)   -- Triggers the God-Tier Projection Engine
 
-      -- 3. THE STABILIZER: Force the Humanoid to "re-stand"
-      -- This fixes the shaking by forcing the engine to re-calculate your balance
-      if Hum then
-          task.wait(0.05)
-          Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-          _G.EliteLog("Magnet Stability Reset: " .. (Value and "Applied" or "Cleared"), "success")
-      end
-   end,
-})
-Tab:CreateToggle({
-   Name = "Elite Flying Bridge",
-   CurrentValue = false,
-   Flag = "BridgeActive_Toggle",
-   Callback = function(Value)
-      FlyingBridgeActive = Value -- Sets it to true or false
-      SetBridgePose(Value)       -- Triggers the plank animation correctly
-      
+      -- 4. STABILITY & LOGGING
       if Value then
-          _G.EliteLog("Flying Bridge: Engaged", "success")
+          _G.EliteLog("Elite Flying Bridge: Fully Engaged", "success")
+          -- Force state reset to ensure you don't trip during transition
+          if Hum then
+              task.wait(0.05)
+              Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+          end
       else
-          _G.EliteLog("Flying Bridge: Disengaged", "info")
+          _G.EliteLog("Elite Flying Bridge: Disengaged", "info")
+          if Hum then
+              Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+          end
       end
    end,
 })
