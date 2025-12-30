@@ -170,32 +170,6 @@ task.spawn(function()
         end
     end)
 end)
-
--- UI INTEGRATION
-Tab:CreateSection("Helpful Troll Features")
-Tab:CreateParagraph({
-    Title = "⚠️ Collaboration Note",
-    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
-})
-
-Tab:CreateToggle({
-   Name = "Elite Passenger Magnet",
-   CurrentValue = true,
-   Flag = "PassengerMagnet_Toggle",
-   Callback = function(Value)
-      TogglePassengerMagnet(Value)
-   end,
-})
-
-Tab:CreateToggle({
-    Name = "Elite Flying Bridge",
-    CurrentValue = false,
-    Callback = function(Value)
-        FlyingBridgeActive = Value
-        SetBridgePose(Value)
-    end
-})
-
 -- Startup Task
 task.spawn(function()
     repeat task.wait() until LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
@@ -205,23 +179,23 @@ task.spawn(function()
         TogglePassengerMagnet(true)
     end
 end)
+-- UI INTEGRATION
+Tab:CreateSection("Helpful Features")
+Tab:CreateParagraph({
+    Title = "⚠️ Note",
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
+})
 
 Tab:CreateParagraph({
     Title = "🧲 Magnet Instructions",
     Content = "This is enabled by default to assist with 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
 })
-Tab:CreateSlider({
-   Name = "Bridge Flying Speed",
-   Range = {0, 300},
-   Increment = 1,
-   Suffix = "SPS",
-   CurrentValue = 16,
-   Flag = "BridgeSpeed_Slider",
+Tab:CreateToggle({
+   Name = "Elite Passenger Magnet",
+   CurrentValue = true,
+   Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
-      _G.EliteFlySpeed = Value -- Only update the global speed variable
-      if Value > 150 then
-          _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
-      end
+      TogglePassengerMagnet(Value)
    end,
 })
 Tab:CreateToggle({
@@ -239,6 +213,21 @@ Tab:CreateToggle({
       end
    end,
 })
+Tab:CreateSlider({
+   Name = "Bridge Flying Speed",
+   Range = {0, 300},
+   Increment = 1,
+   Suffix = "SPS",
+   CurrentValue = 16,
+   Flag = "BridgeSpeed_Slider",
+   Callback = function(Value)
+      _G.EliteFlySpeed = Value -- Only update the global speed variable
+      if Value > 150 then
+          _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
+      end
+   end,
+})
+
 Tab:CreateSection("Position The Bridge")
 
 Tab:CreateButton({
@@ -382,10 +371,10 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- 2. THE UI SECTION (Dedicated List & Search)
-Tab:CreateSection("Elite Troll Target")
+Tab:CreateSection("Elite Fun/Target")
 
 local TrollDropdown = Tab:CreateDropdown({
-    Name = "Troll Target: None",
+    Name = "Target:",
     Options = GetTrollPlayerList(),
     CurrentOption = {""},
     Callback = function(Option)
@@ -394,7 +383,7 @@ local TrollDropdown = Tab:CreateDropdown({
 })
 
 Tab:CreateInput({
-    Name = "Search Troll Target",
+    Name = "Search Target",
     PlaceholderText = "Type name...",
     Callback = function(Text)
         local found = GetTrollTarget(Text)
@@ -406,14 +395,14 @@ Tab:CreateInput({
 })
 
 Tab:CreateButton({
-    Name = "Refresh Troll List",
+    Name = "Refresh List",
     Callback = function()
         TrollDropdown:Refresh(GetTrollPlayerList())
     end,
 })
 
 -- 3. ELITE FEATURES
-Tab:CreateSection("Troll Features")
+Tab:CreateSection("Fun Features")
 
 -- 1. ELITE ORBIT (Customizable)
 Tab:CreateToggle({
