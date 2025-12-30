@@ -28,19 +28,12 @@ local function SetBridgePose(active)
         end
         Hum.PlatformStand = true
     else
-        -- RETURNS TO NORMAL FORM (Keep this!)
         Hum.AutoRotate = true 
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
         end
         original_joints = {}
         Hum.PlatformStand = false
-        
-        -- Restore Collisions ONCE
-        for _, p in pairs(Char:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = true end
-        end
-        
         Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end
@@ -115,7 +108,7 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET: FINAL BUILD (STABILIZED) ]]
+-- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + LIMB ISOLATION) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
 
@@ -126,22 +119,20 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
-        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(10, 0.6, 12)
+        MagnetPlate.Size = Vector3.new(9, 0.6, 11)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
+        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- FIX: Height set to 1.1 studs above Root for R15/R6 clearance
-        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 1.2, 0)
-        
-        -- STRENGTH: Maximum friction weight (100) for "Super Glue" effect
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
+        -- WORKING MODEL PHYSICS
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
         
-        -- ISOLATION: Recursive No-Collision to stop the shaking
+        -- [[ ELITE FIX: LIMB ISOLATION ]]
+        -- This applies your Noclip logic to every limb so you don't 'kick' the plate
         for _, part in pairs(Char:GetDescendants()) do
             if part:IsA("BasePart") then
                 local NoCol = Instance.new("NoCollisionConstraint")
@@ -158,52 +149,50 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: High-Strength Mode Active", "success")
+        _G.EliteLog("Magnet: Jitter-Pull Engaged (Isolation Fix)", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- [[ ELITE SUPER-PULL: MULTI-USER & HEIGHT STABILIZED ]]
+-- Elite Jitter-Sync Loop (WORKING MODEL - UNCHANGED)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
-            -- HIJACK JITTER: Increased frequency to dominate Network Ownership
-            local jitter = Vector3.new(math.random(-1,1)*0.2, 0, math.random(-1,1)*0.2)
+            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
+            local jitter = Vector3.new(
+                math.random(-1, 1) * 0.1,
+                math.random(-1, 1) * 0.1,
+                math.random(-1, 1) * 0.1
+            )
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
                     local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
-                    if pRoot and pHum and pHum.Health > 0 then
-                        -- 1. BOX DETECTION (Supports 5+ people and any height)
+                    if pRoot and pHum then
+                        -- Converts the player's position into "Relative Space" to your plate
                         local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                         
-                        -- Width: 6, Length: 8, Height: -2 to 12 (Massive detection zone)
-                        if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 8 and (relPos.Y > -2 and relPos.Y < 12) then
+                        -- Width (X: 5 studs each side), Length (Z: 6 studs each side), Height (Y: 1 to 10 studs up)
+                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6 and (relPos.Y > -2 and relPos.Y < 10) then
+                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
+                            pRoot.AssemblyLinearVelocity = bridgeVel + jitter
                             
-                            -- 2. RELATIVE LOCK: They move with you + their own walk speed
-                            -- This is the "Strongest" pull: it forces their velocity to YOURS.
-                            pRoot.AssemblyLinearVelocity = bridgeVel + (pHum.MoveDirection * pHum.WalkSpeed) + jitter
+                            -- 2. THE ANGLUAR LOCK: Stops them from spinning off during turns
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                             
-                            -- 3. ANTI-WOBBLE: Zeroes out rotation so R15/R6 don't trip each other
-                            pRoot.AssemblyAngularVelocity = Vector3.zero
-                            
-                            -- 4. THE SUPER-SLAM: If they try to jump/fly away, slam them back
-                            if relPos.Y > 2.5 then
-                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -45, 0)
-                            end
-
-                            -- 5. ANTI-SINK: If they glitch into your body, pop them up 1 stud
-                            if relPos.Y < 0 then
-                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.8, 0)
+                            -- 3. FORCED ADHESION: If they are in the zone, they CANNOT jump away
+                            -- This prevents them from "escaping" while you are moving.
+                            if relPos.Y > 3 then
+                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -25, 0)
                             end
                             
-                            -- 6. PHYSICS OVERRIDE: Prevent them from falling over
+                            -- 4. STATE LOCK: Keeps R15 characters standing perfectly
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
@@ -213,16 +202,18 @@ task.spawn(function()
         end
     end)
 end)
-
+-- UI INTEGRATION
 Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
     Title = "⚠️ Note",
     Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
 })
+
 Tab:CreateParagraph({
     Title = "🧲 Magnet Instructions",
     Content = "Enable NoClip before using the bridge to assist 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
 })
+-- NoClip (from Movement.lua)
 task.spawn(function()
     RunService.Stepped:Connect(function()
         if _nc then
@@ -239,7 +230,7 @@ task.spawn(function()
 end)
 
 Tab:CreateToggle({
-   Name = "Elite Noclip",
+   Name = "Noclip",
    CurrentValue = false,
    Flag = "NoclipToggle",
    Callback = function(Value)
@@ -257,25 +248,28 @@ Tab:CreateToggle({
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = false, -- FIX: Set to FALSE so it doesn't auto-spawn on load
+   CurrentValue = true,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
+      -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
       local Char = LP.Character
       local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
       local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
       
-      -- Clear existing forces to prevent the "Initial Shake"
       if HRP then
           HRP.AssemblyLinearVelocity = Vector3.zero
           HRP.AssemblyAngularVelocity = Vector3.zero
       end
 
+      -- 2. TRIGGER ENGINE
       TogglePassengerMagnet(Value)
 
-      -- Safety state reset
+      -- 3. THE STABILIZER: Force the Humanoid to "re-stand"
+      -- This fixes the shaking by forcing the engine to re-calculate your balance
       if Hum then
           task.wait(0.05)
           Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+          _G.EliteLog("Magnet Stability Reset: " .. (Value and "Applied" or "Cleared"), "success")
       end
    end,
 })
