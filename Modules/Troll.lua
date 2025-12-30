@@ -118,98 +118,81 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
+        
+        -- THE INVISIBLE GRAB ZONE (Lowered and Thicker for Short Rigs)
         MagnetPlate = Instance.new("Part")
-        MagnetPlate.Name = "ElitePassengerMagnet"
+        MagnetPlate.Name = "EliteGrabZone"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(9, 0.6, 11)
+        MagnetPlate.Size = Vector3.new(12, 6, 12) -- Increased thickness (6 studs)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
-        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
-        
-        -- WORKING MODEL PHYSICS
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
         
-        -- [[ ELITE FIX: LIMB ISOLATION ]]
-        -- This applies your Noclip logic to every limb so you don't 'kick' the plate
-        for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
+        -- WELD: Positioned lower (C1 Y offset) to catch feet of short players
+        local Weld = Instance.new("Weld")
+        Weld.Part0 = Root
+        Weld.Part1 = MagnetPlate
+        Weld.C1 = CFrame.new(0, -1.5, 0) -- 1.5 studs lower than your center
+        Weld.Parent = MagnetPlate
+        
+        -- LIMB ISOLATION (NoCollision with YOU)
+        for _, limb in pairs(Char:GetDescendants()) do
+            if limb:IsA("BasePart") then
                 local NoCol = Instance.new("NoCollisionConstraint")
                 NoCol.Part0 = MagnetPlate
-                NoCol.Part1 = part
+                NoCol.Part1 = limb
                 NoCol.Parent = MagnetPlate
             end
         end
-        
-        local Weld = Instance.new("WeldConstraint")
-        Weld.Part0 = Root
-        Weld.Part1 = MagnetPlate
-        Weld.Parent = MagnetPlate
-        
-        task.wait(0.1)
-        if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Jitter-Pull Engaged (Isolation Fix)", "success")
+        _G.EliteLog("Magnet: V3 Multi-Limb Sync Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Elite Jitter-Sync Loop (V2: Multi-Target & High-G Locking)
+-- [[ ELITE SYNC ENGINE V3 - NO DELAY ]]
 task.spawn(function()
-    _G.RunService.Heartbeat:Connect(function()
-        if PassengerMagnetActive and MagnetPlate and LP.Character then
-            local Root = LP.Character:FindFirstChild("HumanoidRootPart")
-            if not Root then return end
+    -- PreSimulation runs BEFORE physics calculations, killing the 1-frame lag
+    game:GetService("RunService").PreSimulation:Connect(function()
+        if not PassengerMagnetActive or not MagnetPlate then return end
+        
+        local MyChar = LP.Character
+        local MyRoot = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
+        if not MyRoot then return end
 
-            -- Calculate the REAL velocity including rotation
-            local plateVelocity = MagnetPlate.AssemblyLinearVelocity
-            local plateRotVelocity = MagnetPlate.AssemblyAngularVelocity
-            
-            for _, p in pairs(game:GetService("Players"):GetPlayers()) do
-                if p ~= LP and p.Character then
-                    local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+        local MyVel = MyRoot.AssemblyLinearVelocity
+        local MyRotVel = MyRoot.AssemblyAngularVelocity
+
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= LP and p.Character then
+                local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+                
+                if pRoot and pHum then
+                    -- PointToObjectSpace detects if they are inside the Plate's local box
+                    local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    if pRoot and pHum then
-                        -- 1. DETECTION ZONE (Improved for all Rig heights)
-                        local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
+                    -- Check if inside the 12x12 area and 6 studs height
+                    if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 6 and math.abs(relPos.Y) < 3 then
                         
-                        -- Box: 10x12 wide, 12 studs high (to catch jumping R15s)
-                        if math.abs(relPos.X) < 5.5 and math.abs(relPos.Z) < 6.5 and (relPos.Y > -2 and relPos.Y < 12) then
-                            
-                            -- 2. THE "SUCTION" FORCE (Strength Fix)
-                            -- If they are above the plate, we pull them DOWN onto it
-                            local suction = Vector3.new(0, 0, 0)
-                            if relPos.Y > 0.5 then
-                                suction = Vector3.new(0, -35, 0) -- High downward force
-                            end
-
-                            -- 3. THE CALCULATED INERTIA (Multi-Player Fix)
-                            -- We calculate the velocity at their SPECIFIC point on the plate
-                            -- This prevents them from sliding off when you turn.
-                            local offset = pRoot.Position - MagnetPlate.Position
-                            local rotationalInertia = plateRotVelocity:Cross(offset)
-                            
-                            -- 4. APPLY PHYSICS HIJACK
-                            pRoot.AssemblyLinearVelocity = plateVelocity + rotationalInertia + suction + Vector3.new(
-                                math.random(-1, 1) * 0.2, -- Enhanced Jitter
-                                0, 
-                                math.random(-1, 1) * 0.2
-                            )
-                            
-                            -- 5. RIG STABILITY (R15 / Different Heights)
-                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0) -- Zero out their rotation
-                            
-                            -- Force them into a state where they can't fight the physics
-                            if pHum.FloorMaterial == Enum.Material.Air then
-                                pHum:ChangeState(Enum.HumanoidStateType.PlatformStand)
-                            end
-                            
-                            -- Property override for high-strength grip
-                            pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 0, 100, 100)
-                        else
-                            -- Restore if they escape the box
+                        -- THE SNAPPING CORRECTION: Pulls them toward the center so they don't drift
+                        local pullToCenter = (MagnetPlate.Position - pRoot.Position) * 0.4
+                        
+                        -- Apply Velocity: My Speed + Pull Force + Tiny Jitter (for physics hijack)
+                        pRoot.AssemblyLinearVelocity = MyVel + pullToCenter + Vector3.new(0, 0.5, 0)
+                        pRoot.AssemblyAngularVelocity = MyRotVel
+                        
+                        -- RIG STABILITY: Force "Physics" state to stop animations from breaking the lock
+                        if pHum:GetState() ~= Enum.HumanoidStateType.Physics then
+                            pHum:ChangeState(Enum.HumanoidStateType.Physics)
+                        end
+                        
+                        -- High Friction override so they "stick" to your limbs
+                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 10, 0, 100, 100)
+                    else
+                        -- Only reset if we previously modified them
+                        if pRoot.CustomPhysicalProperties ~= nil then
                             pRoot.CustomPhysicalProperties = nil
                         end
                     end
@@ -238,7 +221,7 @@ Tab:CreateParagraph({
 
 Tab:CreateParagraph({
     Title = "🧲 Magnet Instructions",
-    Content = "Enable NoClip before using the bridge to assist 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+    Content = "It creates a high-friction zone on your back so passengers don't slide off."
 })
 -- NoClip (from Movement.lua)
 task.spawn(function()
