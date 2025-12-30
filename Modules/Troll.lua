@@ -292,14 +292,14 @@ Tab:CreateToggle({
 })
 Tab:CreateSlider({
    Name = "Bridge Flying Speed",
-   Range = {0, 300},
+   Range = {0, 30},
    Increment = 1,
    Suffix = "SPS",
    CurrentValue = 10,
    Flag = "BridgeSpeed_Slider",
    Callback = function(Value)
       _G.EliteFlySpeed = Value -- Only update the global speed variable
-      if Value > 150 then
+      if Value > 25 then
           _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
       end
    end,
