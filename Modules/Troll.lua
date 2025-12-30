@@ -1,54 +1,20 @@
 --==========================================================- Elite Help Section (COMPLETE & FIXED) -==========================================================================
 
--- [[ PHYSICS SANITIZER ]]
-local function EliteSanitizeMovement()
-    local Char = LP.Character
-    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
-    
-    if not Char or not Hum or not HRP then return end
-
-    -- 1. MASS RESTORATION
-    for _, part in pairs(Char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Massless = false
-            part.CustomPhysicalProperties = nil 
-            part.CanCollide = true
-        end
-    end
-
-    -- 2. STATE RECOVERY
-    Hum.PlatformStand = false
-    Hum.AutoRotate = true
-    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-    
-    -- 3. VELOCITY PURGE
-    HRP.AssemblyLinearVelocity = Vector3.zero
-    HRP.AssemblyAngularVelocity = Vector3.zero
-    
-    -- 4. OWNERSHIP RECLAIM
-    pcall(function() HRP:SetNetworkOwner(LP) end)
-    
-    -- 5. FINAL BALANCE RESET
-    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    _G.EliteLog("Movement Sanitized: Standard Physics Restored", "success")
-end
-
 -- [[ ELITE FLYING BRIDGE ENGINE ]]
-_G.EliteFlySpeed = 10 
+_G.EliteFlySpeed = 10 -- Default Elite Speed
 local FlyingBridgeActive = false
 local bridge_bv = nil
 local bridge_bg = nil
 local original_joints = {}
 
+-- Function to lock limbs and fix First-Person Camera
 local function SetBridgePose(active)
     local Char = LP.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     if not Char or not Hum then return end
 
     if active then
+        -- FIX: Disable AutoRotate to stop the First-Person spinning/shaking
         Hum.AutoRotate = false 
         for _, v in pairs(Char:GetDescendants()) do
             if v:IsA("Motor6D") then
@@ -68,11 +34,11 @@ local function SetBridgePose(active)
         end
         original_joints = {}
     end
-end -- [[ FIXED: THIS END WAS MISSING ]]
+end 
 
--- Main Physics Loop
+-- Main Physics Loop (Fly + Integrated Noclip)
 task.spawn(function()
-    RunService.RenderStepped:Connect(function()
+    _G.RunService.RenderStepped:Connect(function()
         local Char = LP.Character
         local Root = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
@@ -95,8 +61,11 @@ task.spawn(function()
                 bridge_bg.Parent = Root
             end
 
+            -- [[ ELITE NOCLIP INTEGRATION ]]
             for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+                if part:IsA("BasePart") then 
+                    part.CanCollide = false 
+                end
             end
 
             local moveDir = Hum.MoveDirection 
@@ -117,6 +86,7 @@ task.spawn(function()
             if bridge_bv then bridge_bv:Destroy() bridge_bv = nil end
             if bridge_bg then bridge_bg:Destroy() bridge_bg = nil end
             
+            -- Restore Noclip only if main toggle is off
             if not _nc and Char then
                 for _, p in pairs(Char:GetDescendants()) do
                     if p:IsA("BasePart") then p.CanCollide = true end
@@ -136,7 +106,7 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET ENGINE ]]
+-- [[ ELITE PASSENGER MAGNET: FINAL BUILD (STABILIZED) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
 
@@ -147,42 +117,52 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
+        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
         MagnetPlate.Size = Vector3.new(10, 0.6, 12)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
+        
+        -- FIX: Height set to 1.1 studs above Root for R15/R6 clearance
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 1.2, 0)
         
+        -- STRENGTH: Maximum friction weight (100) for "Super Glue" effect
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
         MagnetPlate.Parent = Char
         
+        -- ISOLATION: Recursive No-Collision to stop the shaking
         for _, part in pairs(Char:GetDescendants()) do
             if part:IsA("BasePart") then
                 local NoCol = Instance.new("NoCollisionConstraint")
-                NoCol.Part0 = MagnetPlate; NoCol.Part1 = part; NoCol.Parent = MagnetPlate
+                NoCol.Part0 = MagnetPlate
+                NoCol.Part1 = part
+                NoCol.Parent = MagnetPlate
             end
         end
         
         local Weld = Instance.new("WeldConstraint")
-        Weld.Part0 = Root; Weld.Part1 = MagnetPlate; Weld.Parent = MagnetPlate
+        Weld.Part0 = Root
+        Weld.Part1 = MagnetPlate
+        Weld.Parent = MagnetPlate
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
         _G.EliteLog("Magnet: High-Strength Mode Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        EliteSanitizeMovement() 
-        _G.EliteLog("Magnet Disengaged", "info")
+        _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- [[ ELITE SUPER-PULL LOOP ]]
+-- [[ ELITE SUPER-PULL: MULTI-USER & HEIGHT STABILIZED ]]
 task.spawn(function()
-    RunService.Heartbeat:Connect(function()
+    _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
+            
+            -- HIJACK JITTER: Increased frequency to dominate Network Ownership
             local jitter = Vector3.new(math.random(-1,1)*0.2, 0, math.random(-1,1)*0.2)
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
@@ -191,16 +171,30 @@ task.spawn(function()
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
                     if pRoot and pHum and pHum.Health > 0 then
+                        -- 1. BOX DETECTION (Supports 5+ people and any height)
                         local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
+                        
+                        -- Width: 6, Length: 8, Height: -2 to 12 (Massive detection zone)
                         if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 8 and (relPos.Y > -2 and relPos.Y < 12) then
+                            
+                            -- 2. RELATIVE LOCK: They move with you + their own walk speed
+                            -- This is the "Strongest" pull: it forces their velocity to YOURS.
                             pRoot.AssemblyLinearVelocity = bridgeVel + (pHum.MoveDirection * pHum.WalkSpeed) + jitter
+                            
+                            -- 3. ANTI-WOBBLE: Zeroes out rotation so R15/R6 don't trip each other
                             pRoot.AssemblyAngularVelocity = Vector3.zero
+                            
+                            -- 4. THE SUPER-SLAM: If they try to jump/fly away, slam them back
                             if relPos.Y > 2.5 then
                                 pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -45, 0)
                             end
+
+                            -- 5. ANTI-SINK: If they glitch into your body, pop them up 1 stud
                             if relPos.Y < 0 then
                                 pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.8, 0)
                             end
+                            
+                            -- 6. PHYSICS OVERRIDE: Prevent them from falling over
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
@@ -211,15 +205,22 @@ task.spawn(function()
     end)
 end)
 
--- [[ UI INTEGRATION ]]
 Tab:CreateSection("Helpful Features")
-
+Tab:CreateParagraph({
+    Title = "⚠️ Note",
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
+})
+Tab:CreateParagraph({
+    Title = "🧲 Magnet Instructions",
+    Content = "Enable NoClip before using the bridge to assist 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+})
 Tab:CreateToggle({
    Name = "Noclip",
    CurrentValue = false,
    Flag = "NoclipToggle",
    Callback = function(Value)
       _nc = Value
+      _G.EliteLog("Noclip: " .. (Value and "Enabled" or "Disabled"), Value and "success" or "warn")
       if not Value then
           local c = LP.Character
           if c then
@@ -230,26 +231,45 @@ Tab:CreateToggle({
       end
    end,
 })
-
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = false,
+   CurrentValue = false, -- FIX: Set to FALSE so it doesn't auto-spawn on load
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
+      local Char = LP.Character
+      local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+      local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+      
+      -- Clear existing forces to prevent the "Initial Shake"
+      if HRP then
+          HRP.AssemblyLinearVelocity = Vector3.zero
+          HRP.AssemblyAngularVelocity = Vector3.zero
+      end
+
       TogglePassengerMagnet(Value)
+
+      -- Safety state reset
+      if Hum then
+          task.wait(0.05)
+          Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+      end
    end,
 })
-
 Tab:CreateToggle({
    Name = "Elite Flying Bridge",
    CurrentValue = false,
    Flag = "BridgeActive_Toggle",
    Callback = function(Value)
-      FlyingBridgeActive = Value 
-      SetBridgePose(Value)
+      FlyingBridgeActive = Value -- Sets it to true or false
+      SetBridgePose(Value)       -- Triggers the plank animation correctly
+      
+      if Value then
+          _G.EliteLog("Flying Bridge: Engaged", "success")
+      else
+          _G.EliteLog("Flying Bridge: Disengaged", "info")
+      end
    end,
 })
-
 Tab:CreateSlider({
    Name = "Bridge Flying Speed",
    Range = {0, 30},
@@ -258,7 +278,10 @@ Tab:CreateSlider({
    CurrentValue = 10,
    Flag = "BridgeSpeed_Slider",
    Callback = function(Value)
-      _G.EliteFlySpeed = Value 
+      _G.EliteFlySpeed = Value -- Only update the global speed variable
+      if Value > 25 then
+          _G.EliteLog("Speed set to High-Velocity: " .. Value, "warn")
+      end
    end,
 })
 
@@ -266,17 +289,59 @@ Tab:CreateSection("Position The Bridge")
 
 Tab:CreateButton({
    Name = "UP (one stud)",
-   Callback = function() EliteVerticalTween(1) end,
+   Callback = function()
+       EliteVerticalTween(1)
+       _G.EliteLog("Position: +1 Stud World-UP", "info")
+   end,
 })
 
 Tab:CreateButton({
    Name = "DOWN (one stud)",
-   Callback = function() EliteVerticalTween(-1) end,
+   Callback = function()
+       EliteVerticalTween(-1)
+       _G.EliteLog("Position: -1 Stud World-DOWN", "info")
+   end,
 })
 
--- [[ PASSIVE SANITIZER ON LOAD ]]
-task.spawn(EliteSanitizeMovement)
---=========================================================- Elite Troll Section –==========================================================================
+local MoveUpActive = false
+Tab:CreateToggle({
+   Name = "Continuous UP",
+   CurrentValue = false,
+   Flag = "ContUp",
+   Callback = function(Value)
+      MoveUpActive = Value
+      task.spawn(function()
+          while MoveUpActive do
+              local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+              if Root then
+                  -- Adds to the Y axis every frame for smooth vertical rise
+                  Root.CFrame = Root.CFrame + Vector3.new(0, 0.2, 0)
+              end
+              _G.RunService.Heartbeat:Wait()
+          end
+      end)
+   end,
+})
+
+local MoveDownActive = false
+Tab:CreateToggle({
+   Name = "Continuous DOWN",
+   CurrentValue = false,
+   Flag = "ContDown",
+   Callback = function(Value)
+      MoveDownActive = Value
+      task.spawn(function()
+          while MoveDownActive do
+              local Root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+              if Root then
+                  -- Subtracts from the Y axis every frame for smooth descent
+                  Root.CFrame = Root.CFrame + Vector3.new(0, -0.2, 0)
+              end
+              _G.RunService.Heartbeat:Wait()
+          end
+      end)
+   end,
+})
 
 -- Elite Troll Engine (Updated for Customization)
 local TrollEngine = {
