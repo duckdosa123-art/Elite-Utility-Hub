@@ -107,9 +107,9 @@ task.spawn(function()
     end)
 end)
 
--- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + LIMB ISOLATION) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
+local passengerOffsets = {} -- Stores where each player "landed" on your plate
 
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
@@ -118,51 +118,34 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
-        
-        -- THE INVISIBLE GRAB ZONE (Lowered and Thicker for Short Rigs)
         MagnetPlate = Instance.new("Part")
-        MagnetPlate.Name = "EliteGrabZone"
-        MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(12, 6, 12) -- Increased thickness (6 studs)
+        MagnetPlate.Name = "EliteGodMagnet"
+        MagnetPlate.Transparency = 1 -- Set to 0.5 to see the "Capture Zone" during testing
+        MagnetPlate.Size = Vector3.new(15, 7, 15) -- Massive capture zone
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.Parent = Char
         
-        -- WELD: Positioned lower (C1 Y offset) to catch feet of short players
         local Weld = Instance.new("Weld")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
-        Weld.C1 = CFrame.new(0, -1.5, 0) -- 1.5 studs lower than your center
+        Weld.C1 = CFrame.new(0, -2, 0) -- Deep "scoop" for short/R15 players
         Weld.Parent = MagnetPlate
         
-        -- LIMB ISOLATION (NoCollision with YOU)
-        for _, limb in pairs(Char:GetDescendants()) do
-            if limb:IsA("BasePart") then
-                local NoCol = Instance.new("NoCollisionConstraint")
-                NoCol.Part0 = MagnetPlate
-                NoCol.Part1 = limb
-                NoCol.Parent = MagnetPlate
-            end
-        end
-        _G.EliteLog("Magnet: V3 Multi-Limb Sync Active", "success")
+        _G.EliteLog("Magnet: God-Tier Projection Engaged", "success")
     else
+        passengerOffsets = {}
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- [[ ELITE SYNC ENGINE V3 - NO DELAY ]]
+-- [[ ELITE GOD-SYNC ENGINE - VELOCITY PROJECTION ]]
 task.spawn(function()
-    -- PreSimulation runs BEFORE physics calculations, killing the 1-frame lag
     game:GetService("RunService").PreSimulation:Connect(function()
-        if not PassengerMagnetActive or not MagnetPlate then return end
+        if not PassengerMagnetActive or not MagnetPlate or not LP.Character then return end
         
-        local MyChar = LP.Character
-        local MyRoot = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
+        local MyRoot = LP.Character:FindFirstChild("HumanoidRootPart")
         if not MyRoot then return end
-
-        local MyVel = MyRoot.AssemblyLinearVelocity
-        local MyRotVel = MyRoot.AssemblyAngularVelocity
 
         for _, p in pairs(game.Players:GetPlayers()) do
             if p ~= LP and p.Character then
@@ -170,29 +153,37 @@ task.spawn(function()
                 local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                 
                 if pRoot and pHum then
-                    -- PointToObjectSpace detects if they are inside the Plate's local box
+                    -- 1. DETECTION (Relatively wide to catch "short" players)
                     local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    -- Check if inside the 12x12 area and 6 studs height
-                    if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 6 and math.abs(relPos.Y) < 3 then
+                    if math.abs(relPos.X) < 7.5 and math.abs(relPos.Z) < 7.5 and math.abs(relPos.Y) < 5 then
                         
-                        -- THE SNAPPING CORRECTION: Pulls them toward the center so they don't drift
-                        local pullToCenter = (MagnetPlate.Position - pRoot.Position) * 0.4
-                        
-                        -- Apply Velocity: My Speed + Pull Force + Tiny Jitter (for physics hijack)
-                        pRoot.AssemblyLinearVelocity = MyVel + pullToCenter + Vector3.new(0, 0.5, 0)
-                        pRoot.AssemblyAngularVelocity = MyRotVel
-                        
-                        -- RIG STABILITY: Force "Physics" state to stop animations from breaking the lock
-                        if pHum:GetState() ~= Enum.HumanoidStateType.Physics then
-                            pHum:ChangeState(Enum.HumanoidStateType.Physics)
+                        -- 2. THE "LOCK" (Assign them a local spot so they don't all bunch up in the center)
+                        if not passengerOffsets[p.UserId] then
+                            passengerOffsets[p.UserId] = relPos
                         end
                         
-                        -- High Friction override so they "stick" to your limbs
+                        -- 3. VELOCITY PROJECTION MATH
+                        -- We calculate the World Position where they SHOULD be
+                        local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(passengerOffsets[p.UserId])
+                        
+                        -- The "Magic" Formula: (TargetPosition - CurrentPosition) * 60 (framerate)
+                        -- This forces the physics engine to move them to the target in exactly 1/60th of a second.
+                        local diff = (targetWorldPos - pRoot.Position)
+                        local forceVelocity = diff * 45 -- 45 is the "Sweet Spot" for strength vs jitter
+                        
+                        -- 4. APPLY THE FORCE
+                        pRoot.AssemblyLinearVelocity = forceVelocity + (MyRoot.AssemblyLinearVelocity * 1.1)
+                        pRoot.AssemblyAngularVelocity = MyRoot.AssemblyAngularVelocity
+                        
+                        -- 5. ANTI-ESCAPE (Kill their controls)
+                        pHum.PlatformStand = true 
                         pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 10, 0, 100, 100)
                     else
-                        -- Only reset if we previously modified them
-                        if pRoot.CustomPhysicalProperties ~= nil then
+                        -- They left the zone, clear their lock
+                        if passengerOffsets[p.UserId] then
+                            passengerOffsets[p.UserId] = nil
+                            pHum.PlatformStand = false
                             pRoot.CustomPhysicalProperties = nil
                         end
                     end
@@ -201,7 +192,6 @@ task.spawn(function()
         end
     end)
 end)
-
 
 local TweenService = game:GetService("TweenService")
 local function EliteVerticalTween(amount)
@@ -239,23 +229,6 @@ task.spawn(function()
     end)
 end)
 
-Tab:CreateToggle({
-   Name = "Noclip",
-   CurrentValue = false,
-   Flag = "NoclipToggle",
-   Callback = function(Value)
-      _nc = Value
-      _G.EliteLog("Noclip: " .. (Value and "Enabled" or "Disabled"), Value and "success" or "warn")
-      if not Value then
-          local c = LP.Character
-          if c then
-              for _, p in pairs(c:GetDescendants()) do
-                  if p:IsA("BasePart") then p.CanCollide = true end
-              end
-          end
-      end
-   end,
-})
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
    CurrentValue = true,
