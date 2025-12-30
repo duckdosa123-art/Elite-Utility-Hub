@@ -128,7 +128,7 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
         -- ELITE PHYSICS: Max Friction to "grip" the targets
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
         
         local NoCol = Instance.new("NoCollisionConstraint")
@@ -242,12 +242,29 @@ Tab:CreateToggle({
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = false, -- Starts OFF (Bug Fixed)
+   CurrentValue = false,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
-      -- This ONLY runs when you click the toggle
+      -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
+      local Char = LP.Character
+      local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+      local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+      
+      if HRP then
+          HRP.AssemblyLinearVelocity = Vector3.zero
+          HRP.AssemblyAngularVelocity = Vector3.zero
+      end
+
+      -- 2. TRIGGER ENGINE
       TogglePassengerMagnet(Value)
-      _G.EliteLog("Magnet Manual Override: " .. (Value and "ON" or "OFF"), "info")
+
+      -- 3. THE STABILIZER: Force the Humanoid to "re-stand"
+      -- This fixes the shaking by forcing the engine to re-calculate your balance
+      if Hum then
+          task.wait(0.05)
+          Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+          _G.EliteLog("Magnet Stability Reset: " .. (Value and "Applied" or "Cleared"), "success")
+      end
    end,
 })
 Tab:CreateToggle({
