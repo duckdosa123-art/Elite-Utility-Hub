@@ -195,7 +195,7 @@ task.spawn(function()
             end
         end
     end)
-end))
+end)
 -- UI INTEGRATION
 Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
@@ -245,26 +245,26 @@ Tab:CreateToggle({
    CurrentValue = false,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
-      -- ELITE PHYSICS PURGE: Stops the shake before it starts
+      -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
       local Char = LP.Character
-      local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
       local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+      local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
       
       if HRP then
           HRP.AssemblyLinearVelocity = Vector3.zero
           HRP.AssemblyAngularVelocity = Vector3.zero
       end
 
-      -- Run the creation/destruction logic
+      -- 2. TRIGGER ENGINE
       TogglePassengerMagnet(Value)
 
-      -- RE-STABILIZE: Forces the Humanoid to reset its balance
+      -- 3. THE STABILIZER: Force the Humanoid to "re-stand"
+      -- This fixes the shaking by forcing the engine to re-calculate your balance
       if Hum then
           task.wait(0.05)
           Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+          _G.EliteLog("Magnet Stability Reset: " .. (Value and "Applied" or "Cleared"), "success")
       end
-      
-      _G.EliteLog("Magnet State Changed: Jitter Filter Applied", "success")
    end,
 })
 Tab:CreateToggle({
