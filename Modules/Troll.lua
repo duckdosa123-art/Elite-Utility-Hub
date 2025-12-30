@@ -119,22 +119,30 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
+        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
         MagnetPlate.Size = Vector3.new(9, 0.6, 11)
         MagnetPlate.CanCollide = false 
-        MagnetPlate.Massless = true
+        MagnetPlate.Massless = true 
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE PHYSICS: Max Friction to "grip" the targets
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
+        -- ELITE FRICTION: Keep this high so others are PULLED
+        -- We can keep it high because you are going to "Ignore" it now.
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.5, 50, 0, 50, 50)
         MagnetPlate.Parent = Char
         
-        local NoCol = Instance.new("NoCollisionConstraint")
-        NoCol.Part0 = MagnetPlate
-        NoCol.Part1 = Root
-        NoCol.Parent = MagnetPlate
+        -- [[ THE "IGNORE ME" LOGIC ]]
+        -- Instead of just the RootPart, we loop through your WHOLE body.
+        for _, part in pairs(Char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local NoCol = Instance.new("NoCollisionConstraint")
+                NoCol.Part0 = MagnetPlate
+                NoCol.Part1 = part
+                NoCol.Parent = MagnetPlate
+            end
+        end
         
         local Weld = Instance.new("WeldConstraint")
         Weld.Part0 = Root
@@ -143,10 +151,10 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Jitter-Pull Engaged (R6/R15)", "success")
+        _G.EliteLog("Magnet Engaged: Character Isolation Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        _G.EliteLog("Magnet: Disengaged", "info")
+        _G.EliteLog("Magnet Disengaged", "info")
     end
 end
 
@@ -245,26 +253,26 @@ Tab:CreateToggle({
    CurrentValue = false,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
-      -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
+      -- ELITE PHYSICS PURGE: Stops the shake before it starts
       local Char = LP.Character
-      local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
       local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+      local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
       
       if HRP then
           HRP.AssemblyLinearVelocity = Vector3.zero
           HRP.AssemblyAngularVelocity = Vector3.zero
       end
 
-      -- 2. TRIGGER ENGINE
+      -- Run the creation/destruction logic
       TogglePassengerMagnet(Value)
 
-      -- 3. THE STABILIZER: Force the Humanoid to "re-stand"
-      -- This fixes the shaking by forcing the engine to re-calculate your balance
+      -- RE-STABILIZE: Forces the Humanoid to reset its balance
       if Hum then
           task.wait(0.05)
           Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-          _G.EliteLog("Magnet Stability Reset: " .. (Value and "Applied" or "Cleared"), "success")
       end
+      
+      _G.EliteLog("Magnet State Changed: Jitter Filter Applied", "success")
    end,
 })
 Tab:CreateToggle({
