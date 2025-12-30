@@ -108,7 +108,7 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ PASSENGER MAGNET ENGINE ]]
+-- [[ ELITE PASSENGER MAGNET ENGINE (RELATIVE PHYSICS FIX) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
 
@@ -122,11 +122,13 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(8, 0.6, 11)
+        MagnetPlate.Size = Vector3.new(10, 0.6, 12) -- Increased for better R15 landing zone
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.7, 5, 0, 100, 100)
+        
+        -- ELITE FRICTION: Maxed out to 100 to prevent sliding during turns
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
         MagnetPlate.Parent = Char
         
         local NoCol = Instance.new("NoCollisionConstraint")
@@ -141,28 +143,46 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Passenger Magnet: Multi-User Active", "success")
+        _G.EliteLog("Magnet: Relative Velocity Sync Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        _G.EliteLog("Passenger Magnet: Disengaged", "info")
+        _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Multi-Passenger Sync Loop
+-- Elite Multi-Passenger Sync Loop (R6/R15 Optimized)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
-        if PassengerMagnetActive and MagnetPlate and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
-            MagnetPlate.CanCollide = true -- Always solid for OTHERS
+        if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
                     local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
-                    if pRoot then
-                        local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
-                        if distance < 8.5 then 
-                            pRoot.AssemblyLinearVelocity = bridgeVel
-                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+                    
+                    if pRoot and pHum then
+                        -- 1. ZONE CHECK: Using Y-Offset instead of Magnitude (Supports all heights)
+                        local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
+                        
+                        -- Check if they are within the plate's width/length and just above it
+                        if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 7 and (relPos.Y > -1 and relPos.Y < 5) then
+                            
+                            -- 2. RELATIVE VELOCITY INJECTION (The "No-Glue" Fix)
+                            -- We only force the Vertical (Y) and ADD our bridge velocity to their X/Z.
+                            -- This lets them walk around on your back while you fly.
+                            local currentPVel = pRoot.AssemblyLinearVelocity
+                            pRoot.AssemblyLinearVelocity = Vector3.new(
+                                bridgeVel.X + (pHum.MoveDirection.X * pHum.WalkSpeed), 
+                                bridgeVel.Y, 
+                                bridgeVel.Z + (pHum.MoveDirection.Z * pHum.WalkSpeed)
+                            )
+                            
+                            -- 3. STABILITY LOCK
+                            -- Only lock rotation if they aren't trying to turn themselves
+                            if pHum.MoveDirection.Magnitude < 0.1 then
+                                pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            end
                         end
                     end
                 end
