@@ -108,25 +108,19 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET ENGINE (JITTER-PULL VERSION) ]]
+-- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + INTEGRATED NOCLIP) ]]
+local PassengerMagnetActive = false
+local MagnetPlate = nil
+local MagnetNoclipConn = nil
+
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
     local Char = LP.Character
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
-    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     
-    if Value and Root and Hum then
+    if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
         
-        -- [[ ELITE OWNERSHIP IGNORE LOGIC ]]
-        -- Relinquishing Network Ownership to the Server (nil) prevents 
-        -- the local client from "fighting" the MagnetPlate's physics.
-        pcall(function()
-            Root:SetNetworkOwner(nil) 
-            -- Pinned MoveTo prevents the character from drifting while ownership swaps
-            Hum:MoveTo(Root.Position) 
-        end)
-
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
@@ -135,8 +129,25 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
+        -- WORKING MODEL PHYSICS
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
+        
+        -- [[ INTEGRATED NOCLIP LOGIC ]]
+        -- This uses your provided logic to noclip ONLY you from the magnet
+        MagnetNoclipConn = RunService.Stepped:Connect(function()
+            if not PassengerMagnetActive or not Char then 
+                if MagnetNoclipConn then MagnetNoclipConn:Disconnect() end
+                return 
+            end
+            
+            for _, part in pairs(Char:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "ElitePassengerMagnet" then
+                    -- This disables YOUR collision so you don't shake against the plate
+                    part.CanCollide = false
+                end
+            end
+        end)
         
         local NoCol = Instance.new("NoCollisionConstraint")
         NoCol.Part0 = MagnetPlate
@@ -150,24 +161,20 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Jitter-Pull Engaged (Ownership Ignored)", "success")
+        _G.EliteLog("Magnet: Noclip-Pull Engaged", "success")
     else
-        -- Restore Ownership to LocalPlayer when magnet is disabled
-        if Root then
-            pcall(function() Root:SetNetworkOwner(LP) end)
-        end
-        
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
+        if MagnetNoclipConn then MagnetNoclipConn:Disconnect() end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
--- Elite Jitter-Sync Loop (Claiming Network Ownership)
+
+-- Elite Jitter-Sync Loop (WORKING MODEL)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
-            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
             local jitter = Vector3.new(
                 math.random(-1, 1) * 0.1,
                 math.random(-1, 1) * 0.1,
@@ -182,22 +189,17 @@ task.spawn(function()
                     if pRoot and pHum then
                         local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
                         
-                        -- Detection for multiple people (R6/R15)
                         if distance < 8.5 then
-                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
-                            -- This "pulls" them along and prevents them from walking away.
+                            -- THE MAGNETIC LOCK
                             pRoot.AssemblyLinearVelocity = bridgeVel + jitter
-                            
-                            -- 2. THE ANGLUAR JITTER: Keeps them from falling/tripping
-                            -- Setting this to a slight spin helps maintain the physics claim.
                             pRoot.AssemblyAngularVelocity = Vector3.new(0, 5, 0)
                             
-                            -- 3. FLOOR ADHESION: If they try to jump, pull them back down to the plate
+                            -- FLOOR ADHESION
                             if pRoot.Position.Y > MagnetPlate.Position.Y + 2 then
                                 pRoot.AssemblyLinearVelocity = Vector3.new(bridgeVel.X, -20, bridgeVel.Z)
                             end
                             
-                            -- 4. R15 STABILITY: Disable falling states locally for targets
+                            -- R15 STABILITY
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
@@ -235,7 +237,7 @@ task.spawn(function()
 end)
 
 Tab:CreateToggle({
-   Name = "Elite Noclip",
+   Name = "Noclip",
    CurrentValue = false,
    Flag = "NoclipToggle",
    Callback = function(Value)
@@ -253,7 +255,7 @@ Tab:CreateToggle({
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = false,
+   CurrentValue = True,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
       -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
