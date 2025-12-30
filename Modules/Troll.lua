@@ -255,7 +255,7 @@ Tab:CreateToggle({
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = True,
+   CurrentValue = true,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
       -- 1. SETTLE PHYSICS: Clear existing jitter before changing state
