@@ -108,10 +108,9 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + INTEGRATED NOCLIP) ]]
+-- [[ ELITE PASSENGER MAGNET ENGINE (WORKING MODEL + LIMB ISOLATION) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
-local MagnetNoclipConn = nil
 
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
@@ -120,7 +119,6 @@ local function TogglePassengerMagnet(Value)
     
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
-        
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
@@ -133,26 +131,16 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
         
-        -- [[ INTEGRATED NOCLIP LOGIC ]]
-        -- This uses your provided logic to noclip ONLY you from the magnet
-        MagnetNoclipConn = RunService.Stepped:Connect(function()
-            if not PassengerMagnetActive or not Char then 
-                if MagnetNoclipConn then MagnetNoclipConn:Disconnect() end
-                return 
+        -- [[ ELITE FIX: LIMB ISOLATION ]]
+        -- This applies your Noclip logic to every limb so you don't 'kick' the plate
+        for _, part in pairs(Char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local NoCol = Instance.new("NoCollisionConstraint")
+                NoCol.Part0 = MagnetPlate
+                NoCol.Part1 = part
+                NoCol.Parent = MagnetPlate
             end
-            
-            for _, part in pairs(Char:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "ElitePassengerMagnet" then
-                    -- This disables YOUR collision so you don't shake against the plate
-                    part.CanCollide = false
-                end
-            end
-        end)
-        
-        local NoCol = Instance.new("NoCollisionConstraint")
-        NoCol.Part0 = MagnetPlate
-        NoCol.Part1 = Root
-        NoCol.Parent = MagnetPlate
+        end
         
         local Weld = Instance.new("WeldConstraint")
         Weld.Part0 = Root
@@ -161,20 +149,20 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Noclip-Pull Engaged", "success")
+        _G.EliteLog("Magnet: Jitter-Pull Engaged (Isolation Fix)", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        if MagnetNoclipConn then MagnetNoclipConn:Disconnect() end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Elite Jitter-Sync Loop (WORKING MODEL)
+-- Elite Jitter-Sync Loop (WORKING MODEL - UNCHANGED)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
+            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
             local jitter = Vector3.new(
                 math.random(-1, 1) * 0.1,
                 math.random(-1, 1) * 0.1,
@@ -187,19 +175,24 @@ task.spawn(function()
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
                     if pRoot and pHum then
-                        local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
+                        -- Converts the player's position into "Relative Space" to your plate
+                        local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                         
-                        if distance < 8.5 then
-                            -- THE MAGNETIC LOCK
+                        -- Width (X: 5 studs each side), Length (Z: 6 studs each side), Height (Y: 1 to 10 studs up)
+                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6 and (relPos.Y > -2 and relPos.Y < 10) then
+                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
                             pRoot.AssemblyLinearVelocity = bridgeVel + jitter
-                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 5, 0)
                             
-                            -- FLOOR ADHESION
-                            if pRoot.Position.Y > MagnetPlate.Position.Y + 2 then
-                                pRoot.AssemblyLinearVelocity = Vector3.new(bridgeVel.X, -20, bridgeVel.Z)
+                            -- 2. THE ANGLUAR LOCK: Stops them from spinning off during turns
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            
+                            -- 3. FORCED ADHESION: If they are in the zone, they CANNOT jump away
+                            -- This prevents them from "escaping" while you are moving.
+                            if relPos.Y > 3 then
+                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -25, 0)
                             end
                             
-                            -- R15 STABILITY
+                            -- 4. STATE LOCK: Keeps R15 characters standing perfectly
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
