@@ -155,18 +155,16 @@ local function TogglePassengerMagnet(Value)
     end
 end
 
--- Elite Jitter-Sync Loop (WORKING MODEL - UNCHANGED)
+-- Elite Jitter-Sync Loop (V2: Multi-Target & High-G Locking)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
-            local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
-            
-            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
-            local jitter = Vector3.new(
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1
-            )
+            local Root = LP.Character:FindFirstChild("HumanoidRootPart")
+            if not Root then return end
+
+            -- Calculate the REAL velocity including rotation
+            local plateVelocity = MagnetPlate.AssemblyLinearVelocity
+            local plateRotVelocity = MagnetPlate.AssemblyAngularVelocity
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
@@ -174,26 +172,45 @@ task.spawn(function()
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
                     if pRoot and pHum then
-                        -- Converts the player's position into "Relative Space" to your plate
+                        -- 1. DETECTION ZONE (Improved for all Rig heights)
                         local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                         
-                        -- Width (X: 5 studs each side), Length (Z: 6 studs each side), Height (Y: 1 to 10 studs up)
-                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6 and (relPos.Y > -2 and relPos.Y < 10) then
-                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
-                            pRoot.AssemblyLinearVelocity = bridgeVel + jitter
+                        -- Box: 10x12 wide, 12 studs high (to catch jumping R15s)
+                        if math.abs(relPos.X) < 5.5 and math.abs(relPos.Z) < 6.5 and (relPos.Y > -2 and relPos.Y < 12) then
                             
-                            -- 2. THE ANGLUAR LOCK: Stops them from spinning off during turns
-                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            -- 2. THE "SUCTION" FORCE (Strength Fix)
+                            -- If they are above the plate, we pull them DOWN onto it
+                            local suction = Vector3.new(0, 0, 0)
+                            if relPos.Y > 0.5 then
+                                suction = Vector3.new(0, -35, 0) -- High downward force
+                            end
+
+                            -- 3. THE CALCULATED INERTIA (Multi-Player Fix)
+                            -- We calculate the velocity at their SPECIFIC point on the plate
+                            -- This prevents them from sliding off when you turn.
+                            local offset = pRoot.Position - MagnetPlate.Position
+                            local rotationalInertia = plateRotVelocity:Cross(offset)
                             
-                            -- 3. FORCED ADHESION: If they are in the zone, they CANNOT jump away
-                            -- This prevents them from "escaping" while you are moving.
-                            if relPos.Y > 3 then
-                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -25, 0)
+                            -- 4. APPLY PHYSICS HIJACK
+                            pRoot.AssemblyLinearVelocity = plateVelocity + rotationalInertia + suction + Vector3.new(
+                                math.random(-1, 1) * 0.2, -- Enhanced Jitter
+                                0, 
+                                math.random(-1, 1) * 0.2
+                            )
+                            
+                            -- 5. RIG STABILITY (R15 / Different Heights)
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0) -- Zero out their rotation
+                            
+                            -- Force them into a state where they can't fight the physics
+                            if pHum.FloorMaterial == Enum.Material.Air then
+                                pHum:ChangeState(Enum.HumanoidStateType.PlatformStand)
                             end
                             
-                            -- 4. STATE LOCK: Keeps R15 characters standing perfectly
-                            pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                            pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                            -- Property override for high-strength grip
+                            pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 0, 100, 100)
+                        else
+                            -- Restore if they escape the box
+                            pRoot.CustomPhysicalProperties = nil
                         end
                     end
                 end
