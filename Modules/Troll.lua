@@ -1,5 +1,41 @@
 --==========================================================- Elite Help Section (COMPLETE & FIXED) -==========================================================================
+local function EliteSanitizeMovement()
+    local Char = LP.Character
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+    local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+    
+    if not Char or not Hum or not HRP then return end
 
+    -- 1. MASS RESTORATION (Fixes the "Heaviness/Vulnerability")
+    -- If your character stays Massless, the Humanoid balance solver fails.
+    for _, part in pairs(Char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Massless = false
+            -- Reset to default Roblox physical properties
+            part.CustomPhysicalProperties = nil 
+            part.CanCollide = true
+        end
+    end
+
+    -- 2. STATE RECOVERY
+    Hum.PlatformStand = false
+    Hum.AutoRotate = true
+    Hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+    
+    -- 3. VELOCITY PURGE
+    HRP.AssemblyLinearVelocity = Vector3.zero
+    HRP.AssemblyAngularVelocity = Vector3.zero
+    
+    -- 4. OWNERSHIP RECLAIM
+    -- Ensures your client is in total control of your movement
+    pcall(function() HRP:SetNetworkOwner(LP) end)
+    
+    -- 5. FINAL BALANCE RESET
+    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    _G.EliteLog("Movement Sanitized: Standard Physics Restored", "success")
+end
 -- [[ ELITE FLYING BRIDGE ENGINE ]]
 _G.EliteFlySpeed = 10 -- Default Elite Speed
 local FlyingBridgeActive = false
@@ -27,22 +63,12 @@ local function SetBridgePose(active)
             end
         end
         Hum.PlatformStand = true
-    else
-        -- RETURNS TO NORMAL FORM (Keep this!)
-        Hum.AutoRotate = true 
-        for joint, c0 in pairs(original_joints) do
-            if joint and joint.Parent then joint.C0 = c0 end
-        end
-        original_joints = {}
-        Hum.PlatformStand = false
-        
-        -- Restore Collisions ONCE
-        for _, p in pairs(Char:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = true end
-        end
-        
-        Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+   else
+    EliteSanitizeMovement() -- This replaces the manual joint/collision loops
+    for joint, c0 in pairs(original_joints) do
+        if joint and joint.Parent then joint.C0 = c0 end
     end
+    original_joints = {}
 end
 
 -- Main Physics Loop (Fly + Integrated Noclip)
@@ -161,7 +187,8 @@ local function TogglePassengerMagnet(Value)
         _G.EliteLog("Magnet: High-Strength Mode Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        _G.EliteLog("Magnet: Disengaged", "info")
+        EliteSanitizeMovement() -- Force-clears friction and jitter weight
+        _G.EliteLog("Magnet Disengaged", "info")
     end
 end
 
@@ -879,3 +906,5 @@ Tab:CreateSlider({
         end
     end,
 })
+-- Ensure Movement
+task.spawn(EliteSanitizeMovement)
