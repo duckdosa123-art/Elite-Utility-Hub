@@ -196,15 +196,6 @@ task.spawn(function()
         end
     end)
 end)
--- Startup Task
-task.spawn(function()
-    repeat task.wait() until LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    task.wait(2)
-    local configValue = true 
-    if configValue then
-        TogglePassengerMagnet(true)
-    end
-end)
 -- UI INTEGRATION
 Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
@@ -251,10 +242,12 @@ Tab:CreateToggle({
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = false,
+   CurrentValue = false, -- Starts OFF (Bug Fixed)
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
+      -- This ONLY runs when you click the toggle
       TogglePassengerMagnet(Value)
+      _G.EliteLog("Magnet Manual Override: " .. (Value and "ON" or "OFF"), "info")
    end,
 })
 Tab:CreateToggle({
