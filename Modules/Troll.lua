@@ -109,16 +109,24 @@ local function EliteVerticalTween(amount)
 end
 
 -- [[ ELITE PASSENGER MAGNET ENGINE (JITTER-PULL VERSION) ]]
-local PassengerMagnetActive = false
-local MagnetPlate = nil
-
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
     local Char = LP.Character
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     
-    if Value and Root then
+    if Value and Root and Hum then
         if MagnetPlate then MagnetPlate:Destroy() end 
+        
+        -- [[ ELITE OWNERSHIP IGNORE LOGIC ]]
+        -- Relinquishing Network Ownership to the Server (nil) prevents 
+        -- the local client from "fighting" the MagnetPlate's physics.
+        pcall(function()
+            Root:SetNetworkOwner(nil) 
+            -- Pinned MoveTo prevents the character from drifting while ownership swaps
+            Hum:MoveTo(Root.Position) 
+        end)
+
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
@@ -127,7 +135,6 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE PHYSICS: Max Friction to "grip" the targets
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(10, 10, 0, 10, 10)
         MagnetPlate.Parent = Char
         
@@ -143,13 +150,17 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Jitter-Pull Engaged (R6/R15)", "success")
+        _G.EliteLog("Magnet: Jitter-Pull Engaged (Ownership Ignored)", "success")
     else
+        -- Restore Ownership to LocalPlayer when magnet is disabled
+        if Root then
+            pcall(function() Root:SetNetworkOwner(LP) end)
+        end
+        
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
-
 -- Elite Jitter-Sync Loop (Claiming Network Ownership)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
