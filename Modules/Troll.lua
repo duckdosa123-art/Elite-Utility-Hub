@@ -108,7 +108,7 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET ENGINE (RELATIVE PHYSICS FIX) ]]
+-- [[ ELITE PASSENGER MAGNET ENGINE (JITTER-PULL VERSION) ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
 
@@ -122,12 +122,12 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(10, 0.6, 12) -- Increased for better R15 landing zone
+        MagnetPlate.Size = Vector3.new(9, 0.7, 12) -- Balanced for Multi-Person Carry
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE FRICTION: Maxed out to 100 to prevent sliding during turns
+        -- ELITE PHYSICS: Max Friction + FrictionWeight forces the engine to 'tug' them
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
         MagnetPlate.Parent = Char
         
@@ -143,18 +143,23 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: Relative Velocity Sync Active", "success")
+        _G.EliteLog("Magnet: High-Tension Jitter Active", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Elite Multi-Passenger Sync Loop (R6/R15 Optimized)
+-- Elite Multi-Passenger Sync Loop (Jitter & Turn-Sync)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
+            local Root = LP.Character:FindFirstChild("HumanoidRootPart")
+            if not Root then return end
+
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
+            -- Capture your body's turning speed (Angular Velocity)
+            local bridgeRot = Root.AssemblyAngularVelocity 
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
@@ -162,26 +167,29 @@ task.spawn(function()
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
                     if pRoot and pHum then
-                        -- 1. ZONE CHECK: Using Y-Offset instead of Magnitude (Supports all heights)
+                        -- 1. THE BOX CHECK (R6/R15 SUPPORT)
                         local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                         
-                        -- Check if they are within the plate's width/length and just above it
-                        if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 7 and (relPos.Y > -1 and relPos.Y < 5) then
+                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6.5 and (relPos.Y > -1.5 and relPos.Y < 5) then
                             
-                            -- 2. RELATIVE VELOCITY INJECTION (The "No-Glue" Fix)
-                            -- We only force the Vertical (Y) and ADD our bridge velocity to their X/Z.
-                            -- This lets them walk around on your back while you fly.
-                            local currentPVel = pRoot.AssemblyLinearVelocity
-                            pRoot.AssemblyLinearVelocity = Vector3.new(
-                                bridgeVel.X + (pHum.MoveDirection.X * pHum.WalkSpeed), 
-                                bridgeVel.Y, 
-                                bridgeVel.Z + (pHum.MoveDirection.Z * pHum.WalkSpeed)
-                            )
+                            -- 2. THE JITTER PULL (Rotational Sync)
+                            -- This calculates the force needed to keep them on your back while you TURN
+                            local worldOffset = pRoot.Position - Root.Position
+                            local rotationalForce = bridgeRot:Cross(worldOffset) -- Centripetal Pull
                             
-                            -- 3. STABILITY LOCK
-                            -- Only lock rotation if they aren't trying to turn themselves
+                            -- 3. APPLY COMBINED VELOCITY
+                            -- Bridge Move + Their Walk + Rotation Pull + Tiny Y-Nudge (The Jitter)
+                            pRoot.AssemblyLinearVelocity = bridgeVel + rotationalForce + (pHum.MoveDirection * (pHum.WalkSpeed * 0.8)) + Vector3.new(0, 0.5, 0)
+                            
+                            -- 4. ANGULAR SNAP (Makes them look where you look)
                             if pHum.MoveDirection.Magnitude < 0.1 then
-                                pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                                pRoot.AssemblyAngularVelocity = bridgeRot
+                            end
+
+                            -- 5. ANTI-SINK (The "Sticky" Nudge)
+                            -- If they sink too deep into your ghostly noclip body, it pops them up
+                            if relPos.Y < 0.2 then
+                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.05, 0)
                             end
                         end
                     end
@@ -208,11 +216,44 @@ Tab:CreateParagraph({
 
 Tab:CreateParagraph({
     Title = "🧲 Magnet Instructions",
-    Content = "This is enabled by default to assist with 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+    Content = "Enable NoClip before using the bridge to assist 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+})
+-- NoClip (from Movement.lua)
+task.spawn(function()
+    RunService.Stepped:Connect(function()
+        if _nc then
+            local c = LP.Character
+            if c then
+                for _, part in pairs(c:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+Tab:CreateToggle({
+   Name = "Elite Noclip",
+   CurrentValue = false,
+   Flag = "NoclipToggle",
+   Callback = function(Value)
+      _nc = Value
+      _G.EliteLog("Noclip: " .. (Value and "Enabled" or "Disabled"), Value and "success" or "warn")
+      if not Value then
+          local c = LP.Character
+          if c then
+              for _, p in pairs(c:GetDescendants()) do
+                  if p:IsA("BasePart") then p.CanCollide = true end
+              end
+          end
+      end
+   end,
 })
 Tab:CreateToggle({
    Name = "Elite Passenger Magnet",
-   CurrentValue = true,
+   CurrentValue = false,
    Flag = "PassengerMagnet_Toggle",
    Callback = function(Value)
       TogglePassengerMagnet(Value)
