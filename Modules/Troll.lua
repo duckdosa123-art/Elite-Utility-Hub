@@ -122,12 +122,12 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(9, 0.7, 12) -- Balanced for Multi-Person Carry
+        MagnetPlate.Size = Vector3.new(9, 0.6, 11)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE PHYSICS: Max Friction + FrictionWeight forces the engine to 'tug' them
+        -- ELITE PHYSICS: Max Friction to "grip" the targets
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
         MagnetPlate.Parent = Char
         
@@ -143,23 +143,25 @@ local function TogglePassengerMagnet(Value)
         
         task.wait(0.1)
         if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet: High-Tension Jitter Active", "success")
+        _G.EliteLog("Magnet: Jitter-Pull Engaged (R6/R15)", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
         _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Elite Multi-Passenger Sync Loop (Jitter & Turn-Sync)
+-- Elite Jitter-Sync Loop (Claiming Network Ownership)
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
-            local Root = LP.Character:FindFirstChild("HumanoidRootPart")
-            if not Root then return end
-
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
-            -- Capture your body's turning speed (Angular Velocity)
-            local bridgeRot = Root.AssemblyAngularVelocity 
+            
+            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
+            local jitter = Vector3.new(
+                math.random(-1, 1) * 0.1,
+                math.random(-1, 1) * 0.1,
+                math.random(-1, 1) * 0.1
+            )
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
@@ -167,30 +169,26 @@ task.spawn(function()
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
                     if pRoot and pHum then
-                        -- 1. THE BOX CHECK (R6/R15 SUPPORT)
-                        local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
+                        local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
                         
-                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6.5 and (relPos.Y > -1.5 and relPos.Y < 5) then
+                        -- Detection for multiple people (R6/R15)
+                        if distance < 8.5 then
+                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
+                            -- This "pulls" them along and prevents them from walking away.
+                            pRoot.AssemblyLinearVelocity = bridgeVel + jitter
                             
-                            -- 2. THE JITTER PULL (Rotational Sync)
-                            -- This calculates the force needed to keep them on your back while you TURN
-                            local worldOffset = pRoot.Position - Root.Position
-                            local rotationalForce = bridgeRot:Cross(worldOffset) -- Centripetal Pull
+                            -- 2. THE ANGLUAR JITTER: Keeps them from falling/tripping
+                            -- Setting this to a slight spin helps maintain the physics claim.
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 5, 0)
                             
-                            -- 3. APPLY COMBINED VELOCITY
-                            -- Bridge Move + Their Walk + Rotation Pull + Tiny Y-Nudge (The Jitter)
-                            pRoot.AssemblyLinearVelocity = bridgeVel + rotationalForce + (pHum.MoveDirection * (pHum.WalkSpeed * 0.8)) + Vector3.new(0, 0.5, 0)
-                            
-                            -- 4. ANGULAR SNAP (Makes them look where you look)
-                            if pHum.MoveDirection.Magnitude < 0.1 then
-                                pRoot.AssemblyAngularVelocity = bridgeRot
+                            -- 3. FLOOR ADHESION: If they try to jump, pull them back down to the plate
+                            if pRoot.Position.Y > MagnetPlate.Position.Y + 2 then
+                                pRoot.AssemblyLinearVelocity = Vector3.new(bridgeVel.X, -20, bridgeVel.Z)
                             end
-
-                            -- 5. ANTI-SINK (The "Sticky" Nudge)
-                            -- If they sink too deep into your ghostly noclip body, it pops them up
-                            if relPos.Y < 0.2 then
-                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.05, 0)
-                            end
+                            
+                            -- 4. R15 STABILITY: Disable falling states locally for targets
+                            pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                            pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
                     end
                 end
@@ -279,7 +277,7 @@ Tab:CreateSlider({
    Range = {0, 300},
    Increment = 1,
    Suffix = "SPS",
-   CurrentValue = 16,
+   CurrentValue = 10,
    Flag = "BridgeSpeed_Slider",
    Callback = function(Value)
       _G.EliteFlySpeed = Value -- Only update the global speed variable
