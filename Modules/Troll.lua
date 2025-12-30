@@ -108,9 +108,10 @@ local function EliteVerticalTween(amount)
     TweenService:Create(Root, info, {CFrame = targetCF}):Play()
 end
 
--- [[ ELITE PASSENGER MAGNET ENGINE (JITTER-PULL VERSION) ]]
+-- [[ ELITE PASSENGER MAGNET: STABILIZED JITTER-PULL ]]
 local PassengerMagnetActive = false
 local MagnetPlate = nil
+local MagnetConnection = nil
 
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
@@ -123,78 +124,86 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(9, 0.6, 11)
-        MagnetPlate.CanCollide = false 
+        MagnetPlate.Size = Vector3.new(10, 0.6, 12) -- Larger area for 5+ people
+        MagnetPlate.CanCollide = true 
         MagnetPlate.Massless = true 
         MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 0.5, 0)
         
-        -- ELITE FRICTION: Keep this high so others are PULLED
-        -- We can keep it high because you are going to "Ignore" it now.
-        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(0.5, 50, 0, 50, 50)
+        -- ELITE GRIP: Maximum friction for pulling power
+        MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
         MagnetPlate.Parent = Char
         
-        -- [[ THE "IGNORE ME" LOGIC ]]
-        -- Instead of just the RootPart, we loop through your WHOLE body.
-        for _, part in pairs(Char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local NoCol = Instance.new("NoCollisionConstraint")
-                NoCol.Part0 = MagnetPlate
-                NoCol.Part1 = part
-                NoCol.Parent = MagnetPlate
-            end
-        end
-        
+        -- WELD TO ROOT
         local Weld = Instance.new("WeldConstraint")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
         Weld.Parent = MagnetPlate
         
-        task.wait(0.1)
-        if MagnetPlate then MagnetPlate.CanCollide = true end
-        _G.EliteLog("Magnet Engaged: Character Isolation Active", "success")
+        -- [[ SHAKE FIX: PHASE-SHIFTING ]]
+        -- This ensures the plate NEVER touches YOUR body, but stays solid for OTHERS.
+        MagnetConnection = RunService.Stepped:Connect(function()
+            if not PassengerMagnetActive or not MagnetPlate or not Char then 
+                if MagnetConnection then MagnetConnection:Disconnect() end
+                return 
+            end
+            for _, part in pairs(Char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    -- Locally disable collision between you and your plate ONLY
+                    local noclip = Instance.new("NoCollisionConstraint")
+                    noclip.Part0 = MagnetPlate
+                    noclip.Part1 = part
+                    noclip.Parent = MagnetPlate
+                    game:GetService("Debris"):AddItem(noclip, 0.1) -- Refresh every frame
+                end
+            end
+        end)
+        
+        _G.EliteLog("Magnet: Jitter-Pull Engaged (R6/R15 Ready)", "success")
     else
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
-        _G.EliteLog("Magnet Disengaged", "info")
+        if MagnetConnection then MagnetConnection:Disconnect() end
+        _G.EliteLog("Magnet: Disengaged", "info")
     end
 end
 
--- Elite Jitter-Sync Loop (Claiming Network Ownership)
+-- [[ THE FINAL ELITE PULL & NETWORK HIJACK LOOP ]]
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
+            -- Get your current bridge speed
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
-            -- THE JITTER FACTOR: Small, high-speed oscillation to hijack physics
-            local jitter = Vector3.new(
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1
-            )
+            -- JITTER: The secret to stealing Network Ownership
+            local jitter = Vector3.new(math.random(-1,1)*0.1, 0, math.random(-1,1)*0.1)
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
                     local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
-                    if pRoot and pHum then
+                    if pRoot and pHum and pHum.Health > 0 then
+                        -- Detection for R6/R15 and large groups
                         local distance = (pRoot.Position - MagnetPlate.Position).Magnitude
                         
-                        -- Detection for multiple people (R6/R15)
-                        if distance < 8.5 then
-                            -- 1. THE MAGNETIC LOCK: Force their velocity to match yours + Jitter
-                            -- This "pulls" them along and prevents them from walking away.
+                        if distance < 9.5 then 
+                            -- 1. THE MAGNETIC LOCK: Drag them with your velocity
                             pRoot.AssemblyLinearVelocity = bridgeVel + jitter
                             
-                            -- 2. THE ANGLUAR JITTER: Keeps them from falling/tripping
-                            -- Setting this to a slight spin helps maintain the physics claim.
-                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 5, 0)
+                            -- 2. STABILITY: Stops R15/R6 from spinning off or tripping
+                            pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                             
-                            -- 3. FLOOR ADHESION: If they try to jump, pull them back down to the plate
-                            if pRoot.Position.Y > MagnetPlate.Position.Y + 2 then
-                                pRoot.AssemblyLinearVelocity = Vector3.new(bridgeVel.X, -20, bridgeVel.Z)
+                            -- 3. CARRY HEIGHT (ANTI-SINK): If they sink into the bridge, pop them up
+                            local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
+                            if relPos.Y < 0 then
+                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.6, 0)
                             end
-                            
-                            -- 4. R15 STABILITY: Disable falling states locally for targets
+
+                            -- 4. PULL DOWN: If they try to jump away, slam them back to the plate
+                            if relPos.Y > 4 then
+                                pRoot.AssemblyLinearVelocity = Vector3.new(bridgeVel.X, -30, bridgeVel.Z)
+                            end
+
+                            -- 5. STATE OVERRIDE: Prevent them from falling over on your back
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
