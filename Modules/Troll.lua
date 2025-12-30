@@ -28,12 +28,19 @@ local function SetBridgePose(active)
         end
         Hum.PlatformStand = true
     else
+        -- RETURNS TO NORMAL FORM (Keep this!)
         Hum.AutoRotate = true 
         for joint, c0 in pairs(original_joints) do
             if joint and joint.Parent then joint.C0 = c0 end
         end
         original_joints = {}
         Hum.PlatformStand = false
+        
+        -- Restore Collisions ONCE
+        for _, p in pairs(Char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = true end
+        end
+        
         Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end
@@ -123,12 +130,12 @@ local function TogglePassengerMagnet(Value)
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "ElitePassengerMagnet"
         MagnetPlate.Transparency = 1
-        MagnetPlate.Size = Vector3.new(9, 0.6, 11)
+        MagnetPlate.Size = Vector3.new(10, 0.6, 12)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         
         -- FIX: Height set to 1.1 studs above Root for R15/R6 clearance
-        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 1.1, 0)
+        MagnetPlate.CFrame = Root.CFrame * CFrame.new(0, 1.2, 0)
         
         -- STRENGTH: Maximum friction weight (100) for "Super Glue" effect
         MagnetPlate.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
@@ -158,41 +165,45 @@ local function TogglePassengerMagnet(Value)
     end
 end
 
--- Elite Jitter-Sync Loop (Box-Zone + Height Support)
+-- [[ ELITE SUPER-PULL: MULTI-USER & HEIGHT STABILIZED ]]
 task.spawn(function()
     _G.RunService.Heartbeat:Connect(function()
         if PassengerMagnetActive and MagnetPlate and LP.Character then
             local bridgeVel = (bridge_bv and bridge_bv.Velocity) or Vector3.zero
             
-            -- JITTER LOGIC (UNCHANGED AS REQUESTED)
-            local jitter = Vector3.new(
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1,
-                math.random(-1, 1) * 0.1
-            )
+            -- HIJACK JITTER: Increased frequency to dominate Network Ownership
+            local jitter = Vector3.new(math.random(-1,1)*0.2, 0, math.random(-1,1)*0.2)
             
             for _, p in pairs(game:GetService("Players"):GetPlayers()) do
                 if p ~= LP and p.Character then
                     local pRoot = p.Character:FindFirstChild("HumanoidRootPart")
                     local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                     
-                    if pRoot and pHum then
+                    if pRoot and pHum and pHum.Health > 0 then
+                        -- 1. BOX DETECTION (Supports 5+ people and any height)
                         local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                         
-                        -- Zone Check (X: 5, Z: 6, Y: -2 to 10)
-                        if math.abs(relPos.X) < 5 and math.abs(relPos.Z) < 6 and (relPos.Y > -2 and relPos.Y < 10) then
-                            -- 1. MAGNETIC LOCK
-                            pRoot.AssemblyLinearVelocity = bridgeVel + jitter
+                        -- Width: 6, Length: 8, Height: -2 to 12 (Massive detection zone)
+                        if math.abs(relPos.X) < 6 and math.abs(relPos.Z) < 8 and (relPos.Y > -2 and relPos.Y < 12) then
                             
-                            -- 2. ANGULAR LOCK
+                            -- 2. RELATIVE LOCK: They move with you + their own walk speed
+                            -- This is the "Strongest" pull: it forces their velocity to YOURS.
+                            pRoot.AssemblyLinearVelocity = bridgeVel + (pHum.MoveDirection * pHum.WalkSpeed) + jitter
+                            
+                            -- 3. ANTI-WOBBLE: Zeroes out rotation so R15/R6 don't trip each other
                             pRoot.AssemblyAngularVelocity = Vector3.zero
                             
-                            -- 3. FORCED ADHESION (Increased to -35 for Strength)
+                            -- 4. THE SUPER-SLAM: If they try to jump/fly away, slam them back
                             if relPos.Y > 2.5 then
-                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -35, 0)
+                                pRoot.AssemblyLinearVelocity = bridgeVel + Vector3.new(0, -45, 0)
+                            end
+
+                            -- 5. ANTI-SINK: If they glitch into your body, pop them up 1 stud
+                            if relPos.Y < 0 then
+                                pRoot.CFrame = pRoot.CFrame * CFrame.new(0, 0.8, 0)
                             end
                             
-                            -- 4. STATE LOCK
+                            -- 6. PHYSICS OVERRIDE: Prevent them from falling over
                             pHum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                             pHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
                         end
@@ -203,8 +214,32 @@ task.spawn(function()
     end)
 end)
 
+Tab:CreateSection("Helpful Features")
+Tab:CreateParagraph({
+    Title = "⚠️ Note",
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
+})
+Tab:CreateParagraph({
+    Title = "🧲 Magnet Instructions",
+    Content = "Enable NoClip before using the bridge to assist 'Flying Bridge' stability. It creates a high-friction zone on your back so passengers don't slide off."
+})
+task.spawn(function()
+    RunService.Stepped:Connect(function()
+        if _nc then
+            local c = LP.Character
+            if c then
+                for _, part in pairs(c:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end
+    end)
+end)
+
 Tab:CreateToggle({
-   Name = "Noclip",
+   Name = "Elite Noclip",
    CurrentValue = false,
    Flag = "NoclipToggle",
    Callback = function(Value)
