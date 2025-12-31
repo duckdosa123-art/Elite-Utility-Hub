@@ -109,7 +109,7 @@ end)
 
 local PassengerMagnetActive = false
 local MagnetPlate = nil
-local passengerOffsets = {} -- Stores where each player "landed" on your plate
+local passengerOffsets = {} 
 
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
@@ -120,8 +120,8 @@ local function TogglePassengerMagnet(Value)
         if MagnetPlate then MagnetPlate:Destroy() end 
         MagnetPlate = Instance.new("Part")
         MagnetPlate.Name = "EliteGodMagnet"
-        MagnetPlate.Transparency = 1 -- Set to 0.5 to see the "Capture Zone" during testing
-        MagnetPlate.Size = Vector3.new(15, 7, 15) -- Massive capture zone
+        MagnetPlate.Transparency = 1 
+        MagnetPlate.Size = Vector3.new(18, 10, 18) -- Increased vertical catch for R15
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.Parent = Char
@@ -129,17 +129,17 @@ local function TogglePassengerMagnet(Value)
         local Weld = Instance.new("Weld")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
-        Weld.C1 = CFrame.new(0, -2, 0) -- Deep "scoop" for short/R15 players
+        Weld.C1 = CFrame.new(0, -2.5, 0) -- Deeper scoop for short avatars
         Weld.Parent = MagnetPlate
         
-        _G.EliteLog("Magnet: God-Tier Projection Engaged", "success")
+        _G.EliteLog("Magnet: Multi-Passenger God Engine Active", "success")
     else
         passengerOffsets = {}
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
     end
 end
 
--- [[ ELITE GOD-SYNC ENGINE - VELOCITY PROJECTION ]]
+-- [[ ELITE GOD-SYNC ENGINE - V4 MULTI-PASSENGER ]]
 task.spawn(function()
     game:GetService("RunService").PreSimulation:Connect(function()
         if not PassengerMagnetActive or not MagnetPlate or not LP.Character then return end
@@ -153,38 +153,55 @@ task.spawn(function()
                 local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                 
                 if pRoot and pHum then
-                    -- 1. DETECTION (Relatively wide to catch "short" players)
                     local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    if math.abs(relPos.X) < 7.5 and math.abs(relPos.Z) < 7.5 and math.abs(relPos.Y) < 5 then
+                    -- DUAL-ZONE LOGIC: Use a larger exit boundary (12) than entry boundary (8)
+                    local isInside = math.abs(relPos.X) < 8 and math.abs(relPos.Z) < 8 and math.abs(relPos.Y) < 6
+                    local wasAlreadyLocked = passengerOffsets[p.UserId] ~= nil
+                    local stillInExitZone = math.abs(relPos.X) < 12 and math.abs(relPos.Z) < 12 and math.abs(relPos.Y) < 10
+
+                    if isInside or (wasAlreadyLocked and stillInExitZone) then
                         
-                        -- 2. THE "LOCK" (Assign them a local spot so they don't all bunch up in the center)
+                        -- 1. LOCK ASSIGNMENT
                         if not passengerOffsets[p.UserId] then
                             passengerOffsets[p.UserId] = relPos
                         end
                         
-                        -- 3. VELOCITY PROJECTION MATH
-                        -- We calculate the World Position where they SHOULD be
+                        -- 2. GHOST-PASSENGER (Nocontrols & Nocollision)
+                        -- Stops them from hitting YOU and EACH OTHER
+                        for _, part in pairs(p.Character:GetDescendants()) do
+                            if part:IsA("BasePart") then part.CanCollide = false end
+                        end
+
+                        -- 3. VELOCITY PROJECTION (Clamped to prevent flinging)
                         local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(passengerOffsets[p.UserId])
-                        
-                        -- The "Magic" Formula: (TargetPosition - CurrentPosition) * 60 (framerate)
-                        -- This forces the physics engine to move them to the target in exactly 1/60th of a second.
                         local diff = (targetWorldPos - pRoot.Position)
-                        local forceVelocity = diff * 45 -- 45 is the "Sweet Spot" for strength vs jitter
                         
-                        -- 4. APPLY THE FORCE
-                        pRoot.AssemblyLinearVelocity = forceVelocity + (MyRoot.AssemblyLinearVelocity * 1.1)
+                        -- Strong pull, but capped at 100 velocity to prevent "lag-flings"
+                        local snapVelocity = diff * 35
+                        local clampedSnap = Vector3.new(
+                            math.clamp(snapVelocity.X, -100, 100),
+                            math.clamp(snapVelocity.Y, -100, 100),
+                            math.clamp(snapVelocity.Z, -100, 100)
+                        )
+                        
+                        -- 4. APPLY ELITE FORCE
+                        -- We add 1.2x your velocity to ensure they stay "ahead" of your movement
+                        pRoot.AssemblyLinearVelocity = clampedSnap + (MyRoot.AssemblyLinearVelocity * 1.2)
                         pRoot.AssemblyAngularVelocity = MyRoot.AssemblyAngularVelocity
                         
-                        -- 5. ANTI-ESCAPE (Kill their controls)
-                        pHum.PlatformStand = true 
-                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 10, 0, 100, 100)
+                        -- 5. STATE HIJACK
+                        pHum.PlatformStand = true
+                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 0, 0, 100, 100)
                     else
-                        -- They left the zone, clear their lock
+                        -- CLEANUP: Restore player when they actually leave the large zone
                         if passengerOffsets[p.UserId] then
                             passengerOffsets[p.UserId] = nil
                             pHum.PlatformStand = false
                             pRoot.CustomPhysicalProperties = nil
+                            for _, part in pairs(p.Character:GetDescendants()) do
+                                if part:IsA("BasePart") then part.CanCollide = true end
+                            end
                         end
                     end
                 end
@@ -207,11 +224,6 @@ Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
     Title = "⚠️ Note",
     Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
-})
-
-Tab:CreateParagraph({
-    Title = "🧲 Magnet Instructions",
-    Content = "It creates a high-friction zone on your back so passengers don't slide off."
 })
 -- NoClip (from Movement.lua)
 task.spawn(function()
