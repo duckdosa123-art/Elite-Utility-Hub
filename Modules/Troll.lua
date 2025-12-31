@@ -109,7 +109,7 @@ end)
 
 local PassengerMagnetActive = false
 local MagnetPlate = nil
-local passengerOffsets = {} 
+local passengerOffsets = {} -- THE GLUE CACHE
 
 local function TogglePassengerMagnet(Value)
     PassengerMagnetActive = Value
@@ -119,9 +119,9 @@ local function TogglePassengerMagnet(Value)
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
         MagnetPlate = Instance.new("Part")
-        MagnetPlate.Name = "EliteGodMagnet"
+        MagnetPlate.Name = "EliteGlueZone"
         MagnetPlate.Transparency = 1 
-        MagnetPlate.Size = Vector3.new(18, 10, 18) -- Increased vertical catch for R15
+        MagnetPlate.Size = Vector3.new(20, 12, 20) -- Massive God-Zone
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.Parent = Char
@@ -129,18 +129,19 @@ local function TogglePassengerMagnet(Value)
         local Weld = Instance.new("Weld")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
-        Weld.C1 = CFrame.new(0, -2.5, 0) -- Deeper scoop for short avatars
+        Weld.C1 = CFrame.new(0, -3, 0) -- Deep capture to catch tiny avatars
         Weld.Parent = MagnetPlate
         
-        _G.EliteLog("Magnet: Multi-Passenger God Engine Active", "success")
+        _G.EliteLog("Magnet: CFrame-Glue Engaged (God Mode)", "success")
     else
         passengerOffsets = {}
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
     end
 end
 
--- [[ ELITE GOD-SYNC ENGINE - V4 MULTI-PASSENGER ]]
+-- [[ ELITE GOD-SYNC ENGINE - CFRAME GLUE V5 ]]
 task.spawn(function()
+    -- PreSimulation is the absolute best for CFrame snapping
     game:GetService("RunService").PreSimulation:Connect(function()
         if not PassengerMagnetActive or not MagnetPlate or not LP.Character then return end
         
@@ -153,52 +154,45 @@ task.spawn(function()
                 local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                 
                 if pRoot and pHum then
+                    -- Get player's position relative to your Magnet
                     local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    -- DUAL-ZONE LOGIC: Use a larger exit boundary (12) than entry boundary (8)
+                    -- DUAL-ZONE CHECK (8 studs to enter, 15 to escape)
                     local isInside = math.abs(relPos.X) < 8 and math.abs(relPos.Z) < 8 and math.abs(relPos.Y) < 6
                     local wasAlreadyLocked = passengerOffsets[p.UserId] ~= nil
-                    local stillInExitZone = math.abs(relPos.X) < 12 and math.abs(relPos.Z) < 12 and math.abs(relPos.Y) < 10
+                    local stillInZone = math.abs(relPos.X) < 15 and math.abs(relPos.Z) < 15 and math.abs(relPos.Y) < 10
 
-                    if isInside or (wasAlreadyLocked and stillInExitZone) then
+                    if isInside or (wasAlreadyLocked and stillInZone) then
                         
-                        -- 1. LOCK ASSIGNMENT
+                        -- 1. THE GLUE LOCK
+                        -- Store their EXACT offset the moment they touch the magnet
                         if not passengerOffsets[p.UserId] then
                             passengerOffsets[p.UserId] = relPos
                         end
                         
-                        -- 2. GHOST-PASSENGER (Nocontrols & Nocollision)
-                        -- Stops them from hitting YOU and EACH OTHER
+                        -- 2. GHOSTING (Mandatory for CFrame Glue)
+                        -- Disables collisions so they don't "fling" you while snapped
                         for _, part in pairs(p.Character:GetDescendants()) do
                             if part:IsA("BasePart") then part.CanCollide = false end
                         end
 
-                        -- 3. VELOCITY PROJECTION (Clamped to prevent flinging)
-                        local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(passengerOffsets[p.UserId])
-                        local diff = (targetWorldPos - pRoot.Position)
+                        -- 3. THE CFRAME SNAP (The "Nuclear" Option)
+                        -- This forces them to stay at their offset relative to your plate
+                        local targetCF = MagnetPlate.CFrame * CFrame.new(passengerOffsets[p.UserId])
+                        pRoot.CFrame = targetCF
                         
-                        -- Strong pull, but capped at 100 velocity to prevent "lag-flings"
-                        local snapVelocity = diff * 35
-                        local clampedSnap = Vector3.new(
-                            math.clamp(snapVelocity.X, -100, 100),
-                            math.clamp(snapVelocity.Y, -100, 100),
-                            math.clamp(snapVelocity.Z, -100, 100)
-                        )
+                        -- 4. VELOCITY SYNC (Satisfies the server)
+                        -- We still set velocity so their animations look semi-smooth to others
+                        pRoot.AssemblyLinearVelocity = MyRoot.AssemblyLinearVelocity
                         
-                        -- 4. APPLY ELITE FORCE
-                        -- We add 1.2x your velocity to ensure they stay "ahead" of your movement
-                        pRoot.AssemblyLinearVelocity = clampedSnap + (MyRoot.AssemblyLinearVelocity * 1.2)
-                        pRoot.AssemblyAngularVelocity = MyRoot.AssemblyAngularVelocity
-                        
-                        -- 5. STATE HIJACK
-                        pHum.PlatformStand = true
-                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 0, 0, 100, 100)
+                        -- 5. HIJACK CONTROLS
+                        pHum.PlatformStand = true 
                     else
-                        -- CLEANUP: Restore player when they actually leave the large zone
+                        -- RELEASE: Reset physics if they escape
                         if passengerOffsets[p.UserId] then
                             passengerOffsets[p.UserId] = nil
                             pHum.PlatformStand = false
-                            pRoot.CustomPhysicalProperties = nil
+                            pHum:ChangeState(Enum.HumanoidStateType.GettingUp)
                             for _, part in pairs(p.Character:GetDescendants()) do
                                 if part:IsA("BasePart") then part.CanCollide = true end
                             end
@@ -223,7 +217,7 @@ end
 Tab:CreateSection("Helpful Features")
 Tab:CreateParagraph({
     Title = "⚠️ Note",
-    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled."
+    Content = "The Flying Bridge only works if the game has 'Player Collisions' enabled!"
 })
 -- NoClip (from Movement.lua)
 task.spawn(function()
