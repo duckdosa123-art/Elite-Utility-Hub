@@ -119,9 +119,9 @@ local function TogglePassengerMagnet(Value)
     if Value and Root then
         if MagnetPlate then MagnetPlate:Destroy() end 
         MagnetPlate = Instance.new("Part")
-        MagnetPlate.Name = "ElitePowerMagnet"
+        MagnetPlate.Name = "EliteJitterZone"
         MagnetPlate.Transparency = 1 
-        MagnetPlate.Size = Vector3.new(20, 8, 20) -- Massive capture zone
+        MagnetPlate.Size = Vector3.new(20, 10, 20)
         MagnetPlate.CanCollide = false 
         MagnetPlate.Massless = true
         MagnetPlate.Parent = Char
@@ -129,23 +129,29 @@ local function TogglePassengerMagnet(Value)
         local Weld = Instance.new("Weld")
         Weld.Part0 = Root
         Weld.Part1 = MagnetPlate
-        Weld.C1 = CFrame.new(0, -2.5, 0) -- Deep scoop for short/R15 players
+        Weld.C1 = CFrame.new(0, -2.5, 0) -- Positioned to catch all rig sizes
         Weld.Parent = MagnetPlate
         
-        _G.EliteLog("Magnet: High-Gain Suction Engaged", "success")
+        _G.EliteLog("Magnet: Physics Hijack Engaged", "success")
     else
         passengerOffsets = {}
         if MagnetPlate then MagnetPlate:Destroy() MagnetPlate = nil end
     end
 end
 
--- [[ ELITE GOD-SYNC ENGINE - V6 HIGH-GAIN ]]
+-- [[ ELITE GOD-SYNC ENGINE - V7 JITTER-GLUE ]]
 task.spawn(function()
-    game:GetService("RunService").PreSimulation:Connect(function()
+    game:GetService("RunService").Heartbeat:Connect(function()
         if not PassengerMagnetActive or not MagnetPlate or not LP.Character then return end
         
-        local MyRoot = LP.Character:FindFirstChild("HumanoidRootPart")
-        if not MyRoot then return end
+        local MyChar = LP.Character
+        local MyRoot = MyChar:FindFirstChild("HumanoidRootPart")
+        local MyHum = MyChar:FindFirstChildOfClass("Humanoid")
+        if not MyRoot or not MyHum then return end
+
+        -- IMMEDIATE TRIGGER: Check if we are moving
+        local isMoving = MyHum.MoveDirection.Magnitude > 0
+        local myVel = MyRoot.AssemblyLinearVelocity
 
         for _, p in pairs(game.Players:GetPlayers()) do
             if p ~= LP and p.Character then
@@ -155,57 +161,47 @@ task.spawn(function()
                 if pRoot and pHum then
                     local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    -- Capture Zone (8x8) and Stay Zone (15x15)
-                    local isInside = math.abs(relPos.X) < 8 and math.abs(relPos.Z) < 8 and math.abs(relPos.Y) < 6
-                    local wasAlreadyLocked = passengerOffsets[p.UserId] ~= nil
-                    local stillInExitZone = math.abs(relPos.X) < 15 and math.abs(relPos.Z) < 15 and math.abs(relPos.Y) < 10
-
-                    if isInside or (wasAlreadyLocked and stillInExitZone) then
+                    -- Capture: 9 studs | Stay: 16 studs
+                    if math.abs(relPos.X) < 9 and math.abs(relPos.Z) < 9 and math.abs(relPos.Y) < 6 or passengerOffsets[p.UserId] then
                         
-                        -- 1. ASSIGN LOCK (Prevents multiple people from clumping)
+                        -- 1. THE GLUE LOCK
                         if not passengerOffsets[p.UserId] then
                             passengerOffsets[p.UserId] = relPos
                         end
-                        
-                        -- 2. PASSENGER GHOSTING (Crucial for Multi-Person)
-                        -- This stops passengers from colliding with each other or YOU
-                        for _, part in pairs(p.Character:GetDescendants()) do
-                            if part:IsA("BasePart") and part.CanCollide then 
-                                part.CanCollide = false 
-                            end
-                        end
 
-                        -- 3. THE POWER PULL (High-Gain math)
+                        -- 2. THE JITTER (Physics Hijack)
+                        -- Tiny, high-frequency vibration keeps their physics engine "awake"
+                        local jitter = Vector3.new(
+                            math.random(-100, 100)/2000, 
+                            0.01, -- Slight upward lift to break friction
+                            math.random(-100, 100)/2000
+                        )
+
+                        -- 3. THE INSTANT PULL
                         local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(passengerOffsets[p.UserId])
                         local diff = (targetWorldPos - pRoot.Position)
                         
-                        -- We use a high multiplier (65) to snap them back instantly
-                        local correctionVelocity = diff * 65 
-                        
-                        -- 4. OVERPOWERING THE ENGINE
-                        -- We take your velocity and add 20% to it. 
-                        -- This "Injects" extra momentum so they never slip off the back.
-                        local finalVelocity = (MyRoot.AssemblyLinearVelocity * 1.2) + correctionVelocity
-                        
-                        pRoot.AssemblyLinearVelocity = finalVelocity
+                        -- If we are moving, we apply a massive "Boost" to kill the delay
+                        local movementBoost = isMoving and (MyHum.MoveDirection * 5) or Vector3.zero
+                        local pullForce = diff * 50
+
+                        -- 4. APPLY THE HIJACKED VELOCITY
+                        -- Combined: Your Real Velocity + The Glue Pull + Jitter + Instant Move Boost
+                        pRoot.AssemblyLinearVelocity = myVel + pullForce + jitter + movementBoost
                         pRoot.AssemblyAngularVelocity = MyRoot.AssemblyAngularVelocity
-                        
-                        -- 5. HIJACK THE STATE
-                        -- Physics state disables their walking/jumping logic entirely
+
+                        -- 5. THE ESCAPE-PROOF STATE
+                        -- Force "Physics" state so their movement keys are ignored
                         if pHum:GetState() ~= Enum.HumanoidStateType.Physics then
                             pHum:ChangeState(Enum.HumanoidStateType.Physics)
                         end
                         
-                        -- Infinite friction and zero elasticity so they "stick"
-                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 10, 0, 100, 100)
-                    else
-                        -- RELEASE: Restore when they actually leave the zone
-                        if passengerOffsets[p.UserId] then
-                            passengerOffsets[p.UserId] = nil
-                            pHum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                            for _, part in pairs(p.Character:GetDescendants()) do
-                                if part:IsA("BasePart") then part.CanCollide = true end
-                            end
+                        -- Infinite friction so they don't slide
+                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 20, 0, 100, 100)
+                        
+                        -- 6. BREAK-OUT CHECK
+                        if diff.Magnitude > 15 then -- If they get too far (lag), reset lock
+                            passengerOffsets[p.UserId] = nil 
                         end
                     end
                 end
