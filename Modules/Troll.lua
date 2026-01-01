@@ -139,19 +139,23 @@ local function TogglePassengerMagnet(Value)
     end
 end
 
--- [[ ELITE GOD-SYNC ENGINE - V7 JITTER-GLUE ]]
+-- [[ ELITE GOD-SYNC ENGINE - MULTI-MAGNET V8 ]]
+TrollEngine.PassengerOffsets = {} -- Ensure this is initialized in your script
+
 task.spawn(function()
     game:GetService("RunService").Heartbeat:Connect(function()
-        if not PassengerMagnetActive or not MagnetPlate or not LP.Character then return end
+        if not PassengerMagnetActive or not MagnetPlate or not LP.Character then 
+            TrollEngine.PassengerOffsets = {} -- Clear offsets when off
+            return 
+        end
         
         local MyChar = LP.Character
         local MyRoot = MyChar:FindFirstChild("HumanoidRootPart")
         local MyHum = MyChar:FindFirstChildOfClass("Humanoid")
         if not MyRoot or not MyHum then return end
 
-        -- IMMEDIATE TRIGGER: Check if we are moving
-        local isMoving = MyHum.MoveDirection.Magnitude > 0
         local myVel = MyRoot.AssemblyLinearVelocity
+        local myMoveDir = MyHum.MoveDirection
 
         for _, p in pairs(game.Players:GetPlayers()) do
             if p ~= LP and p.Character then
@@ -161,47 +165,57 @@ task.spawn(function()
                 if pRoot and pHum then
                     local relPos = MagnetPlate.CFrame:PointToObjectSpace(pRoot.Position)
                     
-                    -- Capture: 9 studs | Stay: 16 studs
-                    if math.abs(relPos.X) < 9 and math.abs(relPos.Z) < 9 and math.abs(relPos.Y) < 6 or passengerOffsets[p.UserId] then
+                    -- Capture: 10 studs | Stay: 18 studs
+                    local dist = (MagnetPlate.Position - pRoot.Position).Magnitude
+                    if dist < 10 or TrollEngine.PassengerOffsets[p.UserId] then
                         
-                        -- 1. THE GLUE LOCK
-                        if not passengerOffsets[p.UserId] then
-                            passengerOffsets[p.UserId] = relPos
+                        -- 1. ASSIGN LOCK (If not already locked)
+                        if not TrollEngine.PassengerOffsets[p.UserId] then
+                            TrollEngine.PassengerOffsets[p.UserId] = relPos
                         end
 
-                        -- 2. THE JITTER (Physics Hijack)
-                        -- Tiny, high-frequency vibration keeps their physics engine "awake"
+                        -- 2. THE JITTER (Crucial for Multi-Player Physics Sync)
+                        -- We use a high-frequency sine wave to vibrate them slightly
+                        -- This prevents the "Network Ownership" from putting them to sleep
+                        local jitterClock = tick() * 120
                         local jitter = Vector3.new(
-                            math.random(-100, 100)/2000, 
-                            0.01, -- Slight upward lift to break friction
-                            math.random(-100, 100)/2000
+                            math.sin(jitterClock) * 0.05, 
+                            0.08, -- Constant tiny lift to reduce floor friction
+                            math.cos(jitterClock) * 0.05
                         )
 
-                        -- 3. THE INSTANT PULL
-                        local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(passengerOffsets[p.UserId])
+                        -- 3. CALCULATE GLUE FORCE
+                        local targetWorldPos = MagnetPlate.CFrame:PointToWorldSpace(TrollEngine.PassengerOffsets[p.UserId])
                         local diff = (targetWorldPos - pRoot.Position)
                         
-                        -- If we are moving, we apply a massive "Boost" to kill the delay
-                        local movementBoost = isMoving and (MyHum.MoveDirection * 5) or Vector3.zero
-                        local pullForce = diff * 50
+                        -- Massive force if they are drifting, plus matching YOUR speed
+                        -- This "Matches" your movement so they don't slide off when you turn
+                        local pullForce = diff * 45 
+                        
+                        -- 4. APPLY SYNCED VELOCITY
+                        -- Logic: [Your Velocity] + [The Pull toward Plate] + [HighFreq Jitter]
+                        pRoot.AssemblyLinearVelocity = myVel + pullForce + jitter
+                        pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0) -- Stops them from spinning out
 
-                        -- 4. APPLY THE HIJACKED VELOCITY
-                        -- Combined: Your Real Velocity + The Glue Pull + Jitter + Instant Move Boost
-                        pRoot.AssemblyLinearVelocity = myVel + pullForce + jitter + movementBoost
-                        pRoot.AssemblyAngularVelocity = MyRoot.AssemblyAngularVelocity
-
-                        -- 5. THE ESCAPE-PROOF STATE
-                        -- Force "Physics" state so their movement keys are ignored
+                        -- 5. THE STATE OVERRIDE
+                        -- We force Physics state every frame to ensure they can't walk away
                         if pHum:GetState() ~= Enum.HumanoidStateType.Physics then
                             pHum:ChangeState(Enum.HumanoidStateType.Physics)
                         end
+                                
+                        -- Remove friction so they don't get stuck on walls/floor
+                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+                                
+                        for _, part in pairs(p.Character:GetDescendants()) do
+                            if part:IsA("BasePart") then 
+                                part.CanCollide = false 
+                            end
+                        end
                         
-                        -- Infinite friction so they don't slide
-                        pRoot.CustomPhysicalProperties = PhysicalProperties.new(100, 20, 0, 100, 100)
-                        
-                        -- 6. BREAK-OUT CHECK
-                        if diff.Magnitude > 15 then -- If they get too far (lag), reset lock
-                            passengerOffsets[p.UserId] = nil 
+                        -- 6. BREAK-AWAY (Safety)
+                        -- If they lag more than 20 studs away, release the lock so they don't rubberband
+                        if diff.Magnitude > 20 then
+                            TrollEngine.PassengerOffsets[p.UserId] = nil 
                         end
                     end
                 end
