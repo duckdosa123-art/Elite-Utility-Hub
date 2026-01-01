@@ -470,7 +470,7 @@ Tab:CreateButton({
 -- 3. ELITE FEATURES
 Tab:CreateSection("Fun Features")
 
--- 1. ELITE ORBIT (Customizable)
+-- 1. ELITE ORBIT (Fixed Rotation & Safety)
 Tab:CreateToggle({
     Name = "Elite Orbit",
     CurrentValue = false,
@@ -478,25 +478,46 @@ Tab:CreateToggle({
         TrollEngine.OrbitActive = Value
         ManageTrollPlatform(Value)
         local angle = 0
+        
         task.spawn(function()
             while TrollEngine.OrbitActive do
-                if TrollEngine.Target and TrollEngine.Target.Character then
-                    local HRP = LP.Character:FindFirstChild("HumanoidRootPart")
-                    local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
-                    if HRP and THRP then
-                        angle = angle + TrollEngine.OrbitSpeed
-                        local TargetPos = THRP.CFrame
-                        -- Orbit Position
-                        HRP.CFrame = TargetPos * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, TrollEngine.OrbitHeight, TrollEngine.OrbitDistance)
-                        
-                        -- Safety Part: Syncs to Target Y but stays under the PLAYER
-                        if TrollEngine.VoidPart then
-                            TrollEngine.VoidPart.CFrame = CFrame.new(HRP.Position.X, THRP.Position.Y - 3.5, HRP.Position.Z)
-                        end
+                -- Crash-Proofing: Check if target still exists
+                if not TrollEngine.Target or not TrollEngine.Target.Parent or not TrollEngine.Target.Character then
+                    TrollEngine.OrbitActive = false
+                    Rayfield:Notify({Title = "Orbit Stopped", Content = "Target left the server.", Duration = 3})
+                    break
+                end
+
+                local char = LP.Character
+                local HRP = char and char:FindFirstChild("HumanoidRootPart")
+                local THRP = TrollEngine.Target.Character:FindFirstChild("HumanoidRootPart")
+
+                if HRP and THRP then
+                    angle = angle + (TrollEngine.OrbitSpeed or 2)
+                    
+                    -- FIX: Use CFrame.new(THRP.Position) so target turning doesn't affect orbit path
+                    local centerPoint = CFrame.new(THRP.Position)
+                    local orbitOffset = CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, TrollEngine.OrbitHeight or 0, TrollEngine.OrbitDistance or 5)
+                    
+                    -- Physics: Zero out velocity to prevent "flinging" or falling through floor on exit
+                    HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    HRP.CFrame = centerPoint * orbitOffset
+                    
+                    -- Safety Platform: Follows exactly under the player
+                    if TrollEngine.VoidPart then
+                        TrollEngine.VoidPart.CFrame = HRP.CFrame * CFrame.new(0, -3.5, 0)
                     end
                 end
                 RunService.Heartbeat:Wait()
             end
+            
+            -- Exit Logic: Stop the character from falling into the void when orbit ends
+            local char = LP.Character
+            local HRP = char and char:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            end
+            ManageTrollPlatform(false)
         end)
     end,
 })
@@ -517,6 +538,7 @@ Tab:CreateSlider({
 })
 
 -- 2. ELITE MIMIC (Void Safe)
+-- 2. ELITE MIMIC (R6 Emote & Joint Sync)
 TrollEngine.MimicTracks = {}
 
 Tab:CreateToggle({
@@ -533,36 +555,38 @@ Tab:CreateToggle({
         local MyAnimator = Hum and Hum:FindFirstChildOfClass("Animator")
         
         if Value and HRP and Hum then
-            -- 1. SETUP: Ghost Physics & State Suppression
+            -- 1. SETUP: Physics & State
             for _, v in pairs(Char:GetDescendants()) do
                 if v:IsA("BasePart") then v.Massless = true end
             end
             
-            -- ELITE FIX: Kill the standing force to stop floating
             Hum.PlatformStand = true
             Hum.AutoRotate = false
 
-            -- 2. TRIPLE-LAYER NOCLIP
-            local mimicNoclip = RunService.Stepped:Connect(function()
-                if not TrollEngine.MimicActive or not Char then return end
+            -- 2. NOCLIP & JOINT SYNC (Stepped is best for Motor6Ds)
+            local mimicConnection = RunService.Stepped:Connect(function()
+                if not TrollEngine.MimicActive or not Char or not TrollEngine.Target then return end
+                
+                local TargetChar = TrollEngine.Target.Character
+                if not TargetChar then return end
+
+                -- Noclip
                 for _, part in pairs(Char:GetDescendants()) do
-                    if part:IsA("BasePart") then 
-                        part.CanCollide = false 
-                        part.CanTouch = false 
-                        part.CanQuery = false 
-                    end
+                    if part:IsA("BasePart") then part.CanCollide = false end
                 end
                 
-                if TrollEngine.Target and TrollEngine.Target.Character then
-                    for _, part in pairs(TrollEngine.Target.Character:GetDescendants()) do
-                        if part:IsA("BasePart") then 
-                            part.CanCollide = false 
-                            part.CanTouch = false 
+                -- ELITE R6 SYNC: Copy Joint Rotations (The "Emote" logic)
+                for _, motor in pairs(Char:GetDescendants()) do
+                    if motor:IsA("Motor6D") then
+                        local targetMotor = TargetChar:FindFirstChild(motor.Name, true)
+                        if targetMotor and targetMotor:IsA("Motor6D") then
+                            -- This forces your joints to match their emote pose exactly
+                            motor.Transform = targetMotor.Transform
                         end
                     end
                 end
             end)
-            table.insert(TrollEngine.Connections, mimicNoclip)
+            table.insert(TrollEngine.Connections, mimicConnection)
 
             task.spawn(function()
                 while TrollEngine.MimicActive do
@@ -571,39 +595,23 @@ Tab:CreateToggle({
                     local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
                     
                     if HRP and THRP and Hum and THum then
-                        -- ELITE FIX: Sync HipHeight to prevent floating offset
-                        Hum.HipHeight = THum.HipHeight
-                        for _, Scale in pairs(THum:GetChildren()) do
-                            if Scale:IsA("NumberValue") then -- Matches Height, Width, Depth, HeadScale
-                                local MyScale = Hum:FindFirstChild(Scale.Name)
-                                if MyScale then
-                                    MyScale.Value = Scale.Value
-                                end
-                            end
-                        end
-
-                        -- 3. ELITE POSITIONING
+                        -- 3. POSITIONING
+                        HRP.AssemblyLinearVelocity = Vector3.zero -- Prevents falling through floor
+                        
                         if TrollEngine.MimicDistance == 0 then
-                            -- Use exact CFrame; the PlatformStand handles the "floating" error
                             HRP.CFrame = THRP.CFrame
-                            -- Force Physics state to prevent Humanoid from trying to "climb" the target
                             Hum:ChangeState(Enum.HumanoidStateType.Physics)
                         else
                             local offsetPos = (THRP.CFrame * CFrame.new(0, 0, TrollEngine.MimicDistance)).Position
                             HRP.CFrame = CFrame.lookAt(offsetPos, THRP.Position)
                         end
                         
-                        -- 4. VELOCITY ANCHOR
-                        HRP.AssemblyLinearVelocity = Vector3.zero
-                        HRP.AssemblyAngularVelocity = Vector3.zero
-                        
-                        -- 5. SAFETY PLATFORM
+                        -- 4. SAFETY PLATFORM
                         if TrollEngine.VoidPart then
-                            TrollEngine.VoidPart.CanCollide = (TrollEngine.MimicDistance ~= 0)
-                            TrollEngine.VoidPart.CFrame = CFrame.new(HRP.Position.X, THRP.Position.Y - 3.5, HRP.Position.Z)
+                            TrollEngine.VoidPart.CFrame = HRP.CFrame * CFrame.new(0, -3.5, 0)
                         end
 
-                        -- 6. ANIMATION MIRRORING
+                        -- 5. ANIMATION TRACK SYNC
                         local TAnimator = THum:FindFirstChildOfClass("Animator")
                         if TAnimator and MyAnimator then
                             local PlayingTracks = TAnimator:GetPlayingAnimationTracks()
@@ -619,13 +627,15 @@ Tab:CreateToggle({
                                 local MyTrack = TrollEngine.MimicTracks[AnimID]
                                 MyTrack.TimePosition = TTrack.TimePosition
                                 MyTrack:AdjustSpeed(TTrack.Speed)
+                                MyTrack:AdjustWeight(TTrack.WeightCurrent)
                             end
+                            -- Stop tracks the target stopped
                             for ID, MyTrack in pairs(TrollEngine.MimicTracks) do
-                                local isStillPlaying = false
+                                local stillPlaying = false
                                 for _, TTrack in pairs(PlayingTracks) do
-                                    if TTrack.Animation.AnimationId == ID then isStillPlaying = true break end
+                                    if TTrack.Animation.AnimationId == ID then stillPlaying = true break end
                                 end
-                                if not isStillPlaying then 
+                                if not stillPlaying then 
                                     MyTrack:Stop() 
                                     TrollEngine.MimicTracks[ID] = nil 
                                 end
@@ -636,22 +646,14 @@ Tab:CreateToggle({
                 end
             end)
         else
-            -- 7. CLEANUP & RESTORATION
+            -- CLEANUP
             TrollEngine.MimicActive = false
-            
-            for _, conn in pairs(TrollEngine.Connections) do
-                pcall(function() conn:Disconnect() end)
-            end
+            for _, conn in pairs(TrollEngine.Connections) do pcall(function() conn:Disconnect() end) end
             TrollEngine.Connections = {}
 
             if Char then
                 for _, v in pairs(Char:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = true
-                        v.CanTouch = true
-                        v.CanQuery = true
-                        v.Massless = false
-                    end
+                    if v:IsA("BasePart") then v.CanCollide = true v.Massless = false end
                 end
             end
             
@@ -660,10 +662,10 @@ Tab:CreateToggle({
                 Hum.AutoRotate = true
                 Hum:ChangeState(Enum.HumanoidStateType.GettingUp) 
             end
+            if HRP then HRP.AssemblyLinearVelocity = Vector3.zero end
 
             for _, Track in pairs(TrollEngine.MimicTracks) do pcall(function() Track:Stop() end) end
             TrollEngine.MimicTracks = {}
-            _G.EliteLog("Mimic Disengaged", "info")
         end
     end,
 })
