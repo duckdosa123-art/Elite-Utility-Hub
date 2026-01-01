@@ -590,6 +590,11 @@ Tab:CreateToggle({
 
             task.spawn(function()
                 while TrollEngine.MimicActive do
+                    if not TrollEngine.Target or not TrollEngine.Target.Parent or not TrollEngine.Target.Character then
+                        TrollEngine.MimicActive = false
+                        Rayfield:Notify({Title = "Mimic Stopped", Content = "Target left the server.", Duration = 3})
+                        break
+                    end
                     local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
                     local THum = TargetChar and TargetChar:FindFirstChildOfClass("Humanoid")
                     local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
@@ -673,7 +678,7 @@ Tab:CreateSlider({
     Name = "Mimic Distance Offset",
     Range = {-20, 20},
     Increment = 1,
-    CurrentValue = 0,
+    CurrentValue = -5,
     Callback = function(Value) TrollEngine.MimicDistance = Value end,
 })
 
@@ -742,6 +747,11 @@ Tab:CreateToggle({
             -- 3. MAIN LOOP: CFrame Lock & Animation
             task.spawn(function()
                 while TrollEngine.HeadSitActive do
+                    if not TrollEngine.Target or not TrollEngine.Target.Parent or not TrollEngine.Target.Character then
+                        TrollEngine.HeadSitActive = false
+                        Rayfield:Notify({Title = "Head-Sit Stopped", Content = "Target left the server.", Duration = 3})
+                        break
+                    end
                     local TargetChar = TrollEngine.Target and TrollEngine.Target.Character
                     local THRP = TargetChar and TargetChar:FindFirstChild("HumanoidRootPart")
                     local THead = TargetChar and TargetChar:FindFirstChild("Head")
@@ -873,7 +883,7 @@ Tab:CreateSlider({
     Name = "Platform Transparency",
     Range = {0, 1},
     Increment = 0.1,
-    CurrentValue = 0.8,
+    CurrentValue = 0.5,
     Callback = function(Value)
         TrollEngine.PlatformTransparency = Value
         if TrollEngine.VoidPart then
