@@ -678,7 +678,7 @@ Tab:CreateSlider({
     Name = "Mimic Distance Offset",
     Range = {-20, 20},
     Increment = 1,
-    CurrentValue = -5,
+    CurrentValue = 0,
     Callback = function(Value) TrollEngine.MimicDistance = Value end,
 })
 
