@@ -876,107 +876,105 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- [[ ELITE MARBLE LOGIC ]]
-TrollEngine.MarbleActive = false
+-- [[ ELITE STICKY MARBLE (FLING EDITION) ]]
+TrollEngine.StickyMarbleActive = false
 local MarblePart = nil
 
 Tab:CreateToggle({
-    Name = "Elite Marble",
+    Name = "Sticky Marble (Yes you can fling players too)",
     CurrentValue = false,
     Callback = function(Value)
-        TrollEngine.MarbleActive = Value
+        TrollEngine.StickyMarbleActive = Value
         local Char = LP.Character
         local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
 
         if Value and HRP and Hum then
-            -- Create the Marble
+            -- 1. CREATE THE CHAOS SPHERE
             MarblePart = Instance.new("Part")
-            MarblePart.Name = "EliteMarble"
+            MarblePart.Name = "EliteStickyMarble"
             MarblePart.Shape = Enum.PartType.Ball
-            MarblePart.Size = Vector3.new(8, 8, 8)
+            MarblePart.Size = Vector3.new(10, 10, 10) -- Bigger for more "Squeeze"
             MarblePart.Transparency = 0.5
-            MarblePart.Color = Color3.fromRGB(0, 255, 255)
-            MarblePart.Material = Enum.Material.Glass
+            MarblePart.Color = Color3.fromRGB(255, 0, 0) -- Red for Danger
+            MarblePart.Material = Enum.Material.Neon
             MarblePart.Parent = workspace
             MarblePart.CFrame = HRP.CFrame
             MarblePart.CanCollide = true
-            MarblePart.Massless = false
-            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 0.5, 0, 1, 1) -- High friction for rolling
+            -- Elite Physics: High Friction + High Elasticity = Flinging
+            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 1, 1, 1, 1)
 
             task.spawn(function()
-                while TrollEngine.MarbleActive and MarblePart and HRP do
-                    -- 1. CHARACTER SETUP
-                    -- Character stays inside the ball but doesn't collide with it
+                while TrollEngine.StickyMarbleActive and MarblePart and HRP do
+                    -- 2. LOCK PLAYER INSIDE
                     HRP.CFrame = MarblePart.CFrame
                     for _, v in pairs(Char:GetDescendants()) do
                         if v:IsA("BasePart") then v.CanCollide = false end
                     end
-                    Hum.PlatformStand = true -- Make the player floppy inside
+                    Hum.PlatformStand = true
 
-                    -- 2. ROLLING PHYSICS (Mobile & PC Friendly)
+                    -- 3. TORQUE ROLLING (Movement)
                     local moveDir = Hum.MoveDirection
+                    local ballVel = MarblePart.AssemblyLinearVelocity
+                    
                     if moveDir.Magnitude > 0 then
-                        -- Apply torque (spin) to the ball to make it roll in the direction you move
+                        -- Apply heavy spin to the ball
                         local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
-                        MarblePart.AssemblyAngularVelocity = torqueDirection * 20
+                        MarblePart.AssemblyAngularVelocity = torqueDirection * 35 -- Insane spin speed
                     end
 
-                    -- 3. SPEED CAP (Prevents flinging too hard)
-                    if MarblePart.AssemblyLinearVelocity.Magnitude > 50 then
-                        MarblePart.AssemblyLinearVelocity = MarblePart.AssemblyLinearVelocity.Unit * 50
-                    end
-
-                    RunService.Heartbeat:Wait()
-                end
-
-                -- Cleanup
-                if MarblePart then MarblePart:Destroy() end
-                if Hum then Hum.PlatformStand = false end
-                for _, v in pairs(Char:GetDescendants()) do
-                    if v:IsA("BasePart") then v.CanCollide = true end
-                end
-            end)
-        else
-            TrollEngine.MarbleActive = false
-        end
-    end,
-})
-
--- [[ KATAMARI UPGRADE (Add-on for Marble) ]]
-Tab:CreateToggle({
-    Name = "Elite Sticky Marble (Stick Players)",
-    CurrentValue = false,
-    Callback = function(Value)
-        TrollEngine.KatamariActive = Value
-        task.spawn(function()
-            while TrollEngine.KatamariActive and TrollEngine.MarbleActive do
-                if MarblePart then
+                    -- 4. STICKY & FLING LOGIC
                     for _, p in pairs(game.Players:GetPlayers()) do
                         if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                             local pRoot = p.Character.HumanoidRootPart
+                            local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                             local dist = (MarblePart.Position - pRoot.Position).Magnitude
                             
-                            if dist < 6 then -- If they touch the ball
-                                -- Lock them to the ball's surface
+                            -- If they are within sticking range
+                            if dist < 8 then 
+                                -- A. STICK (Katamari Offset)
                                 if not TrollEngine.PassengerOffsets[p.UserId] then
                                     TrollEngine.PassengerOffsets[p.UserId] = MarblePart.CFrame:PointToObjectSpace(pRoot.Position)
                                 end
                                 
-                                pRoot.CFrame = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
-                                pRoot.AssemblyLinearVelocity = MarblePart.AssemblyLinearVelocity
-                                p.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+                                -- B. THE SQUEEZE (Force them to hit the ground while attached)
+                                local targetPos = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
+                                pRoot.CFrame = targetPos
+                                
+                                -- C. THE FLING (Apply massive velocity based on roll speed)
+                                -- Base fling of 100 + Marble's current speed
+                                local flingPower = 100 + (ballVel.Magnitude * 2)
+                                local flingDir = (pRoot.Position - MarblePart.Position).Unit + Vector3.new(0, 0.5, 0)
+                                
+                                pRoot.AssemblyLinearVelocity = flingDir * flingPower
+                                
+                                -- Force Physics state so they don't auto-recover
+                                if pHum then pHum:ChangeState(Enum.HumanoidStateType.Physics) end
+                            else
+                                -- Reset offset if they escape/get flung away
+                                TrollEngine.PassengerOffsets[p.UserId] = nil
                             end
                         end
                     end
+                    RunService.Heartbeat:Wait()
                 end
-                RunService.Heartbeat:Wait()
-            end
-            TrollEngine.PassengerOffsets = {}
-        end)
+
+                -- CLEANUP
+                if MarblePart then MarblePart:Destroy() end
+                if Hum then 
+                    Hum.PlatformStand = false 
+                    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+                for _, v in pairs(Char:GetDescendants()) do
+                    if v:IsA("BasePart") then v.CanCollide = true end
+                end
+                TrollEngine.PassengerOffsets = {}
+            end)
+        else
+            TrollEngine.StickyMarbleActive = false
+        end
     end,
 })
-
 Tab:CreateSection("Safety Platform Settings")
 
 Tab:CreateSlider({
