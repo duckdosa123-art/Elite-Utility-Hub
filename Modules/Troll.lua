@@ -876,88 +876,104 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- ELITE ZERO-G ZONE
-TrollEngine.ZeroGRange = 15
-TrollEngine.ZeroGPower = 25
-TrollEngine.ZeroGSpin = false
--- ELITE ZERO-G ZONE
+-- [[ ELITE MARBLE LOGIC ]]
+TrollEngine.MarbleActive = false
+local MarblePart = nil
+
 Tab:CreateToggle({
-    Name = "Elite Zero-G Zone",
+    Name = "Elite Marble",
     CurrentValue = false,
     Callback = function(Value)
-        TrollEngine.ZeroGActive = Value
+        TrollEngine.MarbleActive = Value
+        local Char = LP.Character
+        local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+        local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+
+        if Value and HRP and Hum then
+            -- Create the Marble
+            MarblePart = Instance.new("Part")
+            MarblePart.Name = "EliteMarble"
+            MarblePart.Shape = Enum.PartType.Ball
+            MarblePart.Size = Vector3.new(8, 8, 8)
+            MarblePart.Transparency = 0.5
+            MarblePart.Color = Color3.fromRGB(0, 255, 255)
+            MarblePart.Material = Enum.Material.Glass
+            MarblePart.Parent = workspace
+            MarblePart.CFrame = HRP.CFrame
+            MarblePart.CanCollide = true
+            MarblePart.Massless = false
+            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 0.5, 0, 1, 1) -- High friction for rolling
+
+            task.spawn(function()
+                while TrollEngine.MarbleActive and MarblePart and HRP do
+                    -- 1. CHARACTER SETUP
+                    -- Character stays inside the ball but doesn't collide with it
+                    HRP.CFrame = MarblePart.CFrame
+                    for _, v in pairs(Char:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
+                    end
+                    Hum.PlatformStand = true -- Make the player floppy inside
+
+                    -- 2. ROLLING PHYSICS (Mobile & PC Friendly)
+                    local moveDir = Hum.MoveDirection
+                    if moveDir.Magnitude > 0 then
+                        -- Apply torque (spin) to the ball to make it roll in the direction you move
+                        local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
+                        MarblePart.AssemblyAngularVelocity = torqueDirection * 20
+                    end
+
+                    -- 3. SPEED CAP (Prevents flinging too hard)
+                    if MarblePart.AssemblyLinearVelocity.Magnitude > 50 then
+                        MarblePart.AssemblyLinearVelocity = MarblePart.AssemblyLinearVelocity.Unit * 50
+                    end
+
+                    RunService.Heartbeat:Wait()
+                end
+
+                -- Cleanup
+                if MarblePart then MarblePart:Destroy() end
+                if Hum then Hum.PlatformStand = false end
+                for _, v in pairs(Char:GetDescendants()) do
+                    if v:IsA("BasePart") then v.CanCollide = true end
+                end
+            end)
+        else
+            TrollEngine.MarbleActive = false
+        end
+    end,
+})
+
+-- [[ KATAMARI UPGRADE (Add-on for Marble) ]]
+Tab:CreateToggle({
+    Name = "Elite Sticky Marble (Stick Players)",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.KatamariActive = Value
         task.spawn(function()
-            while TrollEngine.ZeroGActive do
-                local MyChar = LP.Character
-                local MyRoot = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
-                if not MyRoot then task.wait() continue end
-
-                for _, p in pairs(game.Players:GetPlayers()) do
-                    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                        local pRoot = p.Character.HumanoidRootPart
-                        local pHum = p.Character:FindFirstChildOfClass("Humanoid")
-                        local dist = (MyRoot.Position - pRoot.Position).Magnitude
-
-                        -- Use Customizable Range
-                        if dist < (TrollEngine.ZeroGRange or 15) then 
-                            -- 1. THE ANTI-GRAVITY LIFT
-                            local floatJitter = math.sin(tick() * 8) * 3
-                            pRoot.AssemblyLinearVelocity = Vector3.new(
-                                pRoot.AssemblyLinearVelocity.X, 
-                                (TrollEngine.ZeroGPower or 25) + floatJitter, 
-                                pRoot.AssemblyLinearVelocity.Z
-                            )
-
-                            -- 2. THE STATE LOCK
-                            if pHum and pHum:GetState() ~= Enum.HumanoidStateType.Freefall then
-                                pHum:ChangeState(Enum.HumanoidStateType.Freefall)
-                            end
+            while TrollEngine.KatamariActive and TrollEngine.MarbleActive do
+                if MarblePart then
+                    for _, p in pairs(game.Players:GetPlayers()) do
+                        if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                            local pRoot = p.Character.HumanoidRootPart
+                            local dist = (MarblePart.Position - pRoot.Position).Magnitude
                             
-                            -- 3. OPTIONAL SPACE SPIN
-                            if TrollEngine.ZeroGSpin then
-                                pRoot.AssemblyAngularVelocity = Vector3.new(1, 2, 1)
-                            else
-                                pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            if dist < 6 then -- If they touch the ball
+                                -- Lock them to the ball's surface
+                                if not TrollEngine.PassengerOffsets[p.UserId] then
+                                    TrollEngine.PassengerOffsets[p.UserId] = MarblePart.CFrame:PointToObjectSpace(pRoot.Position)
+                                end
+                                
+                                pRoot.CFrame = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
+                                pRoot.AssemblyLinearVelocity = MarblePart.AssemblyLinearVelocity
+                                p.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
                             end
                         end
                     end
                 end
                 RunService.Heartbeat:Wait()
             end
+            TrollEngine.PassengerOffsets = {}
         end)
-    end,
-})
-
--- Customization: Range Slider
-Tab:CreateSlider({
-    Name = "Zero-G Range",
-    Range = {5, 50},
-    Increment = 1,
-    Suffix = "Studs",
-    CurrentValue = 15,
-    Callback = function(Value)
-        TrollEngine.ZeroGRange = Value
-    end,
-})
-
--- Customization: Power Slider (Intensity)
-Tab:CreateSlider({
-    Name = "Zero-G Power",
-    Range = {10, 100},
-    Increment = 1,
-    Suffix = "Force",
-    CurrentValue = 25,
-    Callback = function(Value)
-        TrollEngine.ZeroGPower = Value
-    end,
-})
-
--- Customization: Space Spin Toggle
-Tab:CreateToggle({
-    Name = "Zero-G Spin Effect",
-    CurrentValue = false,
-    Callback = function(Value)
-        TrollEngine.ZeroGSpin = Value
     end,
 })
 
