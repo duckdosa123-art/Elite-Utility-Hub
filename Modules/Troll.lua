@@ -876,11 +876,11 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- [[ ELITE MARBLE - STABLE PHYSICS EDITION ]]
+-- [[ ELITE STICKY MARBLE - FINAL JUICY VERSION ]]
 local MarblePart = nil
 local MarbleColor = Color3.fromRGB(0, 255, 255)
 
--- 1. Color Customization
+-- 1. COLOR PICKER
 Tab:CreateColorPicker({
     Name = "Marble Color",
     Color = Color3.fromRGB(0, 255, 255),
@@ -890,7 +890,7 @@ Tab:CreateColorPicker({
     end
 })
 
--- 2. Marble Toggle
+-- 2. THE MARBLE TOGGLE
 Tab:CreateToggle({
     Name = "Elite Marble",
     CurrentValue = false,
@@ -899,73 +899,67 @@ Tab:CreateToggle({
         local Char = LP.Character
         local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-        
-        -- Get the RootJoint (Works for R6 and R15)
-        local RootJoint = Char and (Char:FindFirstChild("RootJoint", true) or Char:FindFirstChild("Root Hip", true))
 
-        if Value and HRP and Hum and RootJoint then
+        if Value and HRP and Hum then
+            -- A. CALCULATE HEIGHT (Rig-Agnostic)
             local groundOffset = Hum.HipHeight + (HRP.Size.Y / 2)
             local ballSize = 10
-            local ballRadius = ballSize / 2
-
-            -- 1. VISUALS: The "Juicy Shine"
+            
+            -- B. CREATE THE MARBLE (Juicy Visuals)
             MarblePart = Instance.new("Part")
             MarblePart.Name = "EliteMarble"
             MarblePart.Shape = Enum.PartType.Ball
             MarblePart.Size = Vector3.new(ballSize, ballSize, ballSize)
             MarblePart.Transparency = 0.5
-            MarblePart.Reflectance = 0.3 -- This adds the "Juicy" shine
+            MarblePart.Reflectance = 0.3 -- The JUICY Shine
+            MarblePart.Material = Enum.Material.Glass
             MarblePart.Color = MarbleColor
-            MarblePart.Material = Enum.Material.Glass 
+            MarblePart.CanCollide = true
             MarblePart.Parent = workspace
             
-            -- Physics: High density for smoothness
+            -- C. PHYSICS (Smooth & Heavy)
             MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 0, 0, 100, 100)
             
-            local spawnPos = HRP.Position - Vector3.new(0, groundOffset, 0) + Vector3.new(0, ballRadius, 0)
+            -- D. SPAWN (Safe Height)
             HRP.AssemblyLinearVelocity = Vector3.zero
-            MarblePart.CFrame = CFrame.new(spawnPos)
+            MarblePart.CFrame = HRP.CFrame * CFrame.new(0, groundOffset, 0)
 
             task.spawn(function()
-                local originalC0 = RootJoint.C0
-                
                 while TrollEngine.MarbleActive and MarblePart and HRP do
-                    -- 2. CAMERA FIX: Keep HRP rotation fixed (Upright)
-                    -- This stops the wobble. The camera follows the HRP.
-                    local moveDir = Hum.MoveDirection
-                    local currentRot = HRP.CFrame - HRP.Position
-                    HRP.CFrame = CFrame.new(MarblePart.Position) * currentRot
+                    -- 1. CAMERA FIX: Lock position to ball, but keep HRP rotation upright
+                    -- This prevents the camera from wobbling or spinning
+                    HRP.CFrame = CFrame.new(MarblePart.Position) * (HRP.CFrame.Rotation)
                     
-                    -- 3. CHARACTER TUMBLE: Rotate the character's body inside the ball
-                    -- We copy the Marble's rotation and apply it to the RootJoint
-                    local ballRotation = MarblePart.CFrame - MarblePart.Position
-                    RootJoint.Transform = ballRotation:Inverse() 
-
+                    -- 2. RIG SETUP
                     Hum.PlatformStand = true
                     for _, v in pairs(Char:GetDescendants()) do
-                        if v:IsA("BasePart") then v.CanCollide = false v.Massless = true end
+                        if v:IsA("BasePart") then 
+                            v.CanCollide = false 
+                            v.Massless = true 
+                        end
                     end
 
+                    -- 3. MOVEMENT (Speed 30)
+                    local moveDir = Hum.MoveDirection
                     local currentVel = MarblePart.AssemblyLinearVelocity
                     
                     if moveDir.Magnitude > 0 then
-                        -- 4. SPEED FIX: Start from 30
+                        -- Smooth Lerp for the "Marble Feel"
                         local targetVel = moveDir * 30 
-                        local newVel = currentVel:Lerp(Vector3.new(targetVel.X, currentVel.Y, targetVel.Z), 0.1)
-                        MarblePart.AssemblyLinearVelocity = newVel
+                        MarblePart.AssemblyLinearVelocity = currentVel:Lerp(Vector3.new(targetVel.X, currentVel.Y, targetVel.Z), 0.1)
                         
-                        -- Rolling Torque
+                        -- Rolling spin effect
                         local torqueDir = Vector3.new(currentVel.Z, 0, -currentVel.X)
                         MarblePart.AssemblyAngularVelocity = torqueDir * 2.5
                     else
-                        -- Coasting stop
+                        -- Coasting stop (2 seconds)
                         MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X * 0.98, currentVel.Y, currentVel.Z * 0.98)
                         MarblePart.AssemblyAngularVelocity = MarblePart.AssemblyAngularVelocity * 0.98
                     end
 
-                    -- Jump Logic
+                    -- Jump Support
                     if Hum.Jump and math.abs(currentVel.Y) < 0.2 then
-                        MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X, 35, currentVel.Z)
+                        MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X, 40, currentVel.Z)
                     end
 
                     RunService.Heartbeat:Wait()
@@ -973,8 +967,10 @@ Tab:CreateToggle({
 
                 -- CLEANUP
                 if MarblePart then MarblePart:Destroy() end
-                if RootJoint then RootJoint.Transform = CFrame.new() end
-                if Hum then Hum.PlatformStand = false Hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+                if Hum then 
+                    Hum.PlatformStand = false 
+                    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
                 for _, v in pairs(Char:GetDescendants()) do
                     if v:IsA("BasePart") then v.CanCollide = true v.Massless = false end
                 end
