@@ -876,106 +876,81 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- [[ ELITE STICKY MARBLE - RIG-AGNOSTIC EDITION ]]
-TrollEngine.StickyMarbleActive = false
+-- [[ ELITE MARBLE - STEP 1: BASE SHELL & COLOR ]]
 local MarblePart = nil
+local MarbleColor = Color3.fromRGB(0, 255, 255) -- Default Color
 
+-- 1. Color Picker (Add this before the toggle so the color is ready)
+Tab:CreateColorPicker({
+    Name = "Marble Color",
+    Color = Color3.fromRGB(0, 255, 255),
+    Callback = function(Value)
+        MarbleColor = Value
+        if MarblePart then
+            MarblePart.Color = Value
+        end
+    end
+})
+
+-- 2. Marble Toggle
 Tab:CreateToggle({
-    Name = "Sticky Marble (Yes you can fling players too)",
+    Name = "Elite Marble Shell",
     CurrentValue = false,
     Callback = function(Value)
-        TrollEngine.StickyMarbleActive = Value
+        TrollEngine.MarbleActive = Value
+        
         local Char = LP.Character
         local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
 
         if Value and HRP and Hum then
-            -- 1. CALCULATE SCALE-BASED SPAWN
-            -- HipHeight + half of RootPart size = distance from center to floor
-            local groundOffset = Hum.HipHeight + (HRP.Size.Y / 2)
-            local marbleSize = 10 -- We can make this dynamic too if needed
-            local marbleRadius = marbleSize / 2
-            
+            -- Create the Marble Part
             MarblePart = Instance.new("Part")
-            MarblePart.Name = "EliteStickyMarble"
+            MarblePart.Name = "EliteMarble"
             MarblePart.Shape = Enum.PartType.Ball
-            MarblePart.Size = Vector3.new(marbleSize, marbleSize, marbleSize)
+            
+            -- DYNAMIC SIZING: Adjust ball size based on character height
+            -- This ensures tall players fit inside
+            local charHeight = Hum.HipHeight + (HRP.Size.Y * 2)
+            local ballSize = math.clamp(charHeight * 2.5, 10, 50) 
+            
+            MarblePart.Size = Vector3.new(ballSize, ballSize, ballSize)
             MarblePart.Transparency = 0.5
-            MarblePart.Color = Color3.fromRGB(255, 0, 0)
-            MarblePart.Material = Enum.Material.Neon
+            MarblePart.Color = MarbleColor
+            MarblePart.Material = Enum.Material.Glass
+            MarblePart.CanCollide = true
             MarblePart.Parent = workspace
             
-            -- THE DYNAMIC FIX: 
-            -- We place the ball's center at: (Player Floor Position) + (Ball Radius)
-            -- This ensures the ball ALWAYS sits perfectly on the floor regardless of character height.
-            local spawnPos = HRP.Position - Vector3.new(0, groundOffset, 0) + Vector3.new(0, marbleRadius, 0)
-            
-            HRP.AssemblyLinearVelocity = Vector3.zero 
-            MarblePart.CFrame = CFrame.new(spawnPos)
-            
-            MarblePart.CanCollide = true
-            MarblePart.Massless = false
-            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 1, 1, 1, 1)
+            -- INITIAL POSITION: Set to character center
+            MarblePart.CFrame = HRP.CFrame
 
             task.spawn(function()
-                while TrollEngine.StickyMarbleActive and MarblePart and HRP do
-                    -- 2. LOCK PLAYER INSIDE
-                    -- Match rotation to ball but keep character upright inside for better visuals
-                    HRP.CFrame = MarblePart.CFrame 
-                    HRP.AssemblyLinearVelocity = Vector3.zero 
-                    
-                    for _, v in pairs(Char:GetDescendants()) do
-                        if v:IsA("BasePart") then v.CanCollide = false end
-                    end
-                    Hum.PlatformStand = true
-
-                    -- 3. TORQUE ROLLING
-                    local moveDir = Hum.MoveDirection
-                    if moveDir.Magnitude > 0 then
-                        -- Torque speed scales slightly with rig height to feel "heavy" or "light"
-                        local torqueSpeed = 35 + (Hum.HipHeight * 2) 
-                        local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
-                        MarblePart.AssemblyAngularVelocity = torqueDirection * torqueSpeed 
-                    end
-
-                    -- 4. STICKY & FLING LOGIC (Using dynamic radii)
-                    local ballVel = MarblePart.AssemblyLinearVelocity
-                    for _, p in pairs(game.Players:GetPlayers()) do
-                        if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local pRoot = p.Character.HumanoidRootPart
-                            local pHum = p.Character:FindFirstChildOfClass("Humanoid")
-                            local dist = (MarblePart.Position - pRoot.Position).Magnitude
-                            
-                            -- Sticking distance is radius + 3
-                            if dist < (marbleRadius + 3) then 
-                                if not TrollEngine.PassengerOffsets[p.UserId] then
-                                    TrollEngine.PassengerOffsets[p.UserId] = MarblePart.CFrame:PointToObjectSpace(pRoot.Position)
-                                end
-                                
-                                pRoot.CFrame = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
-                                
-                                local flingPower = 100 + (ballVel.Magnitude * 2.5)
-                                local flingDir = (pRoot.Position - MarblePart.Position).Unit + Vector3.new(0, 0.5, 0)
-                                pRoot.AssemblyLinearVelocity = flingDir * flingPower
-                                if pHum then pHum:ChangeState(Enum.HumanoidStateType.Physics) end
-                            else
-                                TrollEngine.PassengerOffsets[p.UserId] = nil
+                while TrollEngine.MarbleActive and MarblePart and LP.Character do
+                    local CurrentHRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                    if CurrentHRP then
+                        -- FIX: Keep marble centered on character
+                        MarblePart.CFrame = CurrentHRP.CFrame
+                        
+                        -- FIX: Noclip the character so they don't fight the ball's physics
+                        for _, part in pairs(LP.Character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
                             end
                         end
                     end
-                    RunService.Heartbeat:Wait()
+                    RunService.RenderStepped:Wait()
                 end
 
-                -- CLEANUP
+                -- CLEANUP: When toggle is off
                 if MarblePart then MarblePart:Destroy() end
-                if Hum then Hum.PlatformStand = false Hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
-                for _, v in pairs(Char:GetDescendants()) do
-                    if v:IsA("BasePart") then v.CanCollide = true end
+                for _, part in pairs(LP.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
                 end
-                TrollEngine.PassengerOffsets = {}
             end)
         else
-            TrollEngine.StickyMarbleActive = false
+            TrollEngine.MarbleActive = false
         end
     end,
 })
