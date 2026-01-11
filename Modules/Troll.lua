@@ -891,7 +891,6 @@ Tab:CreateColorPicker({
 })
 
 -- 2. Marble Toggle
--- [[ ELITE MARBLE - HIGH-CONTROL PHYSICS ]]
 Tab:CreateToggle({
     Name = "Elite Marble",
     CurrentValue = false,
@@ -915,8 +914,8 @@ Tab:CreateToggle({
             MarblePart.Material = Enum.Material.Glass
             MarblePart.Parent = workspace
             
-            -- CONTROL FIX: High friction, Zero bounce, and High Density so it feels "Heavy" and stable
-            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(2, 0, 0, 10, 10)
+            -- MARBLE PHYSICS: Medium Friction and lower Density allows for "Coasting"
+            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.1, 0, 1, 1)
             
             local spawnPos = HRP.Position - Vector3.new(0, groundOffset, 0) + Vector3.new(0, ballRadius, 0)
             HRP.AssemblyLinearVelocity = Vector3.zero
@@ -931,31 +930,33 @@ Tab:CreateToggle({
                         if v:IsA("BasePart") then v.CanCollide = false v.Massless = true end
                     end
 
-                    -- 1. DIRECTIONAL CONTROL
                     local moveDir = Hum.MoveDirection
                     local currentVel = MarblePart.AssemblyLinearVelocity
                     
                     if moveDir.Magnitude > 0 then
-                        -- A. THE SPIN (Visual Rolling)
-                        local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
-                        MarblePart.AssemblyAngularVelocity = torqueDirection * 30
+                        -- 1. SMOOTH ACCELERATION & TURNING
+                        -- Instead of snapping, we Lerp (Interpolate) the velocity
+                        -- 0.07 makes it feel heavy and takes time to reach top speed
+                        local targetVel = moveDir * 55
+                        local newVel = currentVel:Lerp(Vector3.new(targetVel.X, currentVel.Y, targetVel.Z), 0.07)
                         
-                        -- B. THE PUSH (Direct Control)
-                        -- This forces the ball to move where you point the joystick
-                        local targetVelocity = moveDir * 45 -- Change 45 to adjust max speed
-                        MarblePart.AssemblyLinearVelocity = Vector3.new(targetVelocity.X, currentVel.Y, targetVelocity.Z)
+                        MarblePart.AssemblyLinearVelocity = newVel
+                        
+                        -- 2. DYNAMIC TORQUE
+                        -- Spinning speed matches the actual velocity for realism
+                        local torqueDir = Vector3.new(currentVel.Z, 0, -currentVel.X)
+                        MarblePart.AssemblyAngularVelocity = torqueDir * 1.5
                     else
-                        -- C. THE BRAKES (Stops the ball from rolling away when you let go)
-                        MarblePart.AssemblyAngularVelocity = MarblePart.AssemblyAngularVelocity * 0.85
-                        MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X * 0.9, currentVel.Y, currentVel.Z * 0.9)
+                        -- 3. THE "COASTING" EFFECT
+                        -- Friction 0.98 is very subtle; it takes ~2-3 seconds to fully stop
+                        -- This gives it that heavy rolling marble feel
+                        MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X * 0.985, currentVel.Y, currentVel.Z * 0.985)
+                        MarblePart.AssemblyAngularVelocity = MarblePart.AssemblyAngularVelocity * 0.985
                     end
 
-                    -- 2. JUMP SUPPORT (Elite Addition)
-                    -- Allows the marble to hop over obstacles
-                    if Hum.Jump then
-                        if math.abs(currentVel.Y) < 0.1 then -- Only jump if on ground
-                            MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X, 40, currentVel.Z)
-                        end
+                    -- 4. JUMPING (Preserves momentum)
+                    if Hum.Jump and math.abs(currentVel.Y) < 0.2 then
+                        MarblePart.AssemblyLinearVelocity = Vector3.new(currentVel.X, 45, currentVel.Z)
                     end
 
                     RunService.Heartbeat:Wait()
@@ -969,7 +970,7 @@ Tab:CreateToggle({
                 end
             end)
         else
-            TrollEngine.MarbleActive = false
+            TrollEngine.StickyMarbleActive = false
         end
     end,
 })
