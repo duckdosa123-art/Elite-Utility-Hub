@@ -876,7 +876,7 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- [[ ELITE STICKY MARBLE (FLING EDITION) ]]
+-- [[ ELITE STICKY MARBLE - RIG-AGNOSTIC EDITION ]]
 TrollEngine.StickyMarbleActive = false
 local MarblePart = nil
 
@@ -890,68 +890,75 @@ Tab:CreateToggle({
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
 
         if Value and HRP and Hum then
-            -- 1. CREATE THE CHAOS SPHERE
+            -- 1. CALCULATE SCALE-BASED SPAWN
+            -- HipHeight + half of RootPart size = distance from center to floor
+            local groundOffset = Hum.HipHeight + (HRP.Size.Y / 2)
+            local marbleSize = 10 -- We can make this dynamic too if needed
+            local marbleRadius = marbleSize / 2
+            
             MarblePart = Instance.new("Part")
             MarblePart.Name = "EliteStickyMarble"
             MarblePart.Shape = Enum.PartType.Ball
-            MarblePart.Size = Vector3.new(10, 10, 10) -- Bigger for more "Squeeze"
+            MarblePart.Size = Vector3.new(marbleSize, marbleSize, marbleSize)
             MarblePart.Transparency = 0.5
-            MarblePart.Color = Color3.fromRGB(255, 0, 0) -- Red for Danger
+            MarblePart.Color = Color3.fromRGB(255, 0, 0)
             MarblePart.Material = Enum.Material.Neon
             MarblePart.Parent = workspace
-            MarblePart.CFrame = HRP.CFrame
+            
+            -- THE DYNAMIC FIX: 
+            -- We place the ball's center at: (Player Floor Position) + (Ball Radius)
+            -- This ensures the ball ALWAYS sits perfectly on the floor regardless of character height.
+            local spawnPos = HRP.Position - Vector3.new(0, groundOffset, 0) + Vector3.new(0, marbleRadius, 0)
+            
+            HRP.AssemblyLinearVelocity = Vector3.zero 
+            MarblePart.CFrame = CFrame.new(spawnPos)
+            
             MarblePart.CanCollide = true
-            -- Elite Physics: High Friction + High Elasticity = Flinging
+            MarblePart.Massless = false
             MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 1, 1, 1, 1)
 
             task.spawn(function()
                 while TrollEngine.StickyMarbleActive and MarblePart and HRP do
                     -- 2. LOCK PLAYER INSIDE
-                    HRP.CFrame = MarblePart.CFrame
+                    -- Match rotation to ball but keep character upright inside for better visuals
+                    HRP.CFrame = MarblePart.CFrame 
+                    HRP.AssemblyLinearVelocity = Vector3.zero 
+                    
                     for _, v in pairs(Char:GetDescendants()) do
                         if v:IsA("BasePart") then v.CanCollide = false end
                     end
                     Hum.PlatformStand = true
 
-                    -- 3. TORQUE ROLLING (Movement)
+                    -- 3. TORQUE ROLLING
                     local moveDir = Hum.MoveDirection
-                    local ballVel = MarblePart.AssemblyLinearVelocity
-                    
                     if moveDir.Magnitude > 0 then
-                        -- Apply heavy spin to the ball
+                        -- Torque speed scales slightly with rig height to feel "heavy" or "light"
+                        local torqueSpeed = 35 + (Hum.HipHeight * 2) 
                         local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
-                        MarblePart.AssemblyAngularVelocity = torqueDirection * 35 -- Insane spin speed
+                        MarblePart.AssemblyAngularVelocity = torqueDirection * torqueSpeed 
                     end
 
-                    -- 4. STICKY & FLING LOGIC
+                    -- 4. STICKY & FLING LOGIC (Using dynamic radii)
+                    local ballVel = MarblePart.AssemblyLinearVelocity
                     for _, p in pairs(game.Players:GetPlayers()) do
                         if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                             local pRoot = p.Character.HumanoidRootPart
                             local pHum = p.Character:FindFirstChildOfClass("Humanoid")
                             local dist = (MarblePart.Position - pRoot.Position).Magnitude
                             
-                            -- If they are within sticking range
-                            if dist < 8 then 
-                                -- A. STICK (Katamari Offset)
+                            -- Sticking distance is radius + 3
+                            if dist < (marbleRadius + 3) then 
                                 if not TrollEngine.PassengerOffsets[p.UserId] then
                                     TrollEngine.PassengerOffsets[p.UserId] = MarblePart.CFrame:PointToObjectSpace(pRoot.Position)
                                 end
                                 
-                                -- B. THE SQUEEZE (Force them to hit the ground while attached)
-                                local targetPos = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
-                                pRoot.CFrame = targetPos
+                                pRoot.CFrame = MarblePart.CFrame:ToWorldSpace(CFrame.new(TrollEngine.PassengerOffsets[p.UserId]))
                                 
-                                -- C. THE FLING (Apply massive velocity based on roll speed)
-                                -- Base fling of 100 + Marble's current speed
-                                local flingPower = 100 + (ballVel.Magnitude * 2)
+                                local flingPower = 100 + (ballVel.Magnitude * 2.5)
                                 local flingDir = (pRoot.Position - MarblePart.Position).Unit + Vector3.new(0, 0.5, 0)
-                                
                                 pRoot.AssemblyLinearVelocity = flingDir * flingPower
-                                
-                                -- Force Physics state so they don't auto-recover
                                 if pHum then pHum:ChangeState(Enum.HumanoidStateType.Physics) end
                             else
-                                -- Reset offset if they escape/get flung away
                                 TrollEngine.PassengerOffsets[p.UserId] = nil
                             end
                         end
@@ -961,10 +968,7 @@ Tab:CreateToggle({
 
                 -- CLEANUP
                 if MarblePart then MarblePart:Destroy() end
-                if Hum then 
-                    Hum.PlatformStand = false 
-                    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                end
+                if Hum then Hum.PlatformStand = false Hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
                 for _, v in pairs(Char:GetDescendants()) do
                     if v:IsA("BasePart") then v.CanCollide = true end
                 end
