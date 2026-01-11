@@ -928,8 +928,15 @@ Tab:CreateToggle({
                 while TrollEngine.MarbleActive and MarblePart and HRP do
                     -- 1. CAMERA FIX: Lock position to ball, but keep HRP rotation upright
                     -- This prevents the camera from wobbling or spinning
-                    HRP.CFrame = CFrame.new(MarblePart.Position) * (HRP.CFrame.Rotation)
+                    HRP.CFrame = CFrame.new(MarblePart.Position) * HRP.CFrame.Rotation
                     
+                    -- 2. CHARACTER TUMBLE (Only the body tilts, not the camera)
+                    local RootJoint = Char:FindFirstChild("RootJoint", true) or Char:FindFirstChild("Root Hip", true)
+                    if RootJoint then
+                        -- We take the Marble's current rotation and apply it to the body joint
+                        local marbleRotation = MarblePart.CFrame - MarblePart.Position
+                        RootJoint.Transform = marbleRotation:Inverse()
+                    end
                     -- 2. RIG SETUP
                     Hum.PlatformStand = true
                     for _, v in pairs(Char:GetDescendants()) do
@@ -967,6 +974,11 @@ Tab:CreateToggle({
 
                 -- CLEANUP
                 if MarblePart then MarblePart:Destroy() end
+                local RootJoint = Char and (Char:FindFirstChild("RootJoint", true) or Char:FindFirstChild("Root Hip", true))
+                if RootJoint then 
+                    RootJoint.Transform = CFrame.new() 
+                end
+                
                 if Hum then 
                     Hum.PlatformStand = false 
                     Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
