@@ -876,6 +876,90 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
+-- ELITE ZERO-G ZONE
+TrollEngine.ZeroGRange = 15
+TrollEngine.ZeroGPower = 25
+TrollEngine.ZeroGSpin = false
+-- ELITE ZERO-G ZONE
+Tab:CreateToggle({
+    Name = "Elite Zero-G Zone",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.ZeroGActive = Value
+        task.spawn(function()
+            while TrollEngine.ZeroGActive do
+                local MyChar = LP.Character
+                local MyRoot = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
+                if not MyRoot then task.wait() continue end
+
+                for _, p in pairs(game.Players:GetPlayers()) do
+                    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        local pRoot = p.Character.HumanoidRootPart
+                        local pHum = p.Character:FindFirstChildOfClass("Humanoid")
+                        local dist = (MyRoot.Position - pRoot.Position).Magnitude
+
+                        -- Use Customizable Range
+                        if dist < (TrollEngine.ZeroGRange or 15) then 
+                            -- 1. THE ANTI-GRAVITY LIFT
+                            local floatJitter = math.sin(tick() * 8) * 3
+                            pRoot.AssemblyLinearVelocity = Vector3.new(
+                                pRoot.AssemblyLinearVelocity.X, 
+                                (TrollEngine.ZeroGPower or 25) + floatJitter, 
+                                pRoot.AssemblyLinearVelocity.Z
+                            )
+
+                            -- 2. THE STATE LOCK
+                            if pHum and pHum:GetState() ~= Enum.HumanoidStateType.Freefall then
+                                pHum:ChangeState(Enum.HumanoidStateType.Freefall)
+                            end
+                            
+                            -- 3. OPTIONAL SPACE SPIN
+                            if TrollEngine.ZeroGSpin then
+                                pRoot.AssemblyAngularVelocity = Vector3.new(1, 2, 1)
+                            else
+                                pRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            end
+                        end
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end,
+})
+
+-- Customization: Range Slider
+Tab:CreateSlider({
+    Name = "Zero-G Range",
+    Range = {5, 50},
+    Increment = 1,
+    Suffix = "Studs",
+    CurrentValue = 15,
+    Callback = function(Value)
+        TrollEngine.ZeroGRange = Value
+    end,
+})
+
+-- Customization: Power Slider (Intensity)
+Tab:CreateSlider({
+    Name = "Zero-G Power",
+    Range = {10, 100},
+    Increment = 1,
+    Suffix = "Force",
+    CurrentValue = 25,
+    Callback = function(Value)
+        TrollEngine.ZeroGPower = Value
+    end,
+})
+
+-- Customization: Space Spin Toggle
+Tab:CreateToggle({
+    Name = "Zero-G Spin Effect",
+    CurrentValue = false,
+    Callback = function(Value)
+        TrollEngine.ZeroGSpin = Value
+    end,
+})
 
 Tab:CreateSection("Safety Platform Settings")
 
