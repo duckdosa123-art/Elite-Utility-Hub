@@ -876,76 +876,95 @@ Tab:CreateSlider({
     Callback = function(Value) TrollEngine.LagFloat = Value end,
 })
 
--- [[ ELITE MARBLE - STEP 1: BASE SHELL & COLOR ]]
+-- [[ ELITE MARBLE - STABLE PHYSICS EDITION ]]
 local MarblePart = nil
-local MarbleColor = Color3.fromRGB(0, 255, 255) -- Default Color
+local MarbleColor = Color3.fromRGB(0, 255, 255)
 
--- 1. Color Picker (Add this before the toggle so the color is ready)
+-- 1. Color Customization
 Tab:CreateColorPicker({
     Name = "Marble Color",
     Color = Color3.fromRGB(0, 255, 255),
     Callback = function(Value)
         MarbleColor = Value
-        if MarblePart then
-            MarblePart.Color = Value
-        end
+        if MarblePart then MarblePart.Color = Value end
     end
 })
 
 -- 2. Marble Toggle
 Tab:CreateToggle({
-    Name = "Elite Marble Shell",
+    Name = "Elite Marble",
     CurrentValue = false,
     Callback = function(Value)
         TrollEngine.MarbleActive = Value
-        
         local Char = LP.Character
         local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
         local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
 
         if Value and HRP and Hum then
-            -- Create the Marble Part
+            -- A. CALCULATE HEIGHT TO PREVENT BOUNCING/VOID
+            local groundOffset = Hum.HipHeight + (HRP.Size.Y / 2)
+            local ballSize = 10 -- Solid size that fits most rigs
+            local ballRadius = ballSize / 2
+
+            -- B. CREATE THE MARBLE
             MarblePart = Instance.new("Part")
             MarblePart.Name = "EliteMarble"
             MarblePart.Shape = Enum.PartType.Ball
-            
-            -- DYNAMIC SIZING: Adjust ball size based on character height
-            -- This ensures tall players fit inside
-            local charHeight = Hum.HipHeight + (HRP.Size.Y * 2)
-            local ballSize = math.clamp(charHeight * 2.5, 10, 50) 
-            
             MarblePart.Size = Vector3.new(ballSize, ballSize, ballSize)
             MarblePart.Transparency = 0.5
             MarblePart.Color = MarbleColor
             MarblePart.Material = Enum.Material.Glass
-            MarblePart.CanCollide = true
             MarblePart.Parent = workspace
             
-            -- INITIAL POSITION: Set to character center
-            MarblePart.CFrame = HRP.CFrame
+            -- C. PHYSICS PROPERTIES (The fix for "Bouncing")
+            -- Friction = 1, Elasticity = 0 (Zero bounce), FrictionWeight = 1, ElasticityWeight = 1
+            MarblePart.CustomPhysicalProperties = PhysicalProperties.new(1, 0, 0, 1, 1)
+            
+            -- D. SPAWN EXACTLY AT FLOOR LEVEL
+            local spawnPos = HRP.Position - Vector3.new(0, groundOffset, 0) + Vector3.new(0, ballRadius, 0)
+            HRP.AssemblyLinearVelocity = Vector3.zero
+            MarblePart.CFrame = CFrame.new(spawnPos)
 
             task.spawn(function()
-                while TrollEngine.MarbleActive and MarblePart and LP.Character do
-                    local CurrentHRP = LP.Character:FindFirstChild("HumanoidRootPart")
-                    if CurrentHRP then
-                        -- FIX: Keep marble centered on character
-                        MarblePart.CFrame = CurrentHRP.CFrame
-                        
-                        -- FIX: Noclip the character so they don't fight the ball's physics
-                        for _, part in pairs(LP.Character:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                part.CanCollide = false
-                            end
+                while TrollEngine.MarbleActive and MarblePart and HRP do
+                    -- 1. CHARACTER SETUP (Lock inside ball)
+                    HRP.CFrame = MarblePart.CFrame
+                    Hum.PlatformStand = true -- Makes character floppy
+                    
+                    for _, v in pairs(Char:GetDescendants()) do
+                        if v:IsA("BasePart") then 
+                            v.CanCollide = false 
+                            v.Massless = true -- Character weight won't mess with the ball
                         end
                     end
-                    RunService.RenderStepped:Wait()
+
+                    -- 2. ROLLING PHYSICS (Your requested logic)
+                    local moveDir = Hum.MoveDirection
+                    if moveDir.Magnitude > 0 then
+                        -- Torque/Spin based on movement
+                        local torqueDirection = Vector3.new(moveDir.Z, 0, -moveDir.X) 
+                        MarblePart.AssemblyAngularVelocity = torqueDirection * 25 
+                    end
+
+                    -- 3. SPEED CAP
+                    if MarblePart.AssemblyLinearVelocity.Magnitude > 60 then
+                        MarblePart.AssemblyLinearVelocity = MarblePart.AssemblyLinearVelocity.Unit * 60
+                    end
+                    
+                    RunService.Heartbeat:Wait()
                 end
 
-                -- CLEANUP: When toggle is off
+                -- CLEANUP
                 if MarblePart then MarblePart:Destroy() end
-                for _, part in pairs(LP.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = true
+                if Hum then 
+                    Hum.PlatformStand = false 
+                    Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+                if HRP then HRP.AssemblyLinearVelocity = Vector3.zero end
+                for _, v in pairs(Char:GetDescendants()) do
+                    if v:IsA("BasePart") then 
+                        v.CanCollide = true 
+                        v.Massless = false
                     end
                 end
             end)
